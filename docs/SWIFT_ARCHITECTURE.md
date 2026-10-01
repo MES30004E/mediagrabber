@@ -3,7 +3,9 @@
 Design date: 1 October 2026. Reference: Python baseline
 `6a024ec97d2521beed1c6cce2752aaa605425390`, provider
 `7608dd51ee813b48cf9a6d68c6e42cb197ce10e0` (1.3.1).
-This is a design, not an implemented native app or an authorization to port it.
+This remains the approved native design, not an implemented native app. Phase 1
+implements a limited headless Python worker; BACKEND_WORKER.md and
+BACKEND_PROTOCOL.md document the executable subset.
 
 ## Goal and constraints
 
@@ -195,5 +197,10 @@ Read [BACKEND_PROTOCOL.md](BACKEND_PROTOCOL.md),
 [BEHAVIOUR_PARITY_CHECKLIST.md](BEHAVIOUR_PARITY_CHECKLIST.md),
 [MIGRATION_PHASES.md](MIGRATION_PHASES.md), and
 [NATIVE_CI_DESIGN.md](NATIVE_CI_DESIGN.md) together. Review this design before any
-backend extraction or Swift implementation. No worker, protocol implementation,
-native UI, Swift package, signing or distribution changes are included now.
+further backend extraction or Swift implementation. Phase 1 adds a protocol
+worker without changing Qt orchestration. The persistent shared scheduler/Qt
+adapter, native UI, Swift package, signing and distribution remain deferred.
+Ephemeral worker jobs do not read/write the Qt database or settings. Do not run
+two engines against the same output files: state isolation does not prevent
+output collisions. The Phase 1 brief explicitly keeps Qt in-process and forbids
+Keychain-secret IPC, superseding those future-design assumptions above.

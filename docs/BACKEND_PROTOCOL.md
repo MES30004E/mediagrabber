@@ -1,7 +1,73 @@
 # Backend protocol v1 — design for review
 
-This specifies future Swift ↔ Python communication. Nothing here is implemented.
-The Python API worker is authoritative for jobs, retries, inventories and storage.
+This specifies Swift ↔ Python communication. The Phase 1 subset below is
+implemented; broader sections remain the approved target contract. Qt continues
+its existing in-process path.
+
+## Implemented Phase 1 subset (version 1.0)
+
+Run `PYTHONPATH=src .venv/bin/python -m morgan_media_downloader.backend`.
+Typed schemas/adapters are under backend/; golden examples are in
+tests/protocol_fixtures/. See [BACKEND_WORKER.md](BACKEND_WORKER.md).
+
+Canonical commands: session.hello, analysis.start, jobs.enqueue, analysis.cancel,
+jobs.cancel, session.ping, session.shutdown. Informal hello/analyse/download/cancel
+names map to these; there are no competing aliases. Hello requires
+supported_versions containing 1.0 and advertises exactly those commands.
+Ready is session.ready; diagnostics use diagnostic. Other implemented events:
+analysis.started/item/completed/failed/cancelled,
+download.started/progress/processing/completed/failed, job.cancelled,
+auth.required/failed and error. Commands require the envelope below;
+session_id is null before hello, then the returned UUID.
+
+Analysis payload: inputs (1–100 nonempty strings), purpose preview (default),
+optional nonnegative settings_revision (reserved, not persisted), and config.
+Config fields: authentication_mode, cookies_browser, browser_profile,
+cookies_file, provider_url, provider_home and proxy {mode,host,port}. Modes
+preserve existing Direct/System/HTTP/SOCKS/External Tor routing. Managed Tor
+ownership/control and automatic circuit retries are deferred. No password or
+userinfo credentials are allowed in proxy/provider settings; provider queries
+are also rejected. No secrets.bind or Keychain credential IPC is implemented;
+that longer-term target command requires redesign to honor the explicit
+no-secret Phase 1 boundary.
+
+jobs.enqueue requires a completed analysis_request_id, 1–4 retained source_ids,
+download options (download_dir required), and optional config override; otherwise
+it inherits the analysis config. Response returns worker-generated job UUIDs,
+attempt IDs and revisions. No client extractor dictionaries are accepted.
+Download options use adapters.py's explicit string/boolean allowlist; auth
+selection is in config. Absolute/parent-traversing filename templates are
+rejected at the new boundary without changing Qt behavior. analysis.cancel
+targets target_request_id; jobs.cancel uses envelope job_id and payload
+expected_job_revision. Cancellation acknowledgement means requested; the terminal
+event follows worker exit. Late items/progress are suppressed; output is retained.
+
+This worker is ephemeral: no Qt settings/database access, durable queue,
+reconnect snapshot, restart/resume/remove, or state migration. Selections expire
+with the process. RuntimeSnapshot uses the installed bundled yt-dlp API;
+verified user-runtime activation/updates are deferred. Startup has no update,
+provider health check or network operation. Existing engine authentication/retry
+policies remain in use. Analysis can block inside legacy yt-dlp calls;
+cancellation/EOF/shutdown wait for return. ffmpeg cancellation gaps remain.
+
+Limits: 1 MiB/frame, four concurrent operations, 4096 retained items, 4096
+analysis/job records each, 4096 response cache entries and 65536 seen request IDs.
+Capacity rejection starts no engine. Unknown totals are null; total_is_estimate
+is conservatively true because DownloadJob loses the upstream estimate flag.
+Nonfinite numbers become null/defaults. Display URLs omit query, fragment and
+credentials; use retained source IDs to enqueue. Headers/thumbnails and
+credential-path references are never echoed. Errors use fixed safe text;
+diagnostics expose category/level only. Dependency text stdout/stderr is
+discarded by the process entry point, not trusted as an API/debug export.
+
+One state/writer lock orders responses/events and terminal outcomes. Invalid
+frames produce error events with validated request_id when available, else null;
+three consecutive malformed frames close the worker. Oversized lines drain in
+bounded chunks; EOF joins owned threads. Output is synchronous and the parent
+must drain it: progress coalescing, an output-stall watchdog, snapshot replay and
+session-limit draining below are future targets, not advertised capabilities.
+A blocked output pipe can delay cancellation/shutdown. This subset is not a
+complete durable BackendService or native frontend readiness claim.
 
 ## Transport and envelope
 

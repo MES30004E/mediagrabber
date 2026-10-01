@@ -1,8 +1,8 @@
 # Migration phases — proposed plan for review
 
-These phases describe future work. Only the baseline test correction, design
-documents and CI structure are included in this task. No phase authorizes Swift
-features or backend extraction without review. Keep the Python app available at
+These phases describe staged work. Phase 0 is verified; the explicitly authorized
+Phase 1 worker subset is now implemented. Further phases require authorization.
+Keep the Python app available at
 every checkpoint; do not run both frontends against the same writable state.
 
 ## Phase 0 — Baseline and reproducible evidence
@@ -17,6 +17,14 @@ every checkpoint; do not run both frontends against the same writable state.
 - macOS CI: not required for Linux baseline; required before claiming native QA.
 
 ## Phase 1 — Extract and qualify the backend contract
+
+Implementation checkpoint: the latest brief narrows this phase to typed protocol
+models/adapters, an ephemeral JSONL worker, existing analysis/download integration,
+identity-based cooperative cancellation, golden fixtures and deterministic tests.
+Qt is intentionally not rewired to IPC. Durable shared scheduling, snapshot
+reconnect/persistence and the Qt adapter described below remain future work.
+This checkpoint is not completion of every original long-term Phase 1 gate.
+See BACKEND_WORKER.md for exact scope/limitations and verification.
 
 - Scope: implement protocol DTOs/fixtures and non-Qt service ownership around
   existing analysis/download/database/runtime modules. Qt uses an adapter to the
@@ -146,8 +154,8 @@ every checkpoint; do not run both frontends against the same writable state.
 
 ## Recommended next task and outstanding decisions
 
-Review architecture/protocol/phase documents first. Then authorize Phase 1 only:
-write an executable extraction plan and protocol fixtures, retaining Qt behavior.
+Review the Phase 1 implementation first. Before a Phase 2 native shell, qualify
+read-only state snapshots/reconnect and the hosted toolchain, while retaining Qt.
 Do not start the complete Swift port. Qualify runner/toolchain/deployment target,
 distribution/update policy and secret delivery before native release work.
 CI hosted executions and live/private/native checks remain unrun in this task.
