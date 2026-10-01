@@ -5,6 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
+from morgan_media_downloader.auth import authentication_options
 from morgan_media_downloader.managed_tor import ManagedTor
 from morgan_media_downloader.settings import AppSettings, SettingsStore
 from morgan_media_downloader.settings_window import SettingsWindow
@@ -87,7 +88,10 @@ def test_real_settings_dialog_apply_ok_cancel_and_restart(tmp_path: Path):
     assert (SettingsStore(path).load().quality, SettingsStore(path).load().theme) == ("1080p", "Light")
 
 
-def test_authentication_controls_and_targeted_reset_do_not_change_other_settings(tmp_path: Path):
+def test_authentication_controls_and_targeted_reset_do_not_change_other_settings(tmp_path: Path, monkeypatch):
+    # A fresh Mac (and Cloud) may have no Chrome profile. Never depend on
+    # the developer's browser installation or create a synthetic profile.
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     settings = AppSettings(download_dir="/keep/media", quality="1440p", connection_mode="Managed Tor",
                            authentication_mode="Browser Cookies", cookies_browser="Firefox",
                            browser_profile="qa", cookies_file="/secret/cookies.txt")
@@ -101,7 +105,10 @@ def test_authentication_controls_and_targeted_reset_do_not_change_other_settings
     dialog._reset_authentication()
     reset = dialog._collect()
     assert (reset.authentication_mode, reset.cookies_browser, reset.browser_profile, reset.cookies_file) == (
-        "Auto", "Chrome", "Default", "")
+        "Auto", "Chrome", "", "")
+    assert authentication_options("Browser Cookies", reset.cookies_browser, reset.browser_profile) == {
+        "cookiesfrombrowser": ("chrome", None, None, None)
+    }
     assert (reset.download_dir, reset.quality, reset.connection_mode) == (
         "/keep/media", "1440p", "Managed Tor")
     _dispose(dialog)
