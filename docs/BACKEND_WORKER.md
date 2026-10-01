@@ -15,9 +15,11 @@ PYTHONPATH=src .venv/bin/python -m morgan_media_downloader.backend
 ```
 
 Use the process's private stdin/stdout pipes. Each frame is one UTF-8 JSON object
-and LF, ≤1 MiB. Always read stdout concurrently with sending commands; stderr is
+and LF, ≤1 MiB of JSON bytes excluding LF/CRLF. Always read stdout concurrently with sending commands; stderr is
 reserved for safe transport/debug diagnostics, not an API. Dependency stdout and
-stderr text is discarded; structured diagnostic callbacks carry category/level.
+stderr text is discarded at both Python and OS descriptor levels, including
+inherited child-process output; structured diagnostics carry category/level.
+Protocol writes use a private non-inheritable duplicate of the stdout pipe.
 Never parse terminal progress. Startup performs no network/health/update request.
 
 An offline hello/EOF smoke (no operation starts):
@@ -72,6 +74,8 @@ Per-operation bundled runtime snapshots are used; no verified user-runtime
 activation or automatic update runs. Download options are explicitly allowlisted;
 absolute/parent-traversing filename templates fail validation. Existing Qt
 configuration and behavior are not changed by these new command restrictions.
+Existing pinned-provider discovery/import compatibility runs once under a lock
+when the first runtime is needed; it performs no provider network probe.
 
 Wire adapters are separate from application dataclasses. They omit request
 headers, signed thumbnail URLs and config paths. Display URLs omit credentials,
@@ -94,9 +98,10 @@ external yt-dlp boundary; no live accounts or cookies. The subprocess test harne
 is tests/backend_subprocess_fixture.py, never a production fake/test-mode flag.
 Golden fixtures independently pin wire fields for later Swift tests.
 
-Initial verification: 52 targeted backend tests and full suite 274 passed,
-dependency check passed. Later review/regression additions may increase counts;
-the final task report is the current evidence. CI's existing full Python job
+Verification after review: 58 targeted backend tests, full suite 280 passed
+(no skipped/expected failures), dependency check passed. Regression cases
+include provider imports without network, nested JSON recovery, semantic request
+ID reuse and native/inherited subprocess output suppression. CI's full Python job
 discovers these tests; branch trigger includes migration/backend-protocol. Swift
 source absence remains explicitly unrun on the hosted macOS job.
 

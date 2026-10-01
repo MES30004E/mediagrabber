@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import threading
 
@@ -28,7 +29,7 @@ def _request_identity(frame):
     try:
         value = json.loads(frame)
         return identifier(value.get('request_id')) if isinstance(value, dict) else None
-    except (ValueError, UnicodeError):
+    except (ValueError, UnicodeError, RecursionError):
         return None
 
 
@@ -60,20 +61,34 @@ def run(input_stream, output_stream) -> int:
 
 class QuietLibraryStream(io.TextIOBase):
     """Unstructured dependency output is discarded, not trusted to carry no secrets."""
+    def __init__(self, fd):
+        self.fd = fd
     def write(self, value): return len(value)
     def flush(self): pass
+    def fileno(self): return self.fd
 
 
 def main() -> int:
     # Capture the protocol pipe before suppressing library stdout/stderr. Engine
     # diagnostics use the explicit structured callback instead of text scraping.
     input_stream = sys.stdin.buffer
-    output_stream = sys.stdout.buffer
     old_stdout, old_stderr = sys.stdout, sys.stderr
-    sys.stdout = sys.stderr = QuietLibraryStream()
+    old_stdout.flush(); old_stderr.flush()
+    protocol_fd = os.dup(old_stdout.fileno())
+    saved_stdout_fd, saved_stderr_fd = os.dup(1), os.dup(2)
+    output_stream = os.fdopen(protocol_fd, 'wb', buffering=0)
+    # Native libraries and engine children inherit descriptors, not sys.stdout.
+    # Keep the protocol on a private non-inheritable duplicate and silence both
+    # dependency descriptors as well as Python-level streams.
+    with open(os.devnull, 'wb') as sink:
+        os.dup2(sink.fileno(), 1); os.dup2(sink.fileno(), 2)
+    sys.stdout, sys.stderr = QuietLibraryStream(1), QuietLibraryStream(2)
     try:
         return run(input_stream, output_stream)
     except BrokenPipeError:
         return 0
     finally:
+        output_stream.close()
+        os.dup2(saved_stdout_fd, 1); os.dup2(saved_stderr_fd, 2)
+        os.close(saved_stdout_fd); os.close(saved_stderr_fd)
         sys.stdout, sys.stderr = old_stdout, old_stderr

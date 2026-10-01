@@ -224,11 +224,11 @@ def _payload(kind, value):
 
 
 def parse_command(raw: bytes) -> Command:
-    if len(raw) > MAX_FRAME_BYTES:
+    if len(raw.rstrip(b'\r\n')) > MAX_FRAME_BYTES:
         raise ProtocolError('protocol.frame_too_large')
     try:
         value = json.loads(raw.decode('utf-8'), parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-    except (ValueError, UnicodeError):
+    except (ValueError, UnicodeError, RecursionError):
         raise ProtocolError('protocol.invalid_json', 'Invalid JSON frame.') from None
     required = ('protocol_version', 'kind', 'type', 'request_id', 'session_id', 'job_id', 'source_id', 'timestamp', 'payload')
     if not isinstance(value, dict) or any(key not in value for key in required):

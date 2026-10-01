@@ -194,3 +194,43 @@ def test_job_cancellation_uses_stable_id_and_waits_for_worker(service, tmp_path)
     terminal = events(messages, 'job.cancelled')
     assert len(terminal) == 1 and terminal[0]['job_id'] == active['job_id']
     assert not events(messages, 'download.completed')
+
+
+def test_reusing_request_id_for_shutdown_has_no_side_effect(service):
+    worker, messages = service
+    raw = command('session.shutdown', {}, worker.session_id)
+    raw['request_id'] = messages[0]['request_id']
+    assert worker.handle(parse_command(json.dumps(raw).encode())) is True
+    assert worker.closed is False
+    assert messages[-1]['payload']['error']['code'] == 'request.reused'
+
+
+def test_reusing_request_id_with_different_payload_is_rejected(service):
+    worker, messages = service
+    raw = command('analysis.start', {'inputs': ['first']}, worker.session_id)
+    worker.handle(parse_command(json.dumps(raw).encode())); assert worker.wait_idle(5)
+    raw['payload']['inputs'] = ['second']
+    worker.handle(parse_command(json.dumps(raw).encode()))
+    assert messages[-1]['payload']['error']['code'] == 'request.reused'
+    assert len(FixtureYDL.calls) == 1
+
+
+def test_real_bundled_runtime_discovers_pinned_provider_without_network():
+    import os
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    script = """
+import socket, sys, urllib.request
+def offline(*args, **kwargs): raise AssertionError('No network allowed')
+socket.create_connection = urllib.request.urlopen = offline
+from morgan_media_downloader.backend.service import bundled_runtime
+snapshot = bundled_runtime()
+for module in ('getpot_bgutil', 'getpot_bgutil_http', 'getpot_bgutil_script'):
+    assert 'yt_dlp_plugins.extractor.' + module in sys.modules, module
+assert snapshot.source == 'Bundled'
+"""
+    result = subprocess.run([sys.executable, '-c', script], cwd=root,
+                            env=dict(os.environ, PYTHONPATH=str(root / 'src')),
+                            text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stderr

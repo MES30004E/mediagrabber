@@ -31,7 +31,8 @@ def test_stream_hello_then_eof_exits_with_only_json():
 @pytest.mark.parametrize('frame,code', [
     (b'{bad\n', 'protocol.invalid_json'), (b'\xff\n', 'protocol.invalid_json'),
     (b'a' * (MAX_FRAME_BYTES + 10) + b'\n', 'protocol.frame_too_large'),
-])
+    (b'[' * 10000 + b'0' + b']' * 10000 + b'\n', 'protocol.invalid_json'),
+], ids=['invalid-json', 'invalid-utf8', 'oversized', 'deep-nesting'])
 def test_bad_frame_then_valid_hello_recovers(frame, code):
     output = io.BytesIO()
     assert run(io.BytesIO(frame + json.dumps(command()).encode() + b'\n'), output) == 0

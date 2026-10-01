@@ -1,6 +1,6 @@
 # Backend Protocol Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Expose the retained Python analysis/download behavior through a tested local worker without changing Qt.
 
@@ -31,34 +31,34 @@
 
 **Files:** backend/protocol.py, backend/adapters.py, tests/test_backend_protocol.py.
 **Interfaces:** parse_command(raw: bytes) -> Command; media_payload(MediaItem, source_id) -> dict; progress_payload(DownloadJob) -> dict; options_from_payload(dict) -> DownloadOptions.
-- [ ] Write tests for strict envelopes, types/IDs/version, unknown commands, options and redacted explicit serialization.
-- [ ] Run `.venv/bin/python -m pytest -q tests/test_backend_protocol.py`; observe missing-module failure.
-- [ ] Implement typed command/payload models and allowlisted wire adapters; rerun targeted tests.
-- [ ] Commit the tested models/adapters.
+- [x] Write tests for strict envelopes, types/IDs/version, unknown commands, options and redacted explicit serialization.
+- [x] Run `.venv/bin/python -m pytest -q tests/test_backend_protocol.py`; observe missing-module failure.
+- [x] Implement typed command/payload models and allowlisted wire adapters; rerun targeted tests.
+- [x] Commit the tested models/adapters.
 
 ## Task 2: Operation service
 
 **Files:** backend/service.py, tests/test_backend_service.py.
 **Interfaces:** BackendService(emit, runtime_factory=None); handle(Command) -> bool; close() -> None; wait_idle(timeout) -> bool. Emit accepts kind/type/request/job/source/payload/revision/attempt.
-- [ ] Write tests for handshake, real analysis chain with fake yt-dlp boundary, search/WL/private routing, enqueue/download callbacks and request/job cancellation.
-- [ ] Observe missing service failure, then implement service using existing production functions.
-- [ ] Test duplicate IDs/session rejection/cancellation races, errors and no startup network.
-- [ ] Commit the tested service.
+- [x] Write tests for handshake, real analysis chain with fake yt-dlp boundary, search/WL/private routing, enqueue/download callbacks and request/job cancellation.
+- [x] Observe missing service failure, then implement service using existing production functions.
+- [x] Test duplicate IDs/session rejection/cancellation races, errors and no startup network.
+- [x] Commit the tested service.
 
 ## Task 3: Process/framing and fixtures
 
 **Files:** backend/__init__.py, backend/__main__.py, backend/worker.py; tests/test_backend_worker.py; tests/protocol_fixtures/.
 **Interfaces:** worker.run(input_stream, output_stream) -> int; worker.main() -> int. Binary input/output permit bounded UTF-8 framing.
-- [ ] Write subprocess tests for hello/EOF/shutdown/errors, fragmented framing, oversize/invalid UTF-8, deterministic analysis harness and stdout isolation.
-- [ ] Observe missing entry-point failure, implement reader/writer and process entry point, rerun tests.
-- [ ] Add representative fixed-ID golden requests/events with explicit provenance and validate them.
-- [ ] Commit the tested transport/fixtures.
+- [x] Write subprocess tests for hello/EOF/shutdown/errors, fragmented framing, oversize/invalid UTF-8, deterministic analysis harness and stdout isolation.
+- [x] Observe missing entry-point failure, implement reader/writer and process entry point, rerun tests.
+- [x] Add representative fixed-ID golden requests/events with explicit provenance and validate them.
+- [x] Commit the tested transport/fixtures.
 
 ## Task 4: Documentation and whole-branch validation
 
 **Files:** docs/BACKEND_PROTOCOL.md, SWIFT_ARCHITECTURE.md, MIGRATION_PHASES.md, BACKEND_WORKER.md; CI only if needed.
-- [ ] Record canonical Phase 1 commands/capabilities, ephemeral state, cancellation limits and no-secret configuration changes.
-- [ ] Run targeted backend tests, full Python suite, pip check and real-process smoke with exact results.
-- [ ] Check Qt startup/shutdown on fresh offscreen state and unchanged existing paths.
-- [ ] Obtain fresh whole-branch review; fix meaningful findings with failing tests then the full suite.
-- [ ] Commit review fixes/docs; show baseline diff and clean Git state. Do not merge or begin Phase 2.
+- [x] Record canonical Phase 1 commands/capabilities, ephemeral state, cancellation limits and no-secret configuration changes.
+- [x] Run targeted backend tests, full Python suite, pip check and real-process smoke with exact results.
+- [x] Check Qt startup/shutdown on fresh offscreen state and unchanged existing paths.
+- [x] Obtain fresh whole-branch review; fix meaningful findings with failing tests then the full suite.
+- [x] Commit review fixes/docs; show baseline diff and clean Git state. Do not merge or begin Phase 2.

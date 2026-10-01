@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -13,14 +15,25 @@ from ..auth import requires_authentication
 from ..downloader import analyse_with_authentication, download_job
 from ..models import DownloadJob, JobStatus
 from ..parsing import split_input
-from ..yt_runtime import RuntimeSnapshot
+from ..yt_runtime import RuntimeSnapshot, YtDlpRuntimeManager
 from .adapters import error_payload, media_payload, options_from_payload, progress_payload, safe_text
 from .protocol import Command, CommandType, Configuration, EventType, MAX_FRAME_BYTES, VERSION, WireMessage
 
 
+_runtime_lock = threading.Lock()
+_bundled_snapshot = None
+
+
 def bundled_runtime() -> RuntimeSnapshot:
-    from yt_dlp import YoutubeDL, version
-    return RuntimeSnapshot(version.__version__, 'Bundled', YoutubeDL)
+    global _bundled_snapshot
+    with _runtime_lock:
+        if _bundled_snapshot is None:
+            from yt_dlp import YoutubeDL, version
+            # Reuse the existing pinned plugin discovery/compatibility loader;
+            # no manager initialization, disk cleanup, update or health request.
+            YtDlpRuntimeManager._check_provider_imports()
+            _bundled_snapshot = RuntimeSnapshot(version.__version__, 'Bundled', YoutubeDL)
+        return _bundled_snapshot
 
 
 @dataclass
@@ -51,6 +64,7 @@ class BackendService:
         self.completed_analyses: set[str] = set()
         self.responses = OrderedDict()
         self.seen: set[str] = set()
+        self.fingerprints: dict[str, str] = {}
 
     def _send(self, kind, type, command=None, payload=None, operation=None, source_id=None, request_id=None):
         with self.lock:
@@ -74,11 +88,25 @@ class BackendService:
         payload['error' if code else 'result'] = error_payload(code) if code else (result or {})
         self.responses[command.request_id] = payload
         self.seen.add(command.request_id)
+        self.fingerprints[command.request_id] = self._fingerprint(command)
         while len(self.responses) > 4096:
             self.responses.popitem(last=False)
         self._send('response', command.type.value, command, payload)
 
     def handle(self, command: Command) -> bool:
+        # Deduplicate before ALL effects, including shutdown. Reusing an ID with
+        # different semantics is rejected rather than replaying a misleading ACK.
+        with self.lock:
+            if not self._validate_session(command):
+                return True
+            if command.request_id in self.seen:
+                if self.fingerprints[command.request_id] != self._fingerprint(command):
+                    payload = {'status': 'rejected', 'error': error_payload('request.reused')}
+                else:
+                    payload = self.responses.get(command.request_id) or {
+                        'status': 'rejected', 'error': error_payload('request.expired')}
+                self._send('response', command.type.value, command, payload)
+                return True
         # Shutdown must join without the state lock held: workers need it to finish.
         if command.type == CommandType.SHUTDOWN:
             with self.lock:
@@ -90,14 +118,6 @@ class BackendService:
             return False
         with self.lock:
             if not self._validate_session(command):
-                return True
-            if command.request_id in self.seen:
-                payload = self.responses.get(command.request_id)
-                if payload is not None:
-                    self._send('response', command.type.value, command, payload)
-                else:
-                    self._send('response', command.type.value, command,
-                               {'status': 'rejected', 'error': error_payload('request.expired')})
                 return True
             if len(self.seen) >= 65536:
                 self._send('response', command.type.value, command,
@@ -138,6 +158,10 @@ class BackendService:
                         op.stop.set()
                         self._respond(command, 'accepted', {'cancellation': 'requested'})
             return True
+
+    @staticmethod
+    def _fingerprint(command):
+        return hashlib.sha256(json.dumps(asdict(command), sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
     def _validate_session(self, command):
         if self.closed:

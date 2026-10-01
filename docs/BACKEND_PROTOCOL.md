@@ -50,7 +50,7 @@ provider health check or network operation. Existing engine authentication/retry
 policies remain in use. Analysis can block inside legacy yt-dlp calls;
 cancellation/EOF/shutdown wait for return. ffmpeg cancellation gaps remain.
 
-Limits: 1 MiB/frame, four concurrent operations, 4096 retained items, 4096
+Limits: 1 MiB of JSON bytes/frame excluding LF/CRLF, four concurrent operations, 4096 retained items, 4096
 analysis/job records each, 4096 response cache entries and 65536 seen request IDs.
 Capacity rejection starts no engine. Unknown totals are null; total_is_estimate
 is conservatively true because DownloadJob loses the upstream estimate flag.
@@ -58,7 +58,11 @@ Nonfinite numbers become null/defaults. Display URLs omit query, fragment and
 credentials; use retained source IDs to enqueue. Headers/thumbnails and
 credential-path references are never echoed. Errors use fixed safe text;
 diagnostics expose category/level only. Dependency text stdout/stderr is
-discarded by the process entry point, not trusted as an API/debug export.
+discarded by the process entry point, including native and inherited child stdout/
+stderr descriptors. Protocol output uses a separate non-inheritable descriptor.
+Dependency text is not trusted as an API/debug export. Bundled snapshots perform
+the existing pinned-provider import/compatibility setup once under a lock,
+without provider network probes or runtime-manager disk initialization.
 
 One state/writer lock orders responses/events and terminal outcomes. Invalid
 frames produce error events with validated request_id when available, else null;
@@ -68,6 +72,9 @@ must drain it: progress coalescing, an output-stall watchdog, snapshot replay an
 session-limit draining below are future targets, not advertised capabilities.
 A blocked output pipe can delay cancellation/shutdown. This subset is not a
 complete durable BackendService or native frontend readiness claim.
+Decoder recursion is a malformed-input error, not a process crash. Request IDs
+are bound to the parsed command's semantic fingerprint: reuse for a different
+type/payload returns request.reused with no side effect, including shutdown.
 
 ## Transport and envelope
 

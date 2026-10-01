@@ -136,3 +136,16 @@ def test_outgoing_envelope_is_typed_independently_of_job_models():
     wire = message.to_dict()
     assert wire['protocol_version'] == '1.0' and wire['sequence'] == 1
     assert 'job_revision' not in wire and 'attempt_id' not in wire
+
+
+def test_deep_json_nesting_is_a_safe_protocol_error():
+    with pytest.raises(ProtocolError) as exc:
+        parse_command(b'[' * 10000 + b'0' + b']' * 10000)
+    assert exc.value.code == 'protocol.invalid_json'
+
+
+def test_frame_byte_limit_excludes_line_terminator(monkeypatch):
+    import morgan_media_downloader.backend.protocol as protocol
+    raw = json.dumps(command()).encode()
+    monkeypatch.setattr(protocol, 'MAX_FRAME_BYTES', len(raw))
+    assert parse_command(raw + b'\n').type == CommandType.HELLO
