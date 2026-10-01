@@ -1,0 +1,28 @@
+{
+  "protocol_version": "1.0",
+  "kind": "event",
+  "type": "analysis.item",
+  "request_id": "00000000-0000-4000-8000-000000000003",
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "job_id": null,
+  "source_id": "00000000-0000-4000-8000-000000000004",
+  "timestamp": "2026-10-01T12:00:00Z",
+  "payload": {
+    "item": {
+      "source_id": "00000000-0000-4000-8000-000000000004",
+      "title": "Example video",
+      "uploader": "",
+      "display_url": "https://www.youtube.com/watch",
+      "original_display_url": "",
+      "duration_seconds": null,
+      "source": "",
+      "playlist_index": null,
+      "confidence": null,
+      "collection_title": "",
+      "collection_type": "",
+      "available_subtitles": [],
+      "automatic_captions": []
+    }
+  },
+  "sequence": 5
+}

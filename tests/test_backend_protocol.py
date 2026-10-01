@@ -112,3 +112,27 @@ def test_progress_adapter_expresses_unknown_totals_and_stage():
     assert payload['stage'] == 'Starting transfer'
     job.total_bytes = 64; job.progress = 50
     assert progress_payload(job)['percent'] == 50
+
+
+def test_nonfinite_upstream_numbers_are_json_safe():
+    item = MediaItem('url', 'Title', duration=float('nan'), confidence=float('inf'))
+    payload = media_payload(item, str(uuid4()))
+    assert payload['duration_seconds'] is None and payload['confidence'] is None
+    job = DownloadJob(item, DownloadOptions()); job.speed = float('nan')
+    assert progress_payload(job)['speed_bytes_per_second'] == 0
+    json.dumps(progress_payload(job), allow_nan=False)
+
+
+@pytest.mark.parametrize('template', ['../escape.%(ext)s', '/absolute.%(ext)s', 'nested/../../escape'])
+def test_filename_template_cannot_escape_selected_destination(template):
+    with pytest.raises(ProtocolError):
+        options_from_payload({'filename_template': template})
+
+
+def test_outgoing_envelope_is_typed_independently_of_job_models():
+    from morgan_media_downloader.backend.protocol import WireMessage
+    message = WireMessage('event', 'session.ready', str(uuid4()), str(uuid4()), None, None,
+                          '2026-10-01T12:00:00Z', 1, {'selected_version': '1.0'})
+    wire = message.to_dict()
+    assert wire['protocol_version'] == '1.0' and wire['sequence'] == 1
+    assert 'job_revision' not in wire and 'attempt_id' not in wire

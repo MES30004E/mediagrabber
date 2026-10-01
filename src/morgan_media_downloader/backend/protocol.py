@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
 from urllib.parse import urlsplit
@@ -48,6 +48,28 @@ class EventType(str, Enum):
     AUTH_FAILED = 'auth.failed'
     DIAGNOSTIC = 'diagnostic'
     ERROR = 'error'
+
+
+@dataclass(frozen=True)
+class WireMessage:
+    kind: str
+    type: str
+    request_id: str | None
+    session_id: str
+    job_id: str | None
+    source_id: str | None
+    timestamp: str
+    sequence: int
+    payload: dict
+    protocol_version: str = VERSION
+    job_revision: int | None = None
+    attempt_id: str | None = None
+
+    def to_dict(self) -> dict:
+        value = asdict(self)
+        if self.job_id is None:
+            value.pop('job_revision'); value.pop('attempt_id')
+        return value
 
 
 def identifier(value, *, optional=False):

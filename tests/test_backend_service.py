@@ -163,3 +163,34 @@ def test_unknown_cancellation_target_and_shutdown_response(service):
     assert messages[-1]['payload']['status'] == 'rejected'
     shutdown = send(worker, 'session.shutdown', {})
     assert messages[-1]['request_id'] == shutdown and messages[-1]['payload']['status'] == 'completed'
+
+
+def test_incomplete_download_is_never_reported_completed(service, tmp_path, monkeypatch):
+    from morgan_media_downloader.models import JobStatus
+    worker, messages = service
+    analysis = send(worker, 'analysis.start', {'inputs': ['search']}); assert worker.wait_idle(5)
+    def interrupted(job, *_):
+        job.status = JobStatus.PAUSED
+        return job
+    monkeypatch.setattr('morgan_media_downloader.backend.service.download_job', interrupted)
+    send(worker, 'jobs.enqueue', {'analysis_request_id': analysis,
+        'source_ids': [events(messages, 'analysis.item')[0]['source_id']], 'options': {'download_dir': str(tmp_path)}})
+    assert worker.wait_idle(5)
+    assert events(messages, 'download.failed') and not events(messages, 'download.completed')
+
+
+def test_job_cancellation_uses_stable_id_and_waits_for_worker(service, tmp_path):
+    worker, messages = service
+    analysis = send(worker, 'analysis.start', {'inputs': ['search']}); assert worker.wait_idle(5)
+    FixtureYDL.entered = threading.Event(); FixtureYDL.release = threading.Event()
+    send(worker, 'jobs.enqueue', {'analysis_request_id': analysis,
+        'source_ids': [events(messages, 'analysis.item')[0]['source_id']], 'options': {'download_dir': str(tmp_path)}})
+    assert FixtureYDL.entered.wait(5)
+    job_messages = [m for m in messages if m['job_id']]
+    active = job_messages[-1]
+    send(worker, 'jobs.cancel', {'expected_job_revision': active['job_revision']}, job_id=active['job_id'])
+    assert not events(messages, 'job.cancelled')
+    FixtureYDL.release.set(); assert worker.wait_idle(5)
+    terminal = events(messages, 'job.cancelled')
+    assert len(terminal) == 1 and terminal[0]['job_id'] == active['job_id']
+    assert not events(messages, 'download.completed')

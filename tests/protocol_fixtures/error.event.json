@@ -1,0 +1,22 @@
+{
+  "protocol_version": "1.0",
+  "kind": "event",
+  "type": "error",
+  "request_id": null,
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "job_id": null,
+  "source_id": null,
+  "timestamp": "2026-10-01T12:00:00Z",
+  "payload": {
+    "error": {
+      "code": "protocol.invalid_json",
+      "category": "protocol",
+      "stage": "validation",
+      "safe_message": "Command could not be processed.",
+      "retryable": false,
+      "retry_options": [],
+      "diagnostic_id": null
+    }
+  },
+  "sequence": 1
+}

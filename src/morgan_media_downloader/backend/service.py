@@ -15,7 +15,7 @@ from ..models import DownloadJob, JobStatus
 from ..parsing import split_input
 from ..yt_runtime import RuntimeSnapshot
 from .adapters import error_payload, media_payload, options_from_payload, progress_payload, safe_text
-from .protocol import Command, CommandType, Configuration, EventType, MAX_FRAME_BYTES, VERSION
+from .protocol import Command, CommandType, Configuration, EventType, MAX_FRAME_BYTES, VERSION, WireMessage
 
 
 def bundled_runtime() -> RuntimeSnapshot:
@@ -52,22 +52,22 @@ class BackendService:
         self.responses = OrderedDict()
         self.seen: set[str] = set()
 
-    def _send(self, kind, type, command=None, payload=None, operation=None, source_id=None):
+    def _send(self, kind, type, command=None, payload=None, operation=None, source_id=None, request_id=None):
         with self.lock:
             self.sequence += 1
             message = {'protocol_version': VERSION, 'kind': kind, 'type': str(type.value if isinstance(type, EventType) else type),
-                       'request_id': command.request_id if command else None, 'session_id': self.session_id,
+                       'request_id': command.request_id if command else request_id, 'session_id': self.session_id,
                        'job_id': operation.job.id if operation and operation.job else (command.job_id if command else None),
                        'source_id': source_id or (operation.source_id if operation else None),
                        'timestamp': datetime.now(timezone.utc).isoformat(), 'sequence': self.sequence,
                        'payload': payload or {}}
             if operation and operation.job:
                 message.update(job_revision=operation.revision, attempt_id=operation.attempt_id)
-            self.emit(message)
+            self.emit(WireMessage(**message).to_dict())
 
     def protocol_error(self, code, request_id=None):
         with self.lock:
-            self._send('event', EventType.ERROR, payload={'error': error_payload(code)})
+            self._send('event', EventType.ERROR, payload={'error': error_payload(code)}, request_id=request_id)
 
     def _respond(self, command, status, result=None, code=None):
         payload = {'status': status}
@@ -260,7 +260,7 @@ class BackendService:
                 op.revision += 1
                 if op.stop.is_set():
                     self._event(op, EventType.JOB_CANCELLED, {'retained_files': True})
-                elif result.status == JobStatus.FAILED:
+                elif result.status not in (JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS):
                     if requires_authentication(result.error):
                         self._event(op, EventType.AUTH_FAILED, {'error': error_payload('auth.failed', 'auth', 'download', 'Authentication was not accepted.')})
                     self._event(op, EventType.DOWNLOAD_FAILED, {'error': error_payload('download.failed', 'transfer', 'download', 'Download failed. Check the source and settings.')})

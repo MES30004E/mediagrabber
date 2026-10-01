@@ -1,0 +1,30 @@
+{
+  "protocol_version": "1.0",
+  "kind": "event",
+  "type": "session.ready",
+  "request_id": "00000000-0000-4000-8000-000000000001",
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "job_id": null,
+  "source_id": null,
+  "timestamp": "2026-10-01T12:00:00Z",
+  "payload": {
+    "selected_version": "1.0",
+    "capabilities": [
+      "session.hello",
+      "analysis.start",
+      "jobs.enqueue",
+      "analysis.cancel",
+      "jobs.cancel",
+      "session.ping",
+      "session.shutdown"
+    ],
+    "max_frame_bytes": 1048576,
+    "max_analysis_inputs": 100,
+    "max_concurrent_operations": 4,
+    "max_session_items": 4096,
+    "durable_jobs": false,
+    "runtime_source": "bundled",
+    "secret_ipc": false
+  },
+  "sequence": 2
+}

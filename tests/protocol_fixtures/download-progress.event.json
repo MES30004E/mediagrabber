@@ -1,0 +1,24 @@
+{
+  "protocol_version": "1.0",
+  "kind": "event",
+  "type": "download.progress",
+  "request_id": "00000000-0000-4000-8000-000000000003",
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "job_id": "00000000-0000-4000-8000-000000000005",
+  "source_id": "00000000-0000-4000-8000-000000000004",
+  "timestamp": "2026-10-01T12:00:00Z",
+  "payload": {
+    "stage": "Downloading",
+    "downloaded_bytes": 32,
+    "total_bytes": 64,
+    "total_is_estimate": true,
+    "percent": 50,
+    "speed_bytes_per_second": 0,
+    "eta_seconds": null,
+    "fragment_index": null,
+    "fragment_count": null
+  },
+  "sequence": 9,
+  "job_revision": 3,
+  "attempt_id": "00000000-0000-4000-8000-000000000006"
+}
