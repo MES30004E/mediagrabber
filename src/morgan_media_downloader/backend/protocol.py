@@ -137,6 +137,7 @@ class Download:
 @dataclass(frozen=True)
 class Cancel:
     target_request_id: str | None = None
+    expected_job_revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -195,7 +196,7 @@ def _payload(kind, value):
         revision = value.get('expected_job_revision')
         if type(revision) is not int or revision < 0:
             raise ProtocolError('protocol.invalid_message')
-        return Cancel()
+        return Cancel(expected_job_revision=revision)
     object_fields(value, ())
     return Empty()
 
