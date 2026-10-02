@@ -65,3 +65,16 @@ Run unsigned/ad-hoc internal smoke without certificate secrets first. Authorized
 release jobs may later sign/notarize with separately configured secure bindings.
 Do not invoke the baseline build_macos.sh during deterministic CI: it bundles,
 downloads architecture-specific tools and signs, beyond early source-test scope.
+
+
+## Phase 2 workflow changes
+
+migration/swift-bridge now triggers the workflow. The macos-15 job requires the
+Swift package (no source-absence skip), installs Python 3.12 wheels, checks protocol
+drift, runs Python backend tests, builds Swift and runs the entire XCTest suite
+including exact shared fixtures and real Python worker interoperability. Integration
+requires MORGAN_TEST_PYTHON; it cannot silently skip. No native app executable or UI
+is required by the narrowed Phase 2 brief. The runner's Swift version is recorded;
+exact toolchain pinning remains dependent on observed hosted qualification.
+GitHub API access is necessary to inspect Actions results from Cloud. A Forbidden
+API response must be reported as a verification blocker, not treated as CI success.

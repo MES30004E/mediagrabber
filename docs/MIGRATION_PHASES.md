@@ -41,7 +41,15 @@ See BACKEND_WORKER.md for exact scope/limitations and verification.
 - macOS CI: required for process launch/provider imports on macOS; Linux covers
   deterministic headless protocol tests.
 
-## Phase 2 — Minimal native shell and state client
+## Phase 2 — Swift process bridge checkpoint
+
+The latest approved Phase 2 brief narrows this phase to a Foundation-only SwiftPM
+backend client, typed DTOs, bounded JSONL transport, actor correlation, deterministic
+fixtures and real worker interoperability on hosted macOS. SwiftUI/AppState,
+read-only snapshots and Qt IPC rewiring remain deferred. See SWIFT_BACKEND_CLIENT.md.
+Native qualification depends on observed hosted macOS build/tests, not source edits.
+
+### Original broader Phase 2 target — deferred shell/state work
 
 - Scope: separately approved swift/ package with Foundation Domain/BackendClient
   and SwiftUI shell. Read-only queue snapshot first; native fixture service for
@@ -154,8 +162,9 @@ See BACKEND_WORKER.md for exact scope/limitations and verification.
 
 ## Recommended next task and outstanding decisions
 
-Review the Phase 1 implementation first. Before a Phase 2 native shell, qualify
-read-only state snapshots/reconnect and the hosted toolchain, while retaining Qt.
+Review the published Phase 2 bridge and its hosted macOS results before Phase 3.
+Read-only state snapshots/reconnect and a native shell require later qualification,
+while retaining Qt.
 Do not start the complete Swift port. Qualify runner/toolchain/deployment target,
 distribution/update policy and secret delivery before native release work.
 CI hosted executions and live/private/native checks remain unrun in this task.

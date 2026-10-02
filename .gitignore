@@ -98,3 +98,7 @@ media/
 *.ytdl
 *.aria2
 *.torrent
+
+# SwiftPM build products and user-specific package state
+swift/.build/
+swift/.swiftpm/

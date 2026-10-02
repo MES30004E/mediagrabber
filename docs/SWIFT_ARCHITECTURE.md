@@ -204,3 +204,14 @@ Ephemeral worker jobs do not read/write the Qt database or settings. Do not run
 two engines against the same output files: state isolation does not prevent
 output collisions. The Phase 1 brief explicitly keeps Qt in-process and forbids
 Keychain-secret IPC, superseding those future-design assumptions above.
+
+
+## Phase 2 client checkpoint
+
+The separately authorized Phase 2 adds the Foundation-only SwiftPM library
+`swift/Sources/MorganBackendClient/`: typed protocol payloads, bounded framing and
+an actor-owned Python Process bridge. See [SWIFT_BACKEND_CLIENT.md](SWIFT_BACKEND_CLIENT.md).
+The latest brief explicitly excludes SwiftUI/AppState, snapshots and Qt rewiring.
+These remain future design work. Existing download/auth logic stays in Python;
+no extraction policy is duplicated in Swift. Hosted macOS CI is the native gate;
+no owner-local compiler/signing dependency is introduced.

@@ -255,3 +255,23 @@ no automatic destructive replay; None profile forwarding; private auth failures;
 optional processing warnings; sanitized secrets/headers/URLs; verified file grants
 and symlink/out-of-root rejection. Run Python and Swift decoders against the same
 sanitized fixtures before a native feature depends on this protocol.
+
+
+## Phase 2 Swift implementation boundary
+
+MorganBackendClient implements only the canonical Phase 1 subset above, including
+all download-related DTOs without download UI. Its strict envelope decoder accepts
+additive fields and unknown optional event identifiers, discards unknown payload
+objects and rejects missing/invalid required fields. It uses the exact existing
+golden JSON files, not a second contract. scripts/check_backend_protocol.py fences
+version, frame limit, command/event names and hello capabilities across languages.
+
+The client checks session, ordered sequence, request/type/job and analysis source
+correlation. Separate pipe readers never treat stderr as JSON. A bounded event
+stream fails explicitly on overflow; malformed worker output fails the session
+without publishing the raw line. Matching late responses to locally cancelled
+waits are discarded and never replayed. The public event operationError maps safe
+backend/auth/protocol failures. See SWIFT_BACKEND_CLIENT.md for lifecycle/timeouts.
+This does not implement future persistent snapshots, heartbeat/reconnect or a
+coalescing durable scheduler. A Swift task cancellation is not backend operation
+cancellation: send the explicit identity-based cancel command.

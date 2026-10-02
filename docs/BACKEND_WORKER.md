@@ -4,7 +4,7 @@ The Python/Qt application remains the behavioral reference and uses its unchange
 in-process backend. The independent worker shares production parsing, auth policy,
 analyse_with_authentication/analyse_target, download_job and RuntimeSnapshot types.
 It imports no Qt widgets/tasks and does not touch Qt settings, history or runtime
-metadata. There is no Swift source and no local Xcode/admin requirement.
+metadata. The Phase 2 Swift client is documented in SWIFT_BACKEND_CLIENT.md; no local Xcode/admin requirement is introduced.
 
 ## Run and framing
 
@@ -102,8 +102,8 @@ Verification after review: 58 targeted backend tests, full suite 280 passed
 (no skipped/expected failures), dependency check passed. Regression cases
 include provider imports without network, nested JSON recovery, semantic request
 ID reuse and native/inherited subprocess output suppression. CI's full Python job
-discovers these tests; branch trigger includes migration/backend-protocol. Swift
-source absence remains explicitly unrun on the hosted macOS job.
+discovers these tests; branch trigger includes migration/backend-protocol. Phase 2 adds required hosted Swift build/tests and real worker interoperability;
+see SWIFT_BACKEND_CLIENT.md for the native validation boundary.
 
 ## Deferred capabilities
 
