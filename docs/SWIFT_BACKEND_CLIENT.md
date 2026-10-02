@@ -64,6 +64,14 @@ queue and a nonblocking descriptor with bounded polling; no blocking pipe read o
 write runs on the Swift cooperative executor. Darwin suppresses SIGPIPE only on
 the owned write descriptor, not globally in the future host app.
 
+Both readers use one bounded POSIX `read` at a time (up to 64 KiB), retrying
+`EINTR` and treating zero bytes as EOF. They must deliver short reads while the
+worker remains alive: Darwin Foundation's `FileHandle.read(upToCount:)` can wait
+for the requested count or EOF, concealing a flushed handshake and causing a
+request/response deadlock. The direct transport regression verifies small stdout
+delivery before worker exit; changing actor scheduling or increasing request
+timeouts is not a remedy for this pipe-read behavior.
+
 The event stream buffers at most 512 events. A slow or cancelled consumer fails
 the session rather than dropping terminal events silently. At most 128 requests
 await replies; session request tombstones are bounded at 65536. Caller must drain
@@ -139,3 +147,7 @@ The Ubuntu job retains the full Python regression suite. macOS also runs Python
 backend tests and drift protection. No owner's local Xcode, signing/notarisation,
 packaging, UI launch or live accounts are involved. Source/test presence alone is
 not a native success claim: hosted build/test results must be observed separately.
+
+Ubuntu provisioning includes `libegl1` and `libopengl0`: offscreen PySide6 still
+loads these system EGL/OpenGL libraries. A mandatory QApplication/QPixmap smoke
+check precedes the unchanged full suite; UI tests are not excluded or skipped.

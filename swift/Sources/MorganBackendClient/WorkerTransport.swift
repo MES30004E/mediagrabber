@@ -74,7 +74,7 @@ final class WorkerTransport: @unchecked Sendable {
         stdoutReader.async { [self] in
             while true {
                 do {
-                    let bytes = try output.fileHandleForReading.read(upToCount: 65536) ?? Data()
+                    let bytes = try Self.readChunk(output.fileHandleForReading)
                     let done = DispatchSemaphore(value: 0)
                     receive(bytes.isEmpty ? nil : bytes, nil) { done.signal() }
                     done.wait()
@@ -87,8 +87,29 @@ final class WorkerTransport: @unchecked Sendable {
             output.fileHandleForReading.closeFile()
         }
         stderrReader.async { [self] in
-            while let bytes = try? diagnostics.fileHandleForReading.read(upToCount: 65536), !bytes.isEmpty {}
+            while let bytes = try? Self.readChunk(diagnostics.fileHandleForReading), !bytes.isEmpty {}
             diagnostics.fileHandleForReading.closeFile()
+        }
+    }
+    /// Darwin FileHandle.read(upToCount:) may wait for the requested count or
+    /// EOF. A live request/response peer sends short frames and keeps its pipe
+    /// open, so filling that buffer deadlocks the handshake. One POSIX read
+    /// returns the bytes currently available (bounded to 64 KiB), including
+    /// short reads. Both readers stay on their dedicated blocking I/O queues.
+    private static func readChunk(_ handle: FileHandle) throws -> Data {
+        var buffer = [UInt8](repeating: 0, count: 65536)
+        while true {
+            let count = buffer.withUnsafeMutableBytes { bytes in
+                #if canImport(Darwin)
+                return Darwin.read(handle.fileDescriptor, bytes.baseAddress!, bytes.count)
+                #else
+                return Glibc.read(handle.fileDescriptor, bytes.baseAddress!, bytes.count)
+                #endif
+            }
+            if count > 0 { return Data(buffer.prefix(count)) }
+            if count == 0 { return Data() }
+            if errno == EINTR { continue }
+            throw BackendError.transportFailure
         }
     }
     var statusIfExited: Int32? { process.isRunning ? nil : process.terminationStatus }
