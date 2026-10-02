@@ -79,8 +79,14 @@ final class ClientTests: XCTestCase {
     func testCancelledWaitDoesNotReplayOrCorruptLaterResponse() async throws {
         let client = BackendClient()
         _ = try await client.start(configuration("delay"))
-        let request = Task { try await client.send(.ping) }
+        let probeStart = ProcessInfo.processInfo.systemUptime
+        let request = Task {
+            let response = try await client.send(.ping)
+            print("Cancellation ordering probe: response completed after \(ProcessInfo.processInfo.systemUptime - probeStart)s")
+            return response
+        }
         try await Task.sleep(nanoseconds: 30_000_000)
+        print("Cancellation ordering probe: cancel invoked after \(ProcessInfo.processInfo.systemUptime - probeStart)s")
         request.cancel()
         do { _ = try await request.value; XCTFail("Expected cancellation") }
         catch { XCTAssertEqual(error as? BackendError, .cancelled) }
