@@ -22,6 +22,10 @@ def emit(command, kind='response', type_=None, payload=None, **changes):
 if mode == 'eof': sys.exit(0)
 if mode == 'crash': sys.exit(7)
 if mode == 'no-read': time.sleep(60); sys.exit(0)
+if mode == 'small-output':
+    os.write(1, b'small frame\n')
+    time.sleep(60)
+    sys.exit(0)
 for line in sys.stdin:
     command = json.loads(line)
     if command['type'] == 'session.hello':
