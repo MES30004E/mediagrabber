@@ -8,6 +8,7 @@ import uuid
 mode = sys.argv[1]
 session = str(uuid.uuid4())
 sequence = 0
+pending_ping = None
 
 def emit(command, kind='response', type_=None, payload=None, **changes):
     global sequence
@@ -71,6 +72,16 @@ for line in sys.stdin:
     elif mode == 'partial':
         sys.stdout.write('{'); sys.stdout.flush(); break
     elif mode == 'delay':
-        time.sleep(0.15); emit(command)
+        # Hold the first response until the test has cancelled its waiter and
+        # sends the next ping. A sleep cannot guarantee cancellation wins on
+        # a busy runner. Emit the old response first to exercise late discard.
+        if pending_ping is None:
+            pending_ping = command
+            emit(command, 'event', 'diagnostic', {'category': 'test', 'level': 'info',
+                                                'safe_message': 'ping awaiting cancellation'})
+        else:
+            emit(pending_ping)
+            pending_ping = None
+            emit(command)
     else:
         emit(command)

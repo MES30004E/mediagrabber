@@ -78,20 +78,24 @@ final class ClientTests: XCTestCase {
     }
     func testCancelledWaitDoesNotReplayOrCorruptLaterResponse() async throws {
         let client = BackendClient()
-        _ = try await client.start(configuration("delay"))
-        let probeStart = ProcessInfo.processInfo.systemUptime
-        let request = Task {
-            let response = try await client.send(.ping)
-            print("Cancellation ordering probe: response completed after \(ProcessInfo.processInfo.systemUptime - probeStart)s")
-            return response
+        let observed = Task { () throws -> BackendMessage in
+            for try await event in client.events {
+                if case .diagnostic(let payload) = event.payload,
+                   payload.safeMessage == "ping awaiting cancellation" { return event }
+            }
+            throw BackendError.workerEOF
         }
-        try await Task.sleep(nanoseconds: 30_000_000)
-        print("Cancellation ordering probe: cancel invoked after \(ProcessInfo.processInfo.systemUptime - probeStart)s")
+        defer { observed.cancel(); Task { await client.abort() } }
+        _ = try await client.start(configuration("delay"))
+        let request = Task { try await client.send(.ping) }
+        let pendingPing = try await observed.value
+        XCTAssertNotNil(pendingPing.requestID)
         request.cancel()
         do { _ = try await request.value; XCTFail("Expected cancellation") }
         catch { XCTAssertEqual(error as? BackendError, .cancelled) }
         let next = try await client.send(.ping)
         XCTAssertEqual(next.type, "session.ping")
+        XCTAssertNotEqual(next.requestID, pendingPing.requestID)
         try await client.shutdown()
     }
     func testNonreadingWorkerCannotBlockHandshakeForever() async throws {

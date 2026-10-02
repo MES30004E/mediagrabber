@@ -143,6 +143,12 @@ and the existing test-only external yt-dlp boundary for deterministic Watch Late
 analysis. A separate synthetic transport peer floods stderr and simulates
 crash/EOF/bad frames without network, cookies, Tor or accounts.
 
+The cancelled-wait regression uses a peer acknowledgement rather than a sleep
+race. The peer holds the first ping response until cancellation has completed
+and the next ping arrives, then emits the cancelled request's late response
+before the new one. This explicitly tests late discard and correct correlation
+without assuming a timer resumes before another process replies.
+
 The Ubuntu job retains the full Python regression suite. macOS also runs Python
 backend tests and drift protection. No owner's local Xcode, signing/notarisation,
 packaging, UI launch or live accounts are involved. Source/test presence alone is
