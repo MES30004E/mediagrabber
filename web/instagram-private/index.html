@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    style-src 'unsafe-inline';
+    script-src 'unsafe-inline';
+    img-src data: https://*.cdninstagram.com https://*.fbcdn.net https://*.instagram.com;
+    media-src blob: https://*.cdninstagram.com https://*.fbcdn.net https://*.instagram.com;
+    connect-src 'none';
+    frame-src 'none';
+    object-src 'none';
+    base-uri 'none';
+    form-action 'none';
+  ">
+  <title>MediaGrabber · Instagram Private Media</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d12;
+      --panel: #12151d;
+      --panel-2: #181c26;
+      --line: #2a3040;
+      --text: #f6f7fb;
+      --muted: #9ba4b7;
+      --accent: #8b5cf6;
+      --accent-2: #a78bfa;
+      --good: #34d399;
+      --warn: #fbbf24;
+      --bad: #fb7185;
+      --shadow: 0 18px 60px rgba(0,0,0,.32);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    body { min-height: 100vh; }
+    button, input, textarea { font: inherit; }
+    a { color: inherit; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 64px; }
+    .topbar { display:flex; justify-content:space-between; gap:20px; align-items:center; margin-bottom:38px; }
+    .brand { font-weight: 800; letter-spacing:-.02em; font-size:18px; }
+    .brand span { color: var(--accent-2); }
+    .chips { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+    .chip { border:1px solid var(--line); background:var(--panel); color:var(--muted); border-radius:999px; padding:6px 10px; font-size:12px; }
+    .chip.good { color:#baf7df; border-color:#245a4b; background:#10271f; }
+    .hero { display:grid; grid-template-columns: 1.15fr .85fr; gap:26px; align-items:stretch; }
+    .card { background:linear-gradient(180deg,var(--panel),#10131a); border:1px solid var(--line); border-radius:22px; box-shadow:var(--shadow); }
+    .main { padding:28px; }
+    .side { padding:24px; }
+    h1 { font-size: clamp(32px,5vw,58px); line-height:1.02; letter-spacing:-.045em; margin:0 0 16px; max-width:760px; }
+    .lead { color:var(--muted); font-size:17px; max-width:720px; margin:0 0 28px; }
+    .input-row { display:grid; grid-template-columns:1fr auto; gap:10px; margin-top:18px; }
+    input[type=url] { width:100%; border:1px solid var(--line); background:#090b10; color:var(--text); border-radius:14px; padding:14px 15px; outline:none; }
+    input[type=url]:focus, textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(139,92,246,.14); }
+    .btn { border:0; border-radius:13px; padding:13px 16px; cursor:pointer; font-weight:750; transition:.16s ease; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+    .btn:hover { transform:translateY(-1px); }
+    .btn.primary { color:white; background:linear-gradient(135deg,var(--accent),#6d5dfc); }
+    .btn.secondary { color:var(--text); background:var(--panel-2); border:1px solid var(--line); }
+    .btn.ghost { color:var(--muted); background:transparent; border:1px solid var(--line); }
+    .btn.small { padding:9px 11px; font-size:13px; border-radius:10px; }
+    .status { min-height:24px; margin-top:10px; color:var(--muted); font-size:13px; }
+    .status.good { color:var(--good); }
+    .status.bad { color:var(--bad); }
+    .privacy { display:grid; gap:13px; }
+    .privacy-item { display:flex; gap:11px; align-items:flex-start; color:var(--muted); }
+    .dot { width:9px; height:9px; margin-top:6px; border-radius:50%; background:var(--good); box-shadow:0 0 0 5px rgba(52,211,153,.08); flex:0 0 auto; }
+    .privacy strong { color:var(--text); display:block; margin-bottom:2px; }
+    .section { margin-top:30px; }
+    .section-head { display:flex; gap:14px; justify-content:space-between; align-items:end; margin-bottom:14px; }
+    .section-head h2 { margin:0; font-size:22px; letter-spacing:-.02em; }
+    .section-head p { margin:2px 0 0; color:var(--muted); }
+    .setup { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+    .step { padding:18px; background:var(--panel); border:1px solid var(--line); border-radius:17px; min-height:150px; }
+    .step-num { width:28px; height:28px; border-radius:9px; display:grid; place-items:center; background:#21183a; color:#c4b5fd; font-weight:800; margin-bottom:13px; }
+    .step h3 { margin:0 0 6px; font-size:15px; }
+    .step p { margin:0; color:var(--muted); font-size:13px; }
+    .bookmark { margin-top:12px; user-select:none; }
+    .bookmark a { text-decoration:none; }
+    details { margin-top:16px; border:1px solid var(--line); border-radius:16px; background:var(--panel); overflow:hidden; }
+    summary { cursor:pointer; padding:15px 17px; font-weight:750; }
+    details .inside { padding:0 17px 17px; }
+    textarea { width:100%; min-height:140px; resize:vertical; border:1px solid var(--line); background:#090b10; color:var(--text); border-radius:13px; padding:12px; outline:none; }
+    .toolbar { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+    .count { color:var(--muted); margin-left:auto; font-size:13px; }
+    .results { margin-top:18px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    .media-card { overflow:hidden; background:var(--panel); border:1px solid var(--line); border-radius:18px; }
+    .preview { aspect-ratio:4/5; background:#07080c; display:grid; place-items:center; overflow:hidden; }
+    .preview video, .preview img { width:100%; height:100%; object-fit:contain; background:#07080c; }
+    .meta { padding:14px; }
+    .meta-top { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:9px; }
+    .type { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#c4b5fd; }
+    .res { color:var(--muted); font-size:12px; }
+    .source { color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:12px; }
+    .actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .empty { border:1px dashed var(--line); border-radius:18px; padding:32px; color:var(--muted); text-align:center; }
+    .hidden { display:none !important; }
+    .notice { margin-top:18px; border:1px solid #54451c; background:#221c0e; color:#f7df8b; border-radius:14px; padding:12px 14px; font-size:13px; }
+    .footer { margin-top:34px; color:var(--muted); font-size:12px; text-align:center; }
+    code { color:#d8ccff; }
+    @media (max-width: 900px) {
+      .hero { grid-template-columns:1fr; }
+      .setup { grid-template-columns:1fr; }
+      .results { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width: 600px) {
+      .wrap { padding:18px 14px 44px; }
+      .topbar { align-items:flex-start; }
+      .chips { justify-content:flex-start; }
+      .main,.side { padding:20px; }
+      .input-row { grid-template-columns:1fr; }
+      .results { grid-template-columns:1fr; }
+      .count { width:100%; margin-left:0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="topbar">
+      <div class="brand">Media<span>Grabber</span></div>
+      <div class="chips">
+        <span class="chip good">Local-only UI</span>
+        <span class="chip">No cookies requested</span>
+        <span class="chip">No analytics</span>
+        <span class="chip">No backend</span>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="card main">
+        <h1>Resolve Instagram media without handing your session to another site.</h1>
+        <p class="lead">Paste an Instagram URL, open it in your own logged-in Instagram tab, then use the one-click capture bookmark. The media links are returned here and rendered as a private result library in your browser.</p>
+
+        <label for="url"><strong>Instagram or direct CDN URL</strong></label>
+        <div class="input-row">
+          <input id="url" type="url" autocomplete="off" spellcheck="false" placeholder="https://www.instagram.com/stories/...">
+          <button id="openBtn" class="btn primary" type="button">Open in Instagram</button>
+        </div>
+        <div id="status" class="status">Nothing is uploaded from this form.</div>
+
+        <div class="notice">Important: a static GitHub Pages site cannot read your Instagram login cookies. That browser boundary is intentional. The capture bookmark runs on <strong>instagram.com</strong> and only returns already-loaded media URLs.</div>
+      </div>
+
+      <aside class="card side">
+        <h2 style="margin-top:0">Privacy model</h2>
+        <div class="privacy">
+          <div class="privacy-item"><span class="dot"></span><div><strong>Your login stays with Instagram</strong>No session cookie, CSRF token, password, or Authorization header is requested by this page.</div></div>
+          <div class="privacy-item"><span class="dot"></span><div><strong>No application server</strong>The page is static HTML/CSS/JavaScript. There is no resolver API behind it.</div></div>
+          <div class="privacy-item"><span class="dot"></span><div><strong>Results are ephemeral</strong>Captured URLs are kept in the current tab only. They are not stored in localStorage.</div></div>
+          <div class="privacy-item"><span class="dot"></span><div><strong>Signed links expire</strong>Instagram CDN links are temporary. Open or save them soon after capture.</div></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>One-time setup</h2>
+          <p>Install the capture bookmark once, then reuse it on stories, reels, posts, and carousels.</p>
+        </div>
+      </div>
+
+      <div class="setup">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Add the bookmark</h3>
+          <p>Drag <strong>MG Capture</strong> below to your bookmarks bar. If dragging does not work, use Copy and create a bookmark manually.</p>
+          <div class="bookmark toolbar">
+            <a id="bookmarklet" class="btn secondary small" href="#">MG Capture</a>
+            <button id="copyBookmarklet" class="btn ghost small" type="button">Copy</button>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Open the media in Instagram</h3>
+          <p>Use the URL box above. Make sure the story, reel, post, or carousel is actually visible and loaded in your logged-in tab.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Click MG Capture</h3>
+          <p>The bookmark scans loaded <code>&lt;video&gt;</code>, <code>&lt;img&gt;</code>, and Instagram CDN resources, then opens this page with a result library.</p>
+        </div>
+      </div>
+
+      <details>
+        <summary>Advanced fallback: paste an Instagram GraphQL JSON response</summary>
+        <div class="inside">
+          <p style="color:var(--muted);margin-top:0">Parsing is local. Do not paste cookies, request headers, passwords, or session tokens.</p>
+          <textarea id="jsonInput" placeholder='{"data":{"reels_media":[...]}}'></textarea>
+          <div class="toolbar" style="margin-top:10px">
+            <button id="parseJson" class="btn secondary small" type="button">Parse JSON locally</button>
+            <button id="clearJson" class="btn ghost small" type="button">Clear</button>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <section id="library" class="section hidden">
+      <div class="section-head">
+        <div>
+          <h2>Media library</h2>
+          <p id="librarySource">Captured media</p>
+        </div>
+        <div class="toolbar">
+          <button id="copyAll" class="btn ghost small" type="button">Copy all links</button>
+          <button id="clearResults" class="btn ghost small" type="button">Clear</button>
+          <span id="count" class="count"></span>
+        </div>
+      </div>
+      <div id="results" class="results"></div>
+    </section>
+
+    <div class="footer">Use only for media you are authorized to access. This tool does not bypass Instagram access controls.</div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (id) => document.getElementById(id);
+      const state = { items: [], sourceUrl: '' };
+      const allowedInstagram = (h) => h === 'instagram.com' || h === 'www.instagram.com' || h.endsWith('.instagram.com');
+      const allowedCdn = (h) => h.endsWith('.cdninstagram.com') || h.endsWith('.fbcdn.net') || h.endsWith('.instagram.com');
+
+      function setStatus(message, kind='') {
+        const el = $('status');
+        el.textContent = message;
+        el.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function classifyUrl(raw) {
+        try {
+          const u = new URL(raw);
+          if (!/^https:$/.test(u.protocol)) return { kind:'invalid' };
+          if (allowedInstagram(u.hostname) && !allowedCdn(u.hostname)) return { kind:'instagram', url:u.href };
+          if (allowedCdn(u.hostname)) {
+            const video = /\.mp4(?:$|\?)/i.test(u.href) || /\/v\/t\d+\//i.test(u.pathname);
+            return { kind:'cdn', url:u.href, type: video ? 'video' : 'image' };
+          }
+          return { kind:'invalid' };
+        } catch {
+          return { kind:'invalid' };
+        }
+      }
+
+      function b64urlDecode(input) {
+        const padded = input.replace(/-/g,'+').replace(/_/g,'/') + '==='.slice((input.length + 3) % 4);
+        const binary = atob(padded);
+        let encoded = '';
+        for (let i = 0; i < binary.length; i++) encoded += '%' + binary.charCodeAt(i).toString(16).padStart(2,'0');
+        return decodeURIComponent(encoded);
+      }
+
+      function safeUrl(raw) {
+        try {
+          const u = new URL(raw);
+          if (u.protocol !== 'https:' || !allowedCdn(u.hostname)) return null;
+          return u.href;
+        } catch {
+          return null;
+        }
+      }
+
+      function normalizeItem(item) {
+        if (!item || typeof item !== 'object') return null;
+        const url = safeUrl(item.url || item.src || '');
+        if (!url) return null;
+        const type = item.type === 'video' || /\.mp4(?:$|\?)/i.test(url) ? 'video' : 'image';
+        const width = Number(item.width || item.config_width || 0) || null;
+        const height = Number(item.height || item.config_height || 0) || null;
+        return {
+          type,
+          url,
+          width,
+          height,
+          source: String(item.source || item.path || 'Instagram').slice(0,160)
+        };
+      }
+
+      function mergeItems(items, sourceUrl='') {
+        const map = new Map(state.items.map(x => [x.url, x]));
+        for (const raw of items || []) {
+          const item = normalizeItem(raw);
+          if (item) map.set(item.url, item);
+        }
+        state.items = [...map.values()].slice(0, 60);
+        if (sourceUrl) state.sourceUrl = sourceUrl;
+        render();
+      }
+
+      function render() {
+        const lib = $('library');
+        const root = $('results');
+        root.textContent = '';
+
+        if (!state.items.length) {
+          lib.classList.add('hidden');
+          return;
+        }
+
+        lib.classList.remove('hidden');
+        $('count').textContent = state.items.length + (state.items.length === 1 ? ' item' : ' items');
+        $('librarySource').textContent = state.sourceUrl ? 'Captured from ' + state.sourceUrl : 'Captured media';
+
+        state.items.forEach((item, index) => {
+          const card = document.createElement('article');
+          card.className = 'media-card';
+
+          const preview = document.createElement('div');
+          preview.className = 'preview';
+
+          let media;
+          if (item.type === 'video') {
+            media = document.createElement('video');
+            media.controls = true;
+            media.playsInline = true;
+            media.preload = 'metadata';
+          } else {
+            media = document.createElement('img');
+            media.loading = 'lazy';
+            media.alt = 'Captured Instagram media ' + (index + 1);
+          }
+          media.referrerPolicy = 'no-referrer';
+          media.src = item.url;
+          preview.appendChild(media);
+
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+
+          const top = document.createElement('div');
+          top.className = 'meta-top';
+          const type = document.createElement('span');
+          type.className = 'type';
+          type.textContent = item.type;
+          const res = document.createElement('span');
+          res.className = 'res';
+          res.textContent = item.width && item.height ? item.width + '×' + item.height : 'resolution unknown';
+          top.append(type, res);
+
+          const source = document.createElement('div');
+          source.className = 'source';
+          source.title = item.source;
+          source.textContent = item.source;
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+
+          const open = document.createElement('a');
+          open.className = 'btn secondary small';
+          open.textContent = 'Open / Save';
+          open.href = item.url;
+          open.target = '_blank';
+          open.rel = 'noopener noreferrer';
+          open.referrerPolicy = 'no-referrer';
+          open.setAttribute('download','');
+
+          const copy = document.createElement('button');
+          copy.className = 'btn ghost small';
+          copy.type = 'button';
+          copy.textContent = 'Copy URL';
+          copy.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(item.url);
+              copy.textContent = 'Copied';
+              setTimeout(() => copy.textContent = 'Copy URL', 900);
+            } catch {
+              window.prompt('Copy this URL:', item.url);
+            }
+          });
+
+          actions.append(open, copy);
+          meta.append(top, source, actions);
+          card.append(preview, meta);
+          root.appendChild(card);
+        });
+      }
+
+      function makeBookmarklet(target) {
+        const code = `(()=>{try{
+const TARGET=${JSON.stringify(target)};
+if(!/(^|\\.)instagram\\.com$/.test(location.hostname)){alert('MG Capture: open Instagram first.');return;}
+const found=new Map();
+const add=(type,url,width,height,source)=>{
+  try{
+    if(!url||url.startsWith('blob:')||url.startsWith('data:'))return;
+    const u=new URL(url,location.href);
+    if(u.protocol!=='https:')return;
+    if(!(u.hostname.endsWith('.cdninstagram.com')||u.hostname.endsWith('.fbcdn.net')||u.hostname.endsWith('.instagram.com')))return;
+    const key=u.href;
+    const prev=found.get(key);
+    const next={type,url:key,width:Number(width)||null,height:Number(height)||null,source};
+    if(!prev||(next.width||0)*(next.height||0)>(prev.width||0)*(prev.height||0))found.set(key,next);
+  }catch{}
+};
+document.querySelectorAll('video').forEach(v=>{
+  add('video',v.currentSrc||v.src,v.videoWidth||v.clientWidth,v.videoHeight||v.clientHeight,'video element');
+  v.querySelectorAll('source').forEach(s=>add('video',s.src,v.videoWidth||null,v.videoHeight||null,'video source'));
+});
+document.querySelectorAll('img').forEach(img=>{
+  const w=img.naturalWidth||img.clientWidth||0,h=img.naturalHeight||img.clientHeight||0;
+  if(w>=300&&h>=300)add('image',img.currentSrc||img.src,w,h,'image element');
+});
+const ov=document.querySelector('meta[property="og:video"],meta[property="og:video:url"]');
+if(ov)add('video',ov.content,null,null,'og:video');
+const oi=document.querySelector('meta[property="og:image"]');
+if(oi)add('image',oi.content,null,null,'og:image');
+performance.getEntriesByType('resource').forEach(r=>{
+  try{
+    const u=new URL(r.name);
+    if(!(u.hostname.endsWith('.cdninstagram.com')||u.hostname.endsWith('.fbcdn.net')))return;
+    if(/\\.mp4(?:$|\\?)/i.test(u.href)||r.initiatorType==='video')add('video',u.href,null,null,'loaded network media');
+  }catch{}
+});
+const items=[...found.values()].slice(0,24);
+if(!items.length){alert('MG Capture: no loaded media found. Let the media load/play, move to the desired carousel item, then try again.');return;}
+const payload={v:1,sourceUrl:location.href,capturedAt:Date.now(),items};
+const json=JSON.stringify(payload);
+const enc=btoa(unescape(encodeURIComponent(json))).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
+window.open(TARGET+'#mg='+enc,'_blank','noopener,noreferrer');
+}catch(e){alert('MG Capture failed: '+e.message);}})();`;
+        return 'javascript:' + encodeURIComponent(code);
+      }
+
+      const returnTarget = location.origin + location.pathname;
+      const bookmarklet = makeBookmarklet(returnTarget);
+      $('bookmarklet').href = bookmarklet;
+
+      $('copyBookmarklet').addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(bookmarklet);
+          $('copyBookmarklet').textContent = 'Copied';
+          setTimeout(() => $('copyBookmarklet').textContent = 'Copy', 1000);
+        } catch {
+          window.prompt('Create a bookmark and paste this into its URL field:', bookmarklet);
+        }
+      });
+
+      $('openBtn').addEventListener('click', () => {
+        const raw = $('url').value.trim();
+        const parsed = classifyUrl(raw);
+        if (parsed.kind === 'instagram') {
+          window.open(parsed.url, '_blank', 'noopener');
+          setStatus('Opened Instagram. When the media is visible, click the MG Capture bookmark.', 'good');
+        } else if (parsed.kind === 'cdn') {
+          mergeItems([{type:parsed.type,url:parsed.url,source:'direct CDN URL'}], raw);
+          setStatus('Direct Instagram CDN media added to the library.', 'good');
+        } else {
+          setStatus('Please enter an instagram.com URL or an Instagram CDN URL.', 'bad');
+        }
+      });
+
+      $('url').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') $('openBtn').click();
+      });
+
+      function collectFromJson(root) {
+        const out = [];
+        const seen = new WeakSet();
+
+        function add(type, url, width, height, source) {
+          const safe = safeUrl(url);
+          if (safe) out.push({type,url:safe,width,height,source});
+        }
+
+        function walk(x, path='root') {
+          if (!x || typeof x !== 'object') return;
+          if (seen.has(x)) return;
+          seen.add(x);
+
+          if (Array.isArray(x)) {
+            x.forEach((v,i) => walk(v, path + '[' + i + ']'));
+            return;
+          }
+
+          if (Array.isArray(x.video_resources)) {
+            x.video_resources.forEach(v => add('video', v && v.src, v && v.config_width, v && v.config_height, path + '.video_resources'));
+          }
+
+          if (Array.isArray(x.display_resources)) {
+            x.display_resources.forEach(v => add('image', v && v.src, v && v.config_width, v && v.config_height, path + '.display_resources'));
+          }
+
+          if (x.image_versions2 && Array.isArray(x.image_versions2.candidates)) {
+            x.image_versions2.candidates.forEach(v => add('image', v && v.url, v && v.width, v && v.height, path + '.image_versions2'));
+          }
+
+          if (typeof x.video_url === 'string') add('video', x.video_url, x.original_width, x.original_height, path + '.video_url');
+          if (typeof x.display_url === 'string') add('image', x.display_url, x.dimensions && x.dimensions.width, x.dimensions && x.dimensions.height, path + '.display_url');
+
+          for (const [k,v] of Object.entries(x)) walk(v, path + '.' + k);
+        }
+
+        walk(root);
+        return out;
+      }
+
+      $('parseJson').addEventListener('click', () => {
+        try {
+          const text = $('jsonInput').value.trim();
+          if (!text) throw new Error('Paste JSON first.');
+          const data = JSON.parse(text);
+          const items = collectFromJson(data);
+          if (!items.length) throw new Error('No Instagram CDN media URLs were found in that JSON.');
+          mergeItems(items, 'pasted Instagram JSON');
+          setStatus('Parsed ' + items.length + ' media candidate(s) locally.', 'good');
+        } catch (e) {
+          setStatus(e.message || String(e), 'bad');
+        }
+      });
+
+      $('clearJson').addEventListener('click', () => { $('jsonInput').value = ''; });
+
+      $('copyAll').addEventListener('click', async () => {
+        const text = state.items.map(x => x.url).join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          $('copyAll').textContent = 'Copied';
+          setTimeout(() => $('copyAll').textContent = 'Copy all links', 1000);
+        } catch {
+          window.prompt('Copy these links:', text);
+        }
+      });
+
+      $('clearResults').addEventListener('click', () => {
+        state.items = [];
+        state.sourceUrl = '';
+        render();
+      });
+
+      const hash = location.hash;
+      if (hash.startsWith('#mg=')) {
+        try {
+          const payload = JSON.parse(b64urlDecode(hash.slice(4)));
+          history.replaceState(null, '', location.pathname + location.search);
+          if (payload && Array.isArray(payload.items)) {
+            mergeItems(payload.items, payload.sourceUrl || 'Instagram');
+            setStatus('Capture received. No cookies or request headers were transferred.', 'good');
+          }
+        } catch (e) {
+          history.replaceState(null, '', location.pathname + location.search);
+          setStatus('Could not decode the capture payload: ' + e.message, 'bad');
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
