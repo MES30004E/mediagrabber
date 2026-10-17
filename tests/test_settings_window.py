@@ -126,6 +126,7 @@ def test_accounts_connect_disconnect_and_verification_invalidation(tmp_path, mon
         assert "signed" in dialog.auth_status.text().lower()
         dialog.profile.setEditText("Other profile")
         assert "verified" in dialog.auth_status.text().lower() or "not tested" in dialog.auth_status.text().lower()
+        assert "authenticated" not in dialog.auth_status.toolTip()
         dialog.disconnect_youtube.click()
         collected = dialog._collect()
         assert collected.authentication_mode == "None" and collected.cookies_file == "" and collected.browser_profile == ""

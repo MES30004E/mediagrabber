@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 import subprocess
 import threading
 import time
@@ -17,8 +18,8 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QSpinBox, QSplitter, QStyleFactory, QTabWidget, QTableWidget, QTableWidgetItem,
-    QTextEdit, QToolButton, QVBoxLayout, QWidget,
+    QSpinBox, QSplitter, QTableWidget, QTableWidgetItem,
+    QTextEdit, QToolButton, QVBoxLayout, QWidget, QScrollArea, QLayout,
 )
 
 from .database import Database
@@ -51,6 +52,9 @@ from .subtitle_mux import friendly_language
 from .torrent import (TORRENT_TOR_ERROR, TorrentMetadata, analyse_torrent, download_torrent,
                       fetch_magnet_metadata, validate_torrent_connection)
 from .yt_runtime import RuntimeSnapshot, YtDlpRuntimeManager, get_runtime_manager
+from .ui_components import NavigationShell, page_heading, polish_table
+from .theme import apply_theme
+from .auth import connection_failure, requires_authentication
 
 
 def human_bytes(value: float | int) -> str:
@@ -97,8 +101,17 @@ class DropInput(QPlainTextEdit):
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() or event.mimeData().hasText():
             event.acceptProposedAction()
+            self._drop_feedback(True)
+
+    def _drop_feedback(self, active):
+        self.setProperty("dropActive", active)
+        self.style().unpolish(self); self.style().polish(self)
+
+    def dragLeaveEvent(self, event):
+        self._drop_feedback(False); event.accept()
 
     def dropEvent(self, event):
+        self._drop_feedback(False)
         urls = [url.toLocalFile() if url.isLocalFile() else url.toString() for url in event.mimeData().urls()]
         self.insertPlainText("\n".join(urls) if urls else event.mimeData().text())
         event.acceptProposedAction()
@@ -255,6 +268,7 @@ class MainWindow(QMainWindow):
             self.move(self.settings.window_x, self.settings.window_y)
         self.setAcceptDrops(True)
         self._build_ui(); self._build_menu(); self._apply_theme(); self._refresh_queue(); self._refresh_history()
+        QApplication.instance().styleHints().colorSchemeChanged.connect(self._system_appearance_changed)
         self.console_store.append("APP", "Morgan Media Downloader started")
         self.dispatch_timer = QTimer(self); self.dispatch_timer.timeout.connect(self._dispatch); self.dispatch_timer.start(500)
         self.watchdog_timer = QTimer(self); self.watchdog_timer.timeout.connect(self._watchdog_jobs); self.watchdog_timer.start(2000)
@@ -270,8 +284,10 @@ class MainWindow(QMainWindow):
             self.settings_warning_timer = QTimer(self); self.settings_warning_timer.setSingleShot(True); self.settings_warning_timer.timeout.connect(self._show_settings_warning); self.settings_warning_timer.start(400)
 
     def _build_ui(self):
-        self.tabs = QTabWidget(); self.setCentralWidget(self.tabs)
+        self.tabs = NavigationShell(); self.setCentralWidget(self.tabs)
         download_tab = QWidget(); outer = QVBoxLayout(download_tab)
+        outer.setContentsMargins(22, 18, 22, 16); outer.setSpacing(10)
+        page_heading(outer, "Download", "Paste a link or search. Analyse playlists and review your selection before downloading.")
         self.banner = QWidget(); banner_row = QHBoxLayout(self.banner); banner_row.setContentsMargins(8, 4, 8, 4)
         self.banner_text = QLabel(); self.banner_analyse = QPushButton("Analyse"); self.banner_download = QPushButton("Download"); self.banner_dismiss = QPushButton("Dismiss")
         banner_row.addWidget(self.banner_text, 1); banner_row.addWidget(self.banner_analyse); banner_row.addWidget(self.banner_download); banner_row.addWidget(self.banner_dismiss)
@@ -282,6 +298,9 @@ class MainWindow(QMainWindow):
             self.banner_text.setText("Morgan Media Downloader did not close normally last time.")
             self.banner_analyse.setText("Open Logs"); self.banner_download.hide(); self.banner.show()
         top = QHBoxLayout(); self.input = DropInput(); self.analyse_button = QPushButton("Analyse"); self.download_button = QPushButton("Download")
+        self.input.setAccessibleName("Media URLs or search terms"); self.input.setMaximumHeight(88)
+        self.download_button.setProperty("primary", True)
+        self.download_button.setToolTip("Analyse and download using the current options; review Spotify matches with Analyse first.")
         self.analyse_button.setDefault(True); self.analyse_button.clicked.connect(self.analyse)
         self.download_button.clicked.connect(self.download_input); self.input.textChanged.connect(self._input_changed)
         top.addWidget(self.input, 1); top.addWidget(self.analyse_button); top.addWidget(self.download_button)
@@ -295,6 +314,9 @@ class MainWindow(QMainWindow):
         connection_row.addWidget(self.connection_selector); connection_row.addWidget(self.connection_status); connection_row.addWidget(self.connection_test); connection_row.addStretch(); connection_row.addWidget(self.account_button); outer.addLayout(connection_row)
         self.analysis_progress = QProgressBar(); self.analysis_progress.setRange(0, 0); self.analysis_progress.hide(); outer.addWidget(self.analysis_progress)
         self.summary = QLabel("Enter a supported URL or search terms."); self.summary.setWordWrap(True); outer.addWidget(self.summary)
+        self.analysis_diagnostics = QPushButton("View diagnostic details…"); self.analysis_diagnostics.clicked.connect(self._show_analysis_diagnostics)
+        self.analysis_diagnostics.hide(); outer.addWidget(self.analysis_diagnostics, 0, Qt.AlignmentFlag.AlignLeft)
+        self._analysis_error_details = ""
         preview = QGroupBox("Media Preview"); preview_layout = QHBoxLayout(preview)
         self.thumbnail = QLabel("No preview"); self.thumbnail.setFixedSize(160, 90); self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter); self.thumbnail.setStyleSheet("background: palette(midlight); border-radius: 6px;")
         self.preview_details = QLabel("Title\nChannel / artist\nDuration\nSource"); self.preview_details.setWordWrap(True)
@@ -303,12 +325,18 @@ class MainWindow(QMainWindow):
         thumbnail_box.addWidget(self.thumbnail_progress)
         preview_layout.addLayout(thumbnail_box); preview_layout.addWidget(self.preview_details, 1); outer.addWidget(preview)
         splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(False)
         self.item_table = QTableWidget(0, 7)
+        self.item_table.setMinimumHeight(180)
         self.item_table.setHorizontalHeaderLabels(["✓", "#", "Title", "Uploader / artist", "Duration", "Source", "Match"])
         self.item_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        for column, width in ((0, 38), (1, 42), (3, 154), (4, 80), (5, 95), (6, 65)):
+            self.item_table.setColumnWidth(column, width)
         self.item_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        polish_table(self.item_table)
         splitter.addWidget(self.item_table)
         settings_box = QGroupBox("Download Options"); grid = QGridLayout(settings_box)
+        grid.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.quality = QComboBox(); self.quality.addItems(["Best", "2160p", "1440p", "1080p", "720p", "480p", "360p"]); self.quality.setCurrentText(self.settings.quality)
         self.compatibility = QComboBox(); self.compatibility.addItems(["macOS / QuickTime", "Universal", "Original / Best Available"]); self.compatibility.setCurrentText(self.settings.compatibility)
         self.container = QComboBox(); self.container.addItems(["Auto", "MP4", "MKV", "WebM"]); self.container.setCurrentText(self.settings.container)
@@ -326,8 +354,6 @@ class MainWindow(QMainWindow):
         self.folder = QLineEdit(self.settings.download_dir); choose = QPushButton("Choose Folder…"); choose.clicked.connect(self.choose_folder)
         self.template = QComboBox(); self.template.setEditable(True); self.template.addItems(["%(title)s.%(ext)s", "%(uploader)s - %(title)s.%(ext)s", "%(playlist_index)03d - %(title)s.%(ext)s"]); self.template.setCurrentText(self.settings.filename_template)
         grid.addWidget(QLabel("Compatibility"), 0, 0); grid.addWidget(self.compatibility, 0, 1); grid.addWidget(QLabel("Quality"), 0, 2); grid.addWidget(self.quality, 0, 3)
-        grid.addWidget(QLabel("Container"), 1, 0); grid.addWidget(self.container, 1, 1); grid.addWidget(QLabel("Audio"), 1, 2); grid.addWidget(self.audio_format, 1, 3)
-        grid.addWidget(QLabel("Bitrate"), 2, 0); grid.addWidget(self.audio_bitrate, 2, 1)
         self.more_options = QWidget(); more_grid = QGridLayout(self.more_options); more_grid.setContentsMargins(0, 0, 0, 0)
         for index, widget in enumerate([self.embed_thumb, self.embed_meta, self.embed_chapters, self.embed_subtitles, self.write_subtitles, self.keep_original]):
             more_grid.addWidget(widget, index // 3, index % 3)
@@ -335,18 +361,32 @@ class MainWindow(QMainWindow):
         more_grid.addWidget(QLabel("Subtitle source"), 2, 2); more_grid.addWidget(self.subtitle_source, 2, 3)
         more_grid.addWidget(self.verify_postprocessing, 3, 0, 1, 2)
         more_grid.addWidget(QLabel("Filename"), 4, 0); more_grid.addWidget(self.template, 4, 1, 1, 3)
+        more_grid.addWidget(QLabel("Container"), 5, 0); more_grid.addWidget(self.container, 5, 1)
+        more_grid.addWidget(QLabel("Audio"), 5, 2); more_grid.addWidget(self.audio_format, 5, 3)
+        more_grid.addWidget(QLabel("Bitrate"), 6, 0); more_grid.addWidget(self.audio_bitrate, 6, 1)
         self.more_options.hide(); self.more_button = QToolButton(); self.more_button.setText("More Options ▾"); self.more_button.clicked.connect(self._toggle_more_options)
-        grid.addWidget(QLabel("Folder"), 3, 0); grid.addWidget(self.folder, 3, 1, 1, 2); grid.addWidget(choose, 3, 3)
-        grid.addWidget(self.more_button, 4, 0); grid.addWidget(self.more_options, 5, 0, 1, 4)
-        splitter.addWidget(settings_box); outer.addWidget(splitter, 1)
+        grid.addWidget(QLabel("Folder"), 1, 0); grid.addWidget(self.folder, 1, 1, 1, 2); grid.addWidget(choose, 1, 3)
+        grid.addWidget(self.more_button, 2, 0); grid.addWidget(self.more_options, 3, 0, 1, 4)
+        outer.insertWidget(outer.indexOf(preview), settings_box)
+        outer.addWidget(splitter, 1)
         buttons = QHBoxLayout()
         select_all = QPushButton("Select All"); select_none = QPushButton("Select None"); invert = QPushButton("Invert Selection")
         select_all.clicked.connect(lambda: self._select_items(True)); select_none.clicked.connect(lambda: self._select_items(False)); invert.clicked.connect(self._invert_items)
         self.add_button = QPushButton("Download Selected"); self.add_button.clicked.connect(self.enqueue_selected); self.add_button.setEnabled(False)
+        self.add_button.setProperty("primary", True)
         buttons.addWidget(select_all); buttons.addWidget(select_none); buttons.addWidget(invert); buttons.addStretch(); buttons.addWidget(self.add_button)
         outer.addLayout(buttons)
         self.activity_label = QLabel("Current activity: No active downloads"); outer.addWidget(self.activity_label)
-        self.tabs.addTab(download_tab, "Download")
+        # Preserve control size hints rather than crushing the options inside a
+        # vertical splitter on smaller screens. Selection actions stay in view.
+        outer.removeItem(buttons); outer.removeWidget(self.activity_label)
+        outer.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        download_page = QWidget(); download_layout = QVBoxLayout(download_page); download_layout.setContentsMargins(0, 0, 0, 0)
+        download_scroll = QScrollArea(); download_scroll.setWidgetResizable(True); download_scroll.setWidget(download_tab)
+        download_layout.addWidget(download_scroll, 1)
+        footer = QWidget(); footer_layout = QVBoxLayout(footer); footer_layout.setContentsMargins(22, 4, 22, 12)
+        footer_layout.addLayout(buttons); footer_layout.addWidget(self.activity_label); download_layout.addWidget(footer)
+        self.tabs.addTab(download_page, "Download")
         self.tabs.addTab(self._queue_tab(), "Queue"); self.tabs.addTab(self._history_tab(), "History")
         self.console_tab = self._console_tab(); self.tabs.addTab(self.console_tab, "Console")
         self.settings_panel = SettingsWindow(self.settings, self.managed_tor, self._apply_settings, self,
@@ -361,6 +401,9 @@ class MainWindow(QMainWindow):
 
     def _queue_tab(self):
         widget = QWidget(); layout = QVBoxLayout(widget)
+        layout.setContentsMargins(22, 18, 22, 16); layout.setSpacing(10)
+        page_heading(layout, "Queue", "Track transfers, review warnings and manage retained downloads.")
+        self.queue_empty = QLabel("No downloads yet. Add a URL on Download to get started."); self.queue_empty.setObjectName("muted"); self.queue_empty.setWordWrap(True); layout.addWidget(self.queue_empty)
         filter_row = QHBoxLayout(); filter_row.addWidget(QLabel("View:"))
         self.queue_filter = QComboBox(); self.queue_filter.addItems(["Media", "Torrents", "All"])
         self.queue_filter.currentTextChanged.connect(self._refresh_queue); filter_row.addWidget(self.queue_filter); filter_row.addStretch()
@@ -370,9 +413,12 @@ class MainWindow(QMainWindow):
         for text, callback in [("Retry", self.retry_banner_job), ("View Details", self.view_job_details),
                                ("Open Console", self.view_job_console), ("Dismiss", self.job_banner.hide)]:
             button = QPushButton(text); button.clicked.connect(callback); banner_layout.addWidget(button)
+        self.job_account_button = QPushButton("Account settings…"); self.job_account_button.clicked.connect(self.show_youtube_account)
+        self.job_account_button.hide(); banner_layout.addWidget(self.job_account_button)
         self.job_banner.setStyleSheet("background: palette(alternate-base); border-radius: 6px;")
         self.job_banner.hide(); layout.addWidget(self.job_banner)
         self.queue_table = QTableWidget(0, 0)
+        polish_table(self.queue_table)
         self.queue_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.queue_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu); self.queue_table.customContextMenuRequested.connect(self._queue_context_menu)
@@ -407,6 +453,8 @@ class MainWindow(QMainWindow):
 
     def _console_tab(self):
         widget = QWidget(); layout = QVBoxLayout(widget); controls = QHBoxLayout()
+        layout.setContentsMargins(22, 18, 22, 16); layout.setSpacing(10)
+        page_heading(layout, "Console", "Local, redacted diagnostics. Filter by source or inspect a selected job.")
         self.console_filter = QComboBox(); self.console_filter.addItems(
             ["All", "App", "yt-dlp", "ffmpeg", "Subtitles", "Thumbnail", "aria2", "Tor", "Warnings", "Errors"])
         self.console_filter.currentTextChanged.connect(self._refresh_console)
@@ -444,11 +492,15 @@ class MainWindow(QMainWindow):
 
     def _history_tab(self):
         widget = QWidget(); layout = QVBoxLayout(widget); filters = QHBoxLayout()
+        layout.setContentsMargins(22, 18, 22, 16); layout.setSpacing(10)
+        page_heading(layout, "History", "Find completed work and review output details from your local history.")
         self.history_search = QLineEdit(); self.history_search.setPlaceholderText("Search local history")
         self.history_filter = QComboBox(); self.history_filter.addItems(["All"] + [s.value for s in JobStatus])
         self.history_search.textChanged.connect(self._refresh_history); self.history_filter.currentTextChanged.connect(self._refresh_history)
         filters.addWidget(self.history_search); filters.addWidget(self.history_filter); layout.addLayout(filters)
         self.history_table = QTableWidget(0, 7); self.history_table.setHorizontalHeaderLabels(["Date", "Title", "Original URL", "Downloaded source", "Output file", "Format", "Status"])
+        polish_table(self.history_table)
+        self.history_empty = QLabel("No history yet."); self.history_empty.setObjectName("muted"); layout.addWidget(self.history_empty)
         self.history_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.history_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu); self.history_table.customContextMenuRequested.connect(self._history_context_menu)
         self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch); layout.addWidget(self.history_table)
@@ -483,6 +535,7 @@ class MainWindow(QMainWindow):
         self.more_button.setText("More Options ▴" if visible else "More Options ▾")
 
     def _input_changed(self):
+        self.analysis_diagnostics.hide(); self._analysis_error_details = ""
         count = len(split_input(self.input.toPlainText()))
         if not self.analysis_task_id:
             self.analyse_button.setText("Analyse All" if count > 1 else "Analyse")
@@ -841,6 +894,15 @@ class MainWindow(QMainWindow):
     def _show_worker_error(self, message: str, details: str):
         from .logging_setup import redact_secrets
         message, details = redact_secrets(message), redact_secrets(details)
+        if requires_authentication(message):
+            result = connection_failure(message)
+            self.summary.setText(result.message)
+            youtube = any("youtube.com" in value or "youtu.be" in value or value == ":ytwatchlater" for value in split_input(self.input.toPlainText()))
+            self.account_button.setText("Reconnect YouTube…" if youtube else "Authentication settings…")
+            self._analysis_error_details = re.sub(r"(?im)^.*(?:cookie|authorization|password|token|signature).*$", "[Sensitive diagnostic line omitted]", message + "\n\n" + details)
+            self.analysis_diagnostics.show()
+            self.console_store.append("ERROR", result.message, level="error")
+            return  # Never offer an unauthenticated format retry for private errors.
         self.console_store.append("ERROR", message, level="error")
         self.summary.setText("Analysis failed")
         if "format" in message.casefold() and any(term in message.casefold() for term in ("not available", "compatible")):
@@ -858,8 +920,12 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(0, self._retry_analysis_without_authentication)
             return
         if self.settings.authentication_mode == "None" and any(term in message.lower() for term in ("private", "sign in", "age", "unavailable", "bot")):
-            message += "\n\nTry authenticated browser cookies in Settings → Authentication."
+            message += "\n\nTry authenticated browser cookies in Settings → Accounts."
         box = QMessageBox(QMessageBox.Icon.Critical, "Unable to analyse", message, parent=self); box.setDetailedText(details); box.exec()
+
+    def _show_analysis_diagnostics(self):
+        box = QMessageBox(QMessageBox.Icon.Information, "Analysis diagnostics", self.summary.text(), parent=self)
+        box.setDetailedText(self._analysis_error_details); box.exec()
 
     def _retry_analysis_without_authentication(self):
         previous = self.settings.authentication_mode; self.settings.authentication_mode = "None"
@@ -1041,6 +1107,12 @@ class MainWindow(QMainWindow):
     def _resume(self, jobs):
         for job in jobs:
             if job.status in {JobStatus.PAUSED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.INTERRUPTED}:
+                if job.kind == "media" and job.status == JobStatus.FAILED and (
+                        requires_authentication(job.error) or job.failure_code.startswith("auth.")):
+                    # An explicit retry after reconnect uses the applied account
+                    # choice, preserving all unrelated captured download options.
+                    for name in ("authentication_mode", "cookies_browser", "browser_profile", "cookies_file"):
+                        setattr(job.options, name, getattr(self.settings, name))
                 prepare_resumable_job(job); self.database.save_job(job)
         self._refresh_queue()
     def cancel_selected(self):
@@ -1121,6 +1193,7 @@ class MainWindow(QMainWindow):
         return self.jobs.get(getattr(self, "_banner_job_id", ""))
 
     def _show_job_banner(self, job: DownloadJob, message: str):
+        self.job_account_button.setVisible(job.kind == "media" and (requires_authentication(job.error) or job.failure_code.startswith("auth.")))
         self._banner_job_id = job.id; self.job_banner_text.setText(message); self.job_banner.show()
 
     def retry_banner_job(self):
@@ -1479,6 +1552,7 @@ class MainWindow(QMainWindow):
             "All": ["Title", "Type", "Status", "Progress", "Speed", "ETA", "Destination"],
         }[view]
         jobs = [job for job in self.jobs.values() if view == "All" or (view == "Torrents") == (job.kind == "torrent")]
+        self.queue_empty.setVisible(not jobs)
         old_ids = [self.queue_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
                    for row in range(self.queue_table.rowCount()) if self.queue_table.item(row, 0)]
         old_columns = [self.queue_table.horizontalHeaderItem(i).text()
@@ -1561,6 +1635,8 @@ class MainWindow(QMainWindow):
     def _refresh_history(self, *_):
         if not hasattr(self, "history_table"): return
         jobs = self.database.search_history(self.history_search.text(), self.history_filter.currentText())
+        self.history_empty.setVisible(not jobs)
+        self.history_empty.setText("No matching history. Try another search or status filter." if self.history_search.text() or self.history_filter.currentText() != "All" else "No history yet. Completed downloads will appear here.")
         self.history_table.setRowCount(len(jobs))
         for row, job in enumerate(jobs):
             values = [job.created_at[:19].replace("T", " "), job.item.title, job.item.original_url, job.item.source_url, job.output_file, job.options.audio_format if job.options.audio_format != "Original/best audio" else job.options.quality, job.status.value]
@@ -1643,11 +1719,10 @@ class MainWindow(QMainWindow):
         self.settings_store.save(self.settings)
 
     def _apply_theme(self):
-        QApplication.instance().setStyle(QStyleFactory.create("Fusion"))
-        if self.settings.theme == "Dark":
-            self.setStyleSheet("QWidget { background: #202124; color: #e8eaed; } QLineEdit,QPlainTextEdit,QComboBox,QTableWidget,QSpinBox { background: #292a2d; } QPushButton { padding: 6px 12px; }")
-        elif self.settings.theme == "Light": self.setStyleSheet("QPushButton { padding: 6px 12px; }")
-        else: self.setStyleSheet("")
+        apply_theme(QApplication.instance(), self.settings.theme)
+
+    def _system_appearance_changed(self, *_):
+        if self.isVisible() and self.settings.theme == "System": self._apply_theme()
 
     def _initial_checks(self):
         if self.settings.show_first_run_diagnostics and not self.settings.first_run_complete:

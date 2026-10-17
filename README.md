@@ -2,7 +2,7 @@
 
 Morgan Media Downloader is a local, privacy-conscious macOS GUI for downloading media that you are authorised to save. It uses the **yt-dlp Python API** for structured analysis and progress updates, SQLite for a persistent queue/history, and PySide6 for a native desktop interface.
 
-The main window includes Download, adaptive Queue, History, live Console, and Settings tabs. Media failures retain extractor, stage, playable-format, authentication, connection, and retry context; optional subtitle or thumbnail failures complete with persistent, visible warnings instead of hiding the usable media result.
+The main window includes Download, adaptive Queue, History, live Console, and Settings in a keyboard-accessible sidebar (Command-1–5). Media failures retain extractor, stage, playable-format, authentication, connection, and retry context; optional subtitle or thumbnail failures complete with persistent, visible warnings instead of hiding the usable media result.
 
 The default `macOS / QuickTime` compatibility profile prefers H.264/avc1 plus AAC/mp4a sources before download, then uses bundled ffmpeg only when a stream needs conversion. Final MP4 output is fast-started and checked with bundled ffprobe for container, codecs, pixel format, subtitles, artwork disposition, and unintended streams. `Universal` uses the same broadly compatible baseline; `Original / Best Available` preserves source formats such as VP9, AV1, Opus, WebM, or MKV.
 
@@ -14,7 +14,7 @@ The application does not decrypt DRM, bypass account permissions, or download Sp
 
 ## Build and launch
 
-Requirements: macOS 12 or newer and an internet connection for the first build. No administrator password, Homebrew, or global Python packages are needed.
+Source requirements: macOS 12 or newer and a user-local Python environment. No administrator password, Homebrew, or global Python packages are needed for source launch. Packaging has additional Apple-tool requirements: on this owner's Mac, PyInstaller's `lipo` step is licence-gated, so the build commands below are **not currently usable locally**. Do not accept the Xcode licence or retry them to validate UI changes; use source launch instead. See [local validation notes](docs/LOCAL_AUTH_UI_REFRESH.md#local-validation-and-commands).
 
 This repository is the existing Python/PySide6 baseline, not a Swift rewrite. Start with [docs/CODEX_CONTEXT.md](docs/CODEX_CONTEXT.md) and [docs/CURRENT_ARCHITECTURE.md](docs/CURRENT_ARCHITECTURE.md) before changing it. Initialise the pinned provider submodule after cloning:
 
@@ -93,6 +93,17 @@ Tor Browser defaults to `~/Applications/Tor Browser.app` when present, otherwise
 
 ## Authentication
 
+Use **Settings → Accounts → YouTube → Connect YouTube**, select the signed-in
+browser/profile, optionally open that browser to sign in, then **Verify Connection**.
+Apply saves the configuration for future operations. Disconnect disables cookie
+use after Apply without logging out the browser or changing active tasks. Manual
+cookies.txt import/reset remain under Advanced authentication. The verification
+result separates readable cookies from a server-confirmed session; missing or
+changed response evidence is unconfirmed. A valid session does not prove permission
+to a particular private resource or that download/provider requirements are met.
+Auto downloads remain public-first. See [local refresh notes](docs/LOCAL_AUTH_UI_REFRESH.md)
+for workflow, test boundaries, screenshots and packaging limitations.
+
 Authentication is independent from PO-token and proxy configuration. A YouTube job can simultaneously use browser cookies or an imported Netscape cookie file, the bgutil provider, and the selected HTTP proxy/Tor connection. Cookie values are never displayed or logged, and the app does not inspect browser cache files itself.
 
 Watch Later accepts `:ytwatchlater` unchanged, `https://www.youtube.com/playlist?list=WL`, and the `/feed/watch_later` browser route. Explicit Watch Later URLs on `youtube.com`, `www.youtube.com`, `m.youtube.com`, and `music.youtube.com` normalise to the canonical HTTPS `playlist?list=WL` URL; scheme-less versions of those routes also work. Ordinary playlist URLs and `watch?v=...&list=WL` are passed through without rewriting. Ordinary text still becomes a YouTube search.
@@ -144,8 +155,8 @@ Stage 1 verification on 1 October 2026: Python 3.12.13, pytest 8.4.2, yt-dlp 202
 ## Known incomplete items
 
 - Spotify album/playlist expansion without user-provided official API credentials
-- Full live authentication/Watch Later QA; Auto recognises errors by message substrings and its login test checks public media
-- Authentication-test routing for External Tor/custom proxies; the Settings login test currently passes a proxy only for Managed Tor
+- Full live authentication/Watch Later QA; Auto still recognises account-required errors by message substrings. The new bounded account-page check may remain unconfirmed when Google changes its response.
+- Native visual/accessibility and live browser-permission QA; current UI evidence is offscreen Qt with synthetic media. Local PyInstaller packaging is blocked by licence-gated Apple lipo; source launch and tests do not require it.
 - Review one-click Spotify downloading: the preview supports match selection, but direct Download can enqueue all candidate matches
 - Converter cancellation, concurrent stderr draining, and explicit destination-overwrite confirmation
 - Advanced extra-safe-options and Console-detail settings are currently stored but not operationally applied

@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl, QSize
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
@@ -24,6 +24,7 @@ from .settings import AppSettings
 from .tasks import TaskManager
 from .torrent import format_aria2_diagnostic, inspect_aria2c
 from .yt_runtime import YtDlpRuntimeManager, get_runtime_manager
+from .ui_components import settings_page, DisclosureSection
 
 
 def _combo(values: list[str], current: str) -> QComboBox:
@@ -43,12 +44,15 @@ class SettingsWindow(QDialog):
         if embedded:
             self.setWindowFlags(Qt.WindowType.Widget)
         self.setWindowTitle("Settings"); self.resize(790, 610)
-        outer = QVBoxLayout(self); body = QHBoxLayout(); self.sidebar = QListWidget(); self.sidebar.setFixedWidth(150)
+        outer = QVBoxLayout(self); body = QHBoxLayout(); self.sidebar = QListWidget(); self.sidebar.setObjectName("navigation"); self.sidebar.setAccessibleName("Settings sections"); self.sidebar.setFixedWidth(138)
         self.stack = QStackedWidget(); body.addWidget(self.sidebar); body.addWidget(self.stack, 1); outer.addLayout(body, 1)
         self.pages = {}
         for name, builder in [("General", self._general), ("Downloads", self._downloads), ("Network", self._network),
                               ("Accounts", self._authentication), ("Torrents", self._torrents), ("Advanced", self._advanced)]:
             self.sidebar.addItem(name); page = builder(); self.pages[name] = page; self.stack.addWidget(page)
+            self.sidebar.item(self.sidebar.count() - 1).setSizeHint(QSize(120, 36))
+            for label in page.findChildren(QLabel):
+                if label.property("settingsTitle"): label.setText(name)
         self.sidebar.currentRowChanged.connect(self.stack.setCurrentIndex); self.sidebar.setCurrentRow(0)
         standard = QDialogButtonBox.StandardButton.Apply if embedded else (
             QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Ok)
@@ -61,7 +65,7 @@ class SettingsWindow(QDialog):
 
     @staticmethod
     def _page() -> tuple[QWidget, QFormLayout]:
-        page = QWidget(); form = QFormLayout(page); form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows); return page, form
+        return settings_page()
 
     def _general(self):
         page, form = self._page(); self.theme = _combo(["System", "Light", "Dark"], self.working.theme)
@@ -118,8 +122,8 @@ class SettingsWindow(QDialog):
         self.cookies_file = QLineEdit(self.working.cookies_file)
         self.cookies_choose = QPushButton("Choose cookies.txt…"); self.cookies_choose.clicked.connect(self._choose_cookies); file_row = QHBoxLayout(); file_row.addWidget(self.cookies_file); file_row.addWidget(self.cookies_choose)
         self.auth_test = QPushButton("Verify Connection"); self.auth_test.clicked.connect(self._test_auth)
+        self.connect_youtube = QPushButton("Connect YouTube"); self.connect_youtube.setProperty("primary", True); self.connect_youtube.clicked.connect(self._connect_youtube)
         self.auth_status = QLabel("Not verified — connect a browser to get started."); self.auth_status.setWordWrap(True)
-        self.connect_youtube = QPushButton("Connect YouTube"); self.connect_youtube.clicked.connect(self._connect_youtube)
         self.disconnect_youtube = QPushButton("Disconnect"); self.disconnect_youtube.clicked.connect(self._disconnect_youtube)
         self.sign_in = QPushButton("Sign in using browser…"); self.sign_in.clicked.connect(self._open_youtube_browser)
         self.refresh_browsers = QPushButton("Detect Browsers"); self.refresh_browsers.clicked.connect(self._detect_browsers)
@@ -135,7 +139,13 @@ class SettingsWindow(QDialog):
             lambda: QDesktopServices.openUrl(QUrl(YOUTUBE_ROBOTS_URL)))
         helper_row = QHBoxLayout(); helper_row.addWidget(guide); helper_row.addWidget(open_robots)
         privacy = QLabel("Browser cookies are read locally by yt-dlp from the selected browser profile. Morgan Media Downloader does not upload your cookies."); privacy.setWordWrap(True)
-        form.addRow("Connection method", self.auth_mode); form.addRow("Browser", self.browser); form.addRow("Profile", self.profile); form.addRow("Manual cookies.txt fallback", file_row); form.addRow("", reset); form.addRow("", helper_row); form.addRow(privacy)
+        form.addRow("Browser", self.browser); form.addRow("Profile", self.profile)
+        hint = QLabel("Choose the browser profile you use for YouTube. Apply saves the connection for future tasks."); hint.setWordWrap(True); hint.setObjectName("muted"); form.addRow(hint)
+        self.advanced_auth = DisclosureSection("Advanced authentication · manual import", self.working.authentication_mode == "Imported cookies.txt")
+        advanced = QFormLayout(self.advanced_auth.content); advanced.setContentsMargins(0, 12, 0, 12); advanced.setSpacing(12)
+        advanced.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        advanced.addRow("Connection method", self.auth_mode); advanced.addRow("cookies.txt", file_row); advanced.addRow(reset); advanced.addRow(helper_row)
+        form.addRow(self.advanced_auth); form.addRow(privacy)
         self.browser.currentTextChanged.connect(self._refresh_profiles); self.auth_mode.currentTextChanged.connect(self._refresh_auth_controls)
         self.profile.currentTextChanged.connect(self._invalidate_auth)
         self.cookies_file.textChanged.connect(self._invalidate_auth)
@@ -164,11 +174,13 @@ class SettingsWindow(QDialog):
         imported = self.auth_mode.currentText() == "Imported cookies.txt"
         self.browser.setEnabled(browser); self.profile.setEnabled(browser)
         self.cookies_file.setEnabled(imported); self.cookies_choose.setEnabled(imported)
+        if imported: self.advanced_auth.setExpanded(True)
         self._invalidate_auth()
 
     def _invalidate_auth(self, *_):
         self._auth_generation += 1
         self.auth_status.setText("Not verified — verify again after changing the connection.")
+        self.auth_status.setToolTip("")
 
     def _detect_browsers(self):
         sources = discover_browsers()
@@ -334,7 +346,7 @@ class SettingsWindow(QDialog):
         generation, result = payload
         if generation == self._auth_generation: self._auth_test_ready(result)
 
-    def _auth_test_ready(self, result):
+    def _auth_test_ready(self, result: YouTubeConnection):
         self.auth_status.setText(result.message)
         self.auth_status.setToolTip(f"Verification: {result.state}. Cookie source readable: {result.cookies_readable}. This is not a download/provider or private-content entitlement test.")
 
