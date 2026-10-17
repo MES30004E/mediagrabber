@@ -42,6 +42,19 @@ def test_console_tab_adaptive_queue_job_details_and_warning_checklist(tmp_path, 
     window.close(); _APP.processEvents()
 
 
+def test_youtube_account_action_opens_accounts_without_changing_saved_auth(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch)
+    try:
+        button = getattr(window, "account_button", None)
+        assert button is not None, "Reconnect must be reachable from the download workflow"
+        button.click()
+        assert window.tabs.currentWidget() is window.settings_panel
+        assert window.settings_panel.stack.currentWidget() is window.settings_panel.pages["Accounts"]
+        assert window.settings.authentication_mode == "Auto"
+    finally:
+        window.close(); _APP.processEvents()
+
+
 def test_thumbnail_preview_slots_render_real_pixmap_and_handle_known_unknown_progress(tmp_path, monkeypatch):
     window = _window(tmp_path, monkeypatch)
     image = QPixmap(80, 40); image.fill(); path = tmp_path / "thumbnail.png"; assert image.save(str(path))

@@ -291,7 +291,8 @@ class MainWindow(QMainWindow):
         self.connection_selector.setToolTip("Use the Mac's normal network connection.")
         self.connection_selector.currentTextChanged.connect(self._connection_changed)
         self.connection_status = QLabel("● Ready"); self.connection_test = QPushButton("Test"); self.connection_test.clicked.connect(self._test_connection)
-        connection_row.addWidget(self.connection_selector); connection_row.addWidget(self.connection_status); connection_row.addWidget(self.connection_test); connection_row.addStretch(); outer.addLayout(connection_row)
+        self.account_button = QPushButton("YouTube Account…"); self.account_button.clicked.connect(self.show_youtube_account)
+        connection_row.addWidget(self.connection_selector); connection_row.addWidget(self.connection_status); connection_row.addWidget(self.connection_test); connection_row.addStretch(); connection_row.addWidget(self.account_button); outer.addLayout(connection_row)
         self.analysis_progress = QProgressBar(); self.analysis_progress.setRange(0, 0); self.analysis_progress.hide(); outer.addWidget(self.analysis_progress)
         self.summary = QLabel("Enter a supported URL or search terms."); self.summary.setWordWrap(True); outer.addWidget(self.summary)
         preview = QGroupBox("Media Preview"); preview_layout = QHBoxLayout(preview)
@@ -1579,6 +1580,11 @@ class MainWindow(QMainWindow):
 
     def show_preferences(self):
         self.tabs.setCurrentWidget(self.settings_panel)
+
+    def show_youtube_account(self):
+        self.show_preferences()
+        self.settings_panel.sidebar.setCurrentRow(list(self.settings_panel.pages).index("Accounts"))
+        self.settings_panel.connect_youtube.setFocus()
 
     def _apply_settings(self, settings: AppSettings, proxy_passwords: object):
         self.settings = settings

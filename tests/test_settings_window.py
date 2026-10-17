@@ -112,3 +112,47 @@ def test_authentication_controls_and_targeted_reset_do_not_change_other_settings
     assert (reset.download_dir, reset.quality, reset.connection_mode) == (
         "/keep/media", "1440p", "Managed Tor")
     _dispose(dialog)
+
+
+def test_accounts_connect_disconnect_and_verification_invalidation(tmp_path, monkeypatch):
+    from morgan_media_downloader.auth import YouTubeConnection
+    settings = AppSettings(connection_mode="Direct / Normal Network")
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path))
+    try:
+        assert "Accounts" in dialog.pages, "Settings needs a discoverable account connection page"
+        dialog.connect_youtube.click()
+        assert dialog.auth_mode.currentText() == "Browser Cookies"
+        dialog._auth_test_ready(YouTubeConnection("authenticated", "YouTube reports signed in.", True))
+        assert "signed" in dialog.auth_status.text().lower()
+        dialog.profile.setEditText("Other profile")
+        assert "verified" in dialog.auth_status.text().lower() or "not tested" in dialog.auth_status.text().lower()
+        dialog.disconnect_youtube.click()
+        collected = dialog._collect()
+        assert collected.authentication_mode == "None" and collected.cookies_file == "" and collected.browser_profile == ""
+        assert settings.authentication_mode == "Auto", "Working copy must not persist before Apply"
+    finally: _dispose(dialog)
+
+
+def test_auth_test_routes_custom_proxy_and_stale_result_is_ignored(tmp_path, monkeypatch):
+    settings = AppSettings(connection_mode="Direct / Normal Network")
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path))
+    calls = []
+    def verify(*args):
+        calls.append(args)
+        from morgan_media_downloader.auth import YouTubeConnection
+        return YouTubeConnection("authenticated", "Signed in.", True)
+    monkeypatch.setattr("morgan_media_downloader.settings_window.verify_youtube_connection", verify, raising=False)
+    tasks = []
+    monkeypatch.setattr(dialog.task_manager, "start", lambda kind, function, **kw: tasks.append((function, kw)))
+    try:
+        dialog.connection.setCurrentText("Custom SOCKS5 Proxy")
+        dialog.socks_proxy_host.setText("localhost"); dialog.socks_proxy_port.setValue(9911)
+        dialog.auth_mode.setCurrentText("Browser Cookies")
+        dialog._test_auth()
+        function, callbacks = tasks[-1]
+        result = function(None, None)
+        assert calls and calls[0][4] == "socks5h://localhost:9911"
+        dialog.cookies_file.setText("changed")
+        callbacks["on_result"](result)
+        assert "signed in" not in dialog.auth_status.text().lower()
+    finally: _dispose(dialog)

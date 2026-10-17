@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import subprocess
 from pathlib import Path
 from typing import Callable
 
@@ -8,11 +9,13 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox, QStackedWidget,
+    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox, QStackedWidget, QGroupBox,
     QVBoxLayout, QWidget,
 )
 
-from .auth import YOUTUBE_ROBOTS_URL, browser_profiles, test_youtube_login
+from .auth import YOUTUBE_ROBOTS_URL, browser_profiles, discover_browsers, verify_youtube_connection, YouTubeConnection
+from .network import ProxyConfig, detect_tor
+from .keychain import load_proxy_password
 from .managed_tor import ManagedTor, tor_executable
 from .network import test_tor_proxy
 from .paths import find_binary, logs_dir
@@ -44,7 +47,7 @@ class SettingsWindow(QDialog):
         self.stack = QStackedWidget(); body.addWidget(self.sidebar); body.addWidget(self.stack, 1); outer.addLayout(body, 1)
         self.pages = {}
         for name, builder in [("General", self._general), ("Downloads", self._downloads), ("Network", self._network),
-                              ("Authentication", self._authentication), ("Torrents", self._torrents), ("Advanced", self._advanced)]:
+                              ("Accounts", self._authentication), ("Torrents", self._torrents), ("Advanced", self._advanced)]:
             self.sidebar.addItem(name); page = builder(); self.pages[name] = page; self.stack.addWidget(page)
         self.sidebar.currentRowChanged.connect(self.stack.setCurrentIndex); self.sidebar.setCurrentRow(0)
         standard = QDialogButtonBox.StandardButton.Apply if embedded else (
@@ -107,48 +110,109 @@ class SettingsWindow(QDialog):
         self._refresh_tor_state(); return page
 
     def _authentication(self):
+        self._auth_generation = 0
+        self._auth_busy = False
         page, form = self._page(); self.auth_mode = _combo(["Auto", "None", "Browser Cookies", "Imported cookies.txt"], self.working.authentication_mode)
         self.browser = _combo(["Chrome", "Chromium", "Firefox", "Safari", "Edge"], self.working.cookies_browser)
         self.profile = QComboBox(); self.profile.setEditable(True)
         self.cookies_file = QLineEdit(self.working.cookies_file)
         self.cookies_choose = QPushButton("Choose cookies.txt…"); self.cookies_choose.clicked.connect(self._choose_cookies); file_row = QHBoxLayout(); file_row.addWidget(self.cookies_file); file_row.addWidget(self.cookies_choose)
-        self.auth_test = QPushButton("Test YouTube Login"); self.auth_test.clicked.connect(self._test_auth)
-        self.auth_status = QLabel("Not tested")
+        self.auth_test = QPushButton("Verify Connection"); self.auth_test.clicked.connect(self._test_auth)
+        self.auth_status = QLabel("Not verified — connect a browser to get started."); self.auth_status.setWordWrap(True)
+        self.connect_youtube = QPushButton("Connect YouTube"); self.connect_youtube.clicked.connect(self._connect_youtube)
+        self.disconnect_youtube = QPushButton("Disconnect"); self.disconnect_youtube.clicked.connect(self._disconnect_youtube)
+        self.sign_in = QPushButton("Sign in using browser…"); self.sign_in.clicked.connect(self._open_youtube_browser)
+        self.refresh_browsers = QPushButton("Detect Browsers"); self.refresh_browsers.clicked.connect(self._detect_browsers)
+        self.browser_status = QLabel(); self.browser_status.setWordWrap(True)
+        account = QGroupBox("YouTube"); account_layout = QVBoxLayout(account)
+        account_layout.addWidget(self.auth_status)
+        actions = QHBoxLayout(); actions.addWidget(self.connect_youtube); actions.addWidget(self.auth_test); actions.addWidget(self.disconnect_youtube)
+        account_layout.addLayout(actions); account_layout.addWidget(self.sign_in); account_layout.addWidget(self.browser_status); account_layout.addWidget(self.refresh_browsers)
+        form.addRow(account)
         reset = QPushButton("Reset Authentication Settings"); reset.clicked.connect(self._reset_authentication)
         guide = QPushButton("Create YouTube cookies.txt guide"); guide.clicked.connect(self._show_cookies_guide)
         open_robots = QPushButton("Open YouTube robots.txt"); open_robots.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl(YOUTUBE_ROBOTS_URL)))
         helper_row = QHBoxLayout(); helper_row.addWidget(guide); helper_row.addWidget(open_robots)
         privacy = QLabel("Browser cookies are read locally by yt-dlp from the selected browser profile. Morgan Media Downloader does not upload your cookies."); privacy.setWordWrap(True)
-        form.addRow("Authentication", self.auth_mode); form.addRow("Browser", self.browser); form.addRow("Profile", self.profile); form.addRow("cookies.txt", file_row); form.addRow("Status", self.auth_status); form.addRow("", self.auth_test); form.addRow("", reset); form.addRow("", helper_row); form.addRow(privacy)
+        form.addRow("Connection method", self.auth_mode); form.addRow("Browser", self.browser); form.addRow("Profile", self.profile); form.addRow("Manual cookies.txt fallback", file_row); form.addRow("", reset); form.addRow("", helper_row); form.addRow(privacy)
         self.browser.currentTextChanged.connect(self._refresh_profiles); self.auth_mode.currentTextChanged.connect(self._refresh_auth_controls)
+        self.profile.currentTextChanged.connect(self._invalidate_auth)
+        self.cookies_file.textChanged.connect(self._invalidate_auth)
+        for control in (self.connection, self.http_proxy_host, self.socks_proxy_host, self.http_proxy_username, self.socks_proxy_username, self.http_proxy_password, self.socks_proxy_password, self.tor_path):
+            (control.currentTextChanged if isinstance(control, QComboBox) else control.textChanged).connect(self._invalidate_auth)
+        for control in (self.http_proxy_port, self.socks_proxy_port): control.valueChanged.connect(self._invalidate_auth)
         self._refresh_profiles(); self._refresh_auth_controls()
+        self._detect_browsers()
         return page
 
     def _refresh_profiles(self, *_):
-        selected = self.working.browser_profile if not hasattr(self, "profile") or self.profile.count() == 0 else str(self.profile.currentData() or self.profile.currentText())
+        current_browser = self.browser.currentText()
+        selected = self.working.browser_profile if not hasattr(self, "_profile_browser") else self._selected_profile()
+        if hasattr(self, "_profile_browser") and self._profile_browser != current_browser: selected = ""
+        self._profile_browser = current_browser
         self.profile.blockSignals(True); self.profile.clear()
         for label, value in browser_profiles(self.browser.currentText()): self.profile.addItem(label, value)
         index = next((i for i in range(self.profile.count()) if self.profile.itemData(i) == selected), -1)
         if index >= 0: self.profile.setCurrentIndex(index)
         elif selected: self.profile.setEditText(selected)
         self.profile.blockSignals(False)
+        self._invalidate_auth()
 
     def _refresh_auth_controls(self, *_):
         browser = self.auth_mode.currentText() == "Browser Cookies"
         imported = self.auth_mode.currentText() == "Imported cookies.txt"
         self.browser.setEnabled(browser); self.profile.setEnabled(browser)
         self.cookies_file.setEnabled(imported); self.cookies_choose.setEnabled(imported)
-        self.auth_status.setText("Not tested")
+        self._invalidate_auth()
+
+    def _invalidate_auth(self, *_):
+        self._auth_generation += 1
+        self.auth_status.setText("Not verified — verify again after changing the connection.")
+
+    def _detect_browsers(self):
+        sources = discover_browsers()
+        names = {source.name for source in sources}
+        for index in range(self.browser.count()):
+            name = self.browser.itemText(index)
+            self.browser.setItemData(index, "Detected locally" if name in names else "Not detected — select only if available", Qt.ItemDataRole.ToolTipRole)
+        self.browser_status.setText("Detected: " + ", ".join(source.name for source in sources) if sources else "No supported browser detected. Install/sign in with a supported browser, or import cookies.txt.")
+        self._refresh_profiles()
+
+    def _connect_youtube(self):
+        sources = discover_browsers()
+        if sources and self.browser.currentText() not in {source.name for source in sources}: self.browser.setCurrentText(sources[0].name)
+        self.cookies_file.clear(); self.auth_mode.setCurrentText("Browser Cookies")
+        self._refresh_profiles(); self.profile.setFocus()
+        self.auth_status.setText("Choose the profile signed in to YouTube, then Verify Connection. Apply saves this choice for analysis and downloads.")
+
+    def _disconnect_youtube(self):
+        self.auth_mode.setCurrentText("None"); self.cookies_file.clear()
+        self.profile.setCurrentIndex(-1); self.profile.setEditText("")
+        self._invalidate_auth()
+        self.auth_status.setText("Disconnected in this settings copy. Apply to stop using cookies in future tasks. Browser sign-in and existing tasks are unchanged.")
+
+    def _open_youtube_browser(self):
+        source = next((source for source in discover_browsers() if source.name == self.browser.currentText()), None)
+        if not source or not source.application:
+            self.auth_status.setText("Selected browser is not installed. Choose a detected browser or import cookies.txt."); return
+        arguments = ["/usr/bin/open", "-a", str(source.application), "https://www.youtube.com/"]
+        # No guest/incognito session or cookie export. Profile switching remains
+        # visible and under browser control; opening a URL is not login evidence.
+        try: subprocess.Popen(arguments)
+        except OSError:
+            self.auth_status.setText("Could not open the selected browser. Open it manually and sign in to YouTube."); return
+        self.auth_status.setText("In the browser, select the same profile shown here and sign in to YouTube. Return here and Verify Connection.")
 
     def _selected_profile(self) -> str:
         value = self.profile.currentData()
-        return str(value if value is not None else self.profile.currentText()).strip()
+        # Editable combo data can still refer to the formerly selected item.
+        return str(value if value is not None and self.profile.currentText() == self.profile.itemText(self.profile.currentIndex()) else self.profile.currentText()).strip()
 
     def _reset_authentication(self):
         self.auth_mode.setCurrentText("Auto"); self.browser.setCurrentText("Chrome")
         self._refresh_profiles(); self.profile.setCurrentIndex(0); self.cookies_file.clear()
-        self.auth_status.setText("Not tested")
+        self._invalidate_auth()
 
     def _show_cookies_guide(self):
         QMessageBox.information(
@@ -236,19 +300,49 @@ class SettingsWindow(QDialog):
         state, detail = result
         (QMessageBox.information if state == "available" else QMessageBox.warning)(self, "Managed Tor", detail)
     def _test_auth(self):
+        if self._auth_busy: return
         profile = self._selected_profile()
-        values = (self.auth_mode.currentText(), self.browser.currentText(), profile, self.cookies_file.text().strip(), self.tor.proxy_url if self.connection.currentText() == "Managed Tor" else None, self.runtime_manager.snapshot())
-        self.auth_status.setText("Testing…")
-        self.task_manager.start("authentication-test", lambda _cancel, _progress, v=values: test_youtube_login(*v),
-                                on_result=self._auth_test_ready)
+        try: proxy = self._authentication_proxy()
+        except (ValueError, ConnectionError):
+            self.auth_status.setText("Selected connection is unavailable. Check Network settings before verifying."); return
+        values = (self.auth_mode.currentText(), self.browser.currentText(), profile, self.cookies_file.text().strip(), proxy, self.runtime_manager.snapshot())
+        generation = self._auth_generation
+        self._auth_busy = True; self.auth_test.setEnabled(False)
+        self.auth_status.setText("Verifying cookie access and YouTube session…")
+        self.task_manager.start("authentication-test", lambda _cancel, _progress, v=values, g=generation: (g, verify_youtube_connection(*v)),
+                                on_result=self._auth_test_delivered, on_error=self._auth_test_error, on_finished=self._auth_test_finished)
+
+    def _authentication_proxy(self):
+        mode = self.connection.currentText()
+        if mode == "Managed Tor":
+            if not self.tor.proxy_url: raise ConnectionError("Managed Tor unavailable")
+            return self.tor.proxy_url
+        if mode == "External Tor":
+            available, port = detect_tor()
+            if not available: raise ConnectionError("External Tor unavailable")
+            return ProxyConfig(mode, "127.0.0.1", port).url()
+        if mode in {"Custom HTTP Proxy", "Custom SOCKS5 Proxy"}:
+            kind = "http" if mode == "Custom HTTP Proxy" else "socks"
+            username = getattr(self, kind + "_proxy_username").text().strip()
+            password = getattr(self, kind + "_proxy_password").text()
+            if username and not password: password = load_proxy_password(f"{kind}:{username}") or ""
+            return ProxyConfig(mode, getattr(self, kind + "_proxy_host").text().strip(),
+                               getattr(self, kind + "_proxy_port").value(), username, password).url()
+        return None
+
+    def _auth_test_delivered(self, payload):
+        generation, result = payload
+        if generation == self._auth_generation: self._auth_test_ready(result)
+
     def _auth_test_ready(self, result):
-        ok, detail = result
-        if ok: status = "No login required" if self.auth_mode.currentText() == "Auto" else "Authenticated"
-        elif detail.startswith("Browser cookies unavailable"): status = "Browser cookies unavailable"
-        elif detail.startswith("cookies.txt invalid"): status = "cookies.txt invalid"
-        else: status = "Authentication failed"
-        self.auth_status.setText(status)
-        (QMessageBox.information if ok else QMessageBox.warning)(self, "YouTube Login", detail)
+        self.auth_status.setText(result.message)
+        self.auth_status.setToolTip(f"Verification: {result.state}. Cookie source readable: {result.cookies_readable}. This is not a download/provider or private-content entitlement test.")
+
+    def _auth_test_error(self, *_):
+        self.auth_status.setText("Verification could not complete. Check the connection and retry.")
+
+    def _auth_test_finished(self, *_):
+        self._auth_busy = False; self.auth_test.setEnabled(True)
     def _reset(self):
         if QMessageBox.question(self, "Reset settings", "Reset every setting to its default value?") == QMessageBox.StandardButton.Yes:
             self.working = AppSettings(); self.apply_callback(copy.deepcopy(self.working), "")
