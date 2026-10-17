@@ -4,7 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import Qt, QMimeData, QPoint
 from PySide6.QtGui import QPalette, QColor, QDragEnterEvent, QDragLeaveEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QScrollArea
+from PySide6.QtWidgets import QApplication, QScrollArea, QPushButton
 from morgan_media_downloader.models import DownloadJob, DownloadOptions, MediaItem, JobStatus
 
 from test_ui_diagnostics import _window
@@ -160,4 +160,19 @@ def test_explicit_auth_failed_retry_uses_reconnected_profile_not_old_snapshot(tm
         assert (job.options.authentication_mode, job.options.cookies_browser, job.options.browser_profile) == ("Browser Cookies", "Firefox", "new-profile")
         assert job.options.quality == "720p" and job.status == JobStatus.WAITING
         assert other.options.authentication_mode == "None", "Unrelated option snapshots must not be rewritten"
+    finally: window.close(); APP.processEvents()
+
+
+def test_compact_console_and_auth_banner_do_not_clip_action_labels(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch)
+    try:
+        window.resize(900, 650); window.tabs.setCurrentWidget(window.console_tab); APP.processEvents()
+        for button in window.console_tab.findChildren(QPushButton):
+            assert button.width() >= button.minimumSizeHint().width(), button.text()
+        job = DownloadJob(MediaItem("https://www.youtube.com/watch?v=fixture", "Example"), DownloadOptions())
+        job.error = "Private video: sign in required"
+        window.tabs.setCurrentIndex(1); window._show_job_banner(job, "Authentication failed — reconnect your account before retrying")
+        APP.processEvents()
+        for button in window.job_banner.findChildren(QPushButton):
+            assert button.width() >= button.minimumSizeHint().width(), button.text()
     finally: window.close(); APP.processEvents()

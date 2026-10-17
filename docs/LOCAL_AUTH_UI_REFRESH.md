@@ -136,6 +136,11 @@ and accessibility are still manual gates. Review found no Important/Critical
 issues; minor stale-tooltip, diagnostic-access and source-specific recovery
 wording findings were corrected and regression-tested.
 
+A final compact-window follow-up separates Console filters/actions and wraps
+queue error explanations above their buttons. The new no-clipped-action-label
+regression passed at 900×650; the full suite then passed **311 tests in 7.67s**,
+with no skips. This is a separate local follow-up commit, not rewritten history.
+
 **Packaging is currently blocked on this Mac.** An isolated direct PyInstaller
 6.22.3 attempt collected auth/theme/ui_components successfully and built the
 Python archive, but arm64 bootloader conversion invoked Apple lipo and failed
