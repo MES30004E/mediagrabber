@@ -27,6 +27,12 @@ test("normal-store cookies can never be transferred", async () => { const {api,s
 test("unavailable native host can be retried without retaining a transfer", async () => {
   assert.equal(await connectivity(fixture({fail:true}).api),false); assert.equal(await connectivity(fixture().api),true);
 });
+test("connectivity reports Incognito readiness without reading cookies", async () => {
+  const {api,sent,reads} = fixture();
+  assert.equal(await connectivity(api),true);
+  assert.deepEqual(sent,[{type:"ping",incognito:true,incognito_allowed:true}]);
+  assert.equal(reads.length,0);
+});
 test("ambiguous stores stop before reading cookies or requesting transfer", async () => {
   const {api,reads,sent} = fixture();
   api.cookies.getAllCookieStores = async () => [{id:"normal",tabIds:[42]},{id:"private",tabIds:[42]}];

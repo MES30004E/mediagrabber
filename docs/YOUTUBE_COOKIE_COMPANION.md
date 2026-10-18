@@ -46,9 +46,10 @@ absolute paths to this checkout and Python, not bundled dependencies.
    `robots.txt`, selects the cookie store containing that exact Incognito tab,
    and sends only YouTube cookies through Native Messaging.
 7. After successful import, **close Incognito promptly** to reduce YouTube cookie
-   rotation. Return to Accounts, click **Verify Session**, then **Apply** to save
-   the managed authentication choice for future analysis/downloads. Applying is
-   explicit, preserving existing settings Cancel/Apply semantics.
+   rotation. Successful Keychain storage automatically saves and activates only
+   the managed authentication choice for future analysis/downloads. Return to
+   Accounts and click **Verify Session**. Cancel still discards unrelated pending
+   settings edits; other authentication methods still require Apply.
 8. Analyse an authorized URL or `:ytwatchlater`. The documented playlist/feed
    Watch Later URLs also work. Authentication does not confer permission to a
    private item the account cannot access.
@@ -60,9 +61,21 @@ from uploader metadata. No private library enumeration is used for verification.
 
 Use **Advanced authentication** for ordinary Browser Cookies or manually supplied
 Netscape cookies.txt. Neither is presented as an Incognito capture fallback.
-The extension's **Check local connection** is a host connectivity test, not login
-or proof that Allow in Incognito was granted. Reconnect creates a new pending
-authorization; no transfer is replayed automatically.
+The extension's **Check local connection** reports host reachability and Chrome's
+Incognito flags to the current capture operation, without reading cookies. It is
+not a login test or proof that a transfer occurred. Accounts distinguishes host
+registration from Chrome-reported readiness, authorization, transfer, storage and
+verification. **Check downloader/provider** is a separate prerequisite check:
+HTTP ping or script discovery is not proof of token generation or a working
+download. Provider details/paths and unsanitized errors are not shown there.
+Reconnect creates a new pending authorization; no transfer is replayed automatically.
+
+Verification time is UTC and scoped to the current Settings window, not a stored
+account identity or cross-restart guarantee. Source, network, provider and runtime
+changes invalidate evidence; late background results cannot verify a changed
+configuration. Accepted captures awaiting Keychain completion are reconciled
+before unused authorization expiry. A busy native host does not freeze the GUI
+or cause an accepted import receipt to be discarded.
 
 ## Storage and security boundaries
 
@@ -119,8 +132,11 @@ and parses URLs without network access.
 ## Disconnect and removal
 
 **Disconnect** immediately deletes the captured Keychain item (even if settings
-are later Cancelled), then selects None in the working copy. Apply persists None
-for future tasks. Failed deletion is reported, never described as success.
+are later Cancelled), then immediately persists None for future tasks without
+saving unrelated pending edits. Failed deletion is reported, never described as
+success. If storage succeeds but settings persistence fails, Accounts distinguishes
+the stored/deleted Keychain state from the still-applied authentication mode and
+asks you to fix settings-folder permissions and retry Apply or Reconnect.
 
 Terminal equivalents, from the repository root:
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -20,7 +21,7 @@ from .keychain import load_proxy_password
 from .managed_tor import ManagedTor, tor_executable
 from .network import test_tor_proxy
 from .paths import find_binary, logs_dir
-from .provider import check_provider
+from .provider import check_provider, find_runtime
 from .settings import AppSettings
 from .tasks import TaskManager
 from .torrent import format_aria2_diagnostic, inspect_aria2c
@@ -35,12 +36,14 @@ def _combo(values: list[str], current: str) -> QComboBox:
 class SettingsWindow(QDialog):
     def __init__(self, settings: AppSettings, tor: ManagedTor, apply_callback: Callable[[AppSettings, object], None],
                  parent=None, runtime_manager: YtDlpRuntimeManager | None = None,
-                 task_manager: TaskManager | None = None, embedded: bool = False, companion_controller=None):
+                 task_manager: TaskManager | None = None, embedded: bool = False, companion_controller=None,
+                 account_callback: Callable[[str], AppSettings] | None = None):
         super().__init__(parent)
         self.original = settings; self.working = copy.deepcopy(settings); self.tor = tor; self.apply_callback = apply_callback
         self.runtime_manager = runtime_manager or get_runtime_manager()
         self.task_manager = task_manager or TaskManager(self)
         self.embedded = embedded
+        self.account_callback = account_callback
         from .youtube_companion.bridge import CompanionController
         self.companion = companion_controller or CompanionController()
         self._pending_companion = None
@@ -124,6 +127,16 @@ class SettingsWindow(QDialog):
     def _authentication(self):
         self._auth_generation = 0
         self._auth_busy = False
+        self._verified_at = ""
+        self._readiness_busy = False
+        self._account_stages = {
+            "Extension / native host": "Not checked — Connect, then open the extension in Incognito",
+            "Capture": "Not authorized",
+            "Transfer": "No session transferred in this window",
+            "Keychain": "Not checked",
+            "Verification": "Not yet verified",
+            "Downloader / provider": "Not checked — separate from sign-in",
+        }
         page, form = self._page(); self.auth_mode = _combo(["YouTube Companion", "Auto", "None", "Browser Cookies", "Imported cookies.txt"], self.working.authentication_mode)
         self.browser = _combo(["Chrome", "Chromium", "Firefox", "Safari", "Edge"], self.working.cookies_browser)
         self.profile = QComboBox(); self.profile.setEditable(True)
@@ -131,26 +144,32 @@ class SettingsWindow(QDialog):
         self.cookies_choose = QPushButton("Choose cookies.txt…"); self.cookies_choose.clicked.connect(self._choose_cookies); file_row = QHBoxLayout(); file_row.addWidget(self.cookies_file); file_row.addWidget(self.cookies_choose)
         self.auth_test = QPushButton("Verify Session"); self.auth_test.clicked.connect(self._test_auth)
         self.connect_youtube = QPushButton("Connect YouTube with Chrome Incognito"); self.connect_youtube.setProperty("primary", True); self.connect_youtube.clicked.connect(self._connect_youtube)
-        self.reconnect_youtube = QPushButton("Reconnect"); self.reconnect_youtube.clicked.connect(self._connect_youtube)
+        self.readiness_check = QPushButton("Check downloader/provider"); self.readiness_check.clicked.connect(self._check_account_readiness)
         self.companion_setup = QPushButton("Companion setup instructions…"); self.companion_setup.clicked.connect(self._show_companion_setup)
         self.connect_browser = QPushButton("Use ordinary browser-profile cookies"); self.connect_browser.clicked.connect(self._connect_browser)
         self.auth_status = QLabel("Not verified — connect a browser to get started."); self.auth_status.setWordWrap(True)
+        self.auth_progress = QLabel(); self.auth_progress.setWordWrap(True)
+        self.auth_progress.setTextFormat(Qt.TextFormat.PlainText)
+        self.auth_progress.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.auth_status.setTextFormat(Qt.TextFormat.PlainText)
         self.disconnect_youtube = QPushButton("Disconnect"); self.disconnect_youtube.clicked.connect(self._disconnect_youtube)
         self.sign_in = QPushButton("Sign in using browser…"); self.sign_in.clicked.connect(self._open_youtube_browser)
         self.refresh_browsers = QPushButton("Detect Browsers"); self.refresh_browsers.clicked.connect(self._detect_browsers)
         self.browser_status = QLabel(); self.browser_status.setWordWrap(True)
         account = QGroupBox("YouTube"); account_layout = QVBoxLayout(account)
         account_layout.addWidget(self.auth_status)
+        account_layout.addWidget(self.auth_progress)
         account_layout.addWidget(self.connect_youtube)
-        actions = QHBoxLayout(); actions.addWidget(self.reconnect_youtube); actions.addWidget(self.auth_test); actions.addWidget(self.disconnect_youtube)
+        actions = QHBoxLayout(); actions.addWidget(self.auth_test); actions.addWidget(self.disconnect_youtube)
         account_layout.addLayout(actions); account_layout.addWidget(self.companion_setup)
+        account_layout.addWidget(self.readiness_check)
         form.addRow(account)
         reset = QPushButton("Reset Authentication Settings"); reset.clicked.connect(self._reset_authentication)
         guide = QPushButton("Create YouTube cookies.txt guide"); guide.clicked.connect(self._show_cookies_guide)
         open_robots = QPushButton("Open YouTube robots.txt"); open_robots.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl(YOUTUBE_ROBOTS_URL)))
         helper_row = QHBoxLayout(); helper_row.addWidget(guide); helper_row.addWidget(open_robots)
-        privacy = QLabel("Connect → Sign in → Capture Session in the extension → close Incognito → Verify. Captured cookies stay in macOS Keychain and are supplied to yt-dlp in memory. Import is not proof of private-content permission. Apply saves the selected method for future tasks; Disconnect deletes the captured session immediately, even if you later Cancel settings."); privacy.setWordWrap(True)
+        privacy = QLabel("Connect → Sign in → Capture Session in the extension → close Incognito → Verify. Captured cookies stay in macOS Keychain and are supplied to yt-dlp in memory. Successful import activates only YouTube Companion for future tasks; Cancel still discards unrelated edits. Import is not proof of private-content permission. Disconnect immediately deletes the captured session and disables authentication, even if you later Cancel. Other connection methods still require Apply."); privacy.setWordWrap(True)
         self.advanced_auth = DisclosureSection("Advanced authentication · browser profiles and manual import", self.working.authentication_mode in {"Imported cookies.txt", "Browser Cookies"})
         advanced = QFormLayout(self.advanced_auth.content); advanced.setContentsMargins(0, 12, 0, 12); advanced.setSpacing(12)
         advanced.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
@@ -193,6 +212,52 @@ class SettingsWindow(QDialog):
         self._auth_generation += 1
         self.auth_status.setText("Not verified — verify again after changing the connection.")
         self.auth_status.setToolTip("")
+        self._account_stages["Verification"] = "Needs verification — connection or source changed"
+        self._account_stages["Downloader / provider"] = "Not checked — connection or source changed"
+        self._render_account_stages()
+
+    def _render_account_stages(self):
+        self.auth_progress.setText("\n".join([
+            f"Active authentication: {self.original.authentication_mode}",
+            f"Selected method: {self.auth_mode.currentText()} (Apply needed if different)",
+            *(f"{name}: {value}" for name, value in self._account_stages.items()),
+            f"Last verification attempt (this window): {self._verified_at or 'Never'}",
+            "Sign-in is not proof of private-content access or a successful download.",
+        ]))
+        self.connect_youtube.setText("Reconnect YouTube with Chrome Incognito" if self.original.authentication_mode == "YouTube Companion"
+                                     else "Connect YouTube with Chrome Incognito")
+
+    def _check_account_readiness(self):
+        if self._readiness_busy: return
+        generation = self._auth_generation
+        base_url, home = self.provider_url.text().strip(), self.provider_home.text().strip()
+        version = self.runtime_manager.snapshot().version
+        self._readiness_busy = True; self.readiness_check.setEnabled(False)
+        self._account_stages["Downloader / provider"] = "Checking prerequisites; download not tested"
+        self._render_account_stages()
+        def check(_cancel, _progress):
+            # Do not relay provider.detail: it can contain private paths or URL credentials.
+            try:
+                status = check_provider(base_url, home)
+                engine = find_runtime(for_player=True)
+            except Exception:
+                return generation, "Check failed — verify component settings and retry; download not tested"
+            provider = ("HTTP provider responding" if status.mode == "http" and status.state == "available" else
+                        "Script discovered; token generation not tested" if status.mode == "script" and status.state == "available" else
+                        "Provider unavailable — check Advanced settings and Node/Deno")
+            javascript = "Player JavaScript engine detected" if engine else "Player JavaScript engine missing — install Node 22+ or Deno 2.3+"
+            return generation, f"yt-dlp {version}; {javascript}; {provider}; download not tested"
+        self.task_manager.start("account-readiness", check, on_result=self._account_readiness_ready,
+                                on_finished=self._account_readiness_finished)
+
+    def _account_readiness_ready(self, payload):
+        generation, status = payload
+        if generation == self._auth_generation:
+            self._account_stages["Downloader / provider"] = status
+            self._render_account_stages()
+
+    def _account_readiness_finished(self, *_):
+        self._readiness_busy = False; self.readiness_check.setEnabled(True)
 
     def _detect_browsers(self):
         sources = discover_browsers()
@@ -213,10 +278,17 @@ class SettingsWindow(QDialog):
             install(launcher=False)
             self._pending_companion = self.companion.begin()
             self._companion_deadline = time.monotonic() + 300
+            self._account_stages.update({"Extension / native host": "Host registered; Chrome extension readiness not yet reported",
+                                         "Capture": "Authorized for one transfer (5 minutes)", "Transfer": "Waiting for explicit Capture Session",
+                                         "Verification": "Not yet verified"})
+            self._render_account_stages()
             subprocess.Popen(["/usr/bin/open", "-a", str(source.application), "--args", "--incognito", "https://www.youtube.com/"],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             self._cancel_companion()
+            self._account_stages["Capture"] = "Not authorized — preparation failed; retry Connect"
+            self._account_stages["Extension / native host"] = "Not confirmed — check setup and user-folder permissions"
+            self._render_account_stages()
             self.auth_status.setText("Could not prepare the companion. Check user-folder permissions and setup instructions; no ordinary-profile fallback was used."); return
         self.auth_status.setText("Waiting for Capture Session (5 minutes). First time: load the companion extension, enable Allow in Incognito and pin it using Setup instructions. Sign in in the Incognito YouTube tab, then explicitly approve Capture in the extension. No session has been verified yet.")
 
@@ -228,22 +300,45 @@ class SettingsWindow(QDialog):
             f"2. Confirm extension ID: {EXTENSION_ID}. Open Details → Allow in Incognito. Pin the extension.\n\n"
             "3. Click Connect/Reconnect here (registers the local host and authorizes one capture for 5 minutes).\n"
             "4. Use one Incognito YouTube tab, sign in, open the extension, check consent and Capture Session. Close Incognito promptly.\n"
-            "5. Return here, Verify Session and Apply. No private library is enumerated. See docs/YOUTUBE_COOKIE_COMPANION.md for removal and security limits.")
+            "5. Successful capture activates Companion automatically. Return here and Verify Session. Unrelated settings still need Apply. No private library is enumerated. See docs/YOUTUBE_COOKIE_COMPANION.md for removal and security limits.")
 
     def _poll_companion(self):
-        if self._pending_companion is None: return
-        if time.monotonic() >= self._companion_deadline:
-            self._cancel_companion(); self.auth_status.setText("Capture request expired. Reconnect to approve a new capture."); return
-        try: receipt = self.companion.receipt()
+        if self._pending_companion is None or self._companion_busy: return
+        try:
+            pending = self.companion.poll_status(self._pending_companion, expire=time.monotonic() >= self._companion_deadline)
+            if pending and pending.get("busy"):
+                self.auth_status.setText("Native host busy — Keychain completion is not yet confirmed. Complete any Keychain prompt, or Reconnect to recover after the host finishes.")
+                return
+            if pending and pending.get("expired"):
+                self._pending_companion = None
+                self.auth_status.setText("Capture request expired. Reconnect to approve a new capture.")
+                self._account_stages["Capture"] = "Expired — Reconnect to authorize again"; self._render_account_stages(); return
+            if pending and pending.get("extension_ready") is not None:
+                self._account_stages["Extension / native host"] = ("Chrome reported Incognito readiness; native host responding" if pending["extension_ready"] else
+                    "Native host responding; open extension in Incognito and enable Allow in Incognito")
+                self._render_account_stages()
+            receipt = pending.get("receipt") if pending else None
         except Exception:
-            self._cancel_companion(); self.auth_status.setText("Companion status could not be read safely. Check local permissions and Reconnect."); return
+            self._cancel_companion(); self.auth_status.setText("Companion status could not be read safely. Check local permissions and Reconnect.")
+            self._account_stages["Capture"] = "Status unreadable — Reconnect after checking local permissions"
+            self._render_account_stages(); return
         if not receipt or receipt.get("operation_id") != self._pending_companion: return
         self._pending_companion = None
         if receipt.get("status") == "imported":
             self.cookies_file.clear(); self.auth_mode.setCurrentText("YouTube Companion")
             self._invalidate_auth()
-            self.auth_status.setText("Session imported securely into Keychain — not yet verified. Close Incognito, then Verify Session. Apply saves this method for future analysis/downloads.")
+            self._account_stages.update({"Capture": "Completed (single-use authorization consumed)", "Transfer": "Session transferred",
+                                         "Keychain": "Stored", "Verification": "Not yet verified"})
+            self._render_account_stages()
+            try: self._persist_account_choice("YouTube Companion")
+            except Exception:
+                self.auth_status.setText("Session imported and stored in Keychain, but activation could not be saved. Check settings-folder permissions, then retry Apply or Reconnect. Unrelated pending edits were not saved.")
+                return
+            self.auth_status.setText("Session imported securely into Keychain and activated for future tasks — not yet verified. Close Incognito, then Verify Session. Unrelated settings edits remain unsaved.")
         else:
+            self._account_stages.update({"Capture": "Consumed — Reconnect to retry", "Transfer": "Session received",
+                                         "Keychain": "Storage failed — check Keychain access; no plaintext fallback"})
+            self._render_account_stages()
             self.auth_status.setText("Secure session storage failed. Check Keychain access, then Reconnect. No plaintext fallback was saved.")
 
     def _cancel_companion(self, *_):
@@ -251,6 +346,19 @@ class SettingsWindow(QDialog):
             try: self.companion.cancel(self._pending_companion)
             except Exception: pass  # Pending authorization still expires after five minutes.
             self._pending_companion = None
+
+    def _persist_account_choice(self, mode: str):
+        """Commit only the explicit managed-account action, not the form copy."""
+        if mode not in {"YouTube Companion", "None"}: raise ValueError("Unsupported account action")
+        if self.account_callback is not None:
+            applied = self.account_callback(mode)
+        else:
+            applied = copy.deepcopy(self.original)
+            applied.authentication_mode = mode; applied.cookies_file = ""
+            self.apply_callback(copy.deepcopy(applied), {})
+        self.original = copy.deepcopy(applied)
+        self.working.authentication_mode = mode; self.working.cookies_file = ""
+        self._render_account_stages()
 
     def _connect_browser(self):
         sources = discover_browsers()
@@ -263,7 +371,7 @@ class SettingsWindow(QDialog):
         if self._companion_busy: return
         self._companion_busy = True
         self._invalidate_auth()
-        for control in (self.connect_youtube, self.reconnect_youtube, self.disconnect_youtube, self.auth_test): control.setEnabled(False)
+        for control in (self.connect_youtube, self.disconnect_youtube, self.auth_test): control.setEnabled(False)
         self.auth_status.setText("Deleting the captured session from Keychain…")
         def disconnect(_cancel, _progress):
             self.companion.disconnect()
@@ -276,7 +384,7 @@ class SettingsWindow(QDialog):
 
     def _companion_disconnect_finished(self, *_):
         self._companion_busy = False
-        for control in (self.connect_youtube, self.reconnect_youtube, self.disconnect_youtube): control.setEnabled(True)
+        for control in (self.connect_youtube, self.disconnect_youtube): control.setEnabled(True)
         self.auth_test.setEnabled(not self._auth_busy)
 
     def _companion_disconnected(self, *_):
@@ -284,7 +392,13 @@ class SettingsWindow(QDialog):
         self.auth_mode.setCurrentText("None"); self.cookies_file.clear()
         self.profile.setCurrentIndex(-1); self.profile.setEditText("")
         self._invalidate_auth()
-        self.auth_status.setText("Captured Keychain session deleted. Apply to save authentication disabled for future tasks. Browser sign-in and already-running task snapshots are unchanged.")
+        self._account_stages.update({"Capture": "Not authorized", "Keychain": "Deleted", "Transfer": "No active captured session"})
+        self._render_account_stages()
+        try: self._persist_account_choice("None")
+        except Exception:
+            self.auth_status.setText("Captured session deleted, but authentication-disabled settings could not be saved. Check settings permissions and Apply; already-running snapshots are unchanged.")
+            return
+        self.auth_status.setText("Captured Keychain session deleted and authentication disabled for future tasks. Unrelated settings edits remain unsaved; browser sign-in and running task snapshots are unchanged.")
 
     def _open_youtube_browser(self):
         source = next((source for source in discover_browsers() if source.name == self.browser.currentText()), None)
@@ -334,6 +448,8 @@ class SettingsWindow(QDialog):
 
     def _advanced(self):
         page, form = self._page(); self.safe_options = QLineEdit(self.working.yt_dlp_safe_options); self.provider_url = QLineEdit(self.working.provider_base_url); self.provider_home = QLineEdit(self.working.provider_server_home)
+        self.provider_url.textChanged.connect(self._invalidate_auth)
+        self.provider_home.textChanged.connect(self._invalidate_auth)
         self.console_detail = _combo(["Normal", "Verbose", "Debug"], self.working.console_detail)
         form.addRow("Console detail", self.console_detail)
         self.yt_check_startup = QCheckBox(); self.yt_check_startup.setChecked(self.working.yt_dlp_check_updates_on_startup)
@@ -406,9 +522,16 @@ class SettingsWindow(QDialog):
         values = (self.auth_mode.currentText(), self.browser.currentText(), profile, self.cookies_file.text().strip(), proxy, self.runtime_manager.snapshot())
         generation = self._auth_generation
         self._auth_busy = True; self.auth_test.setEnabled(False)
+        self._verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self._account_stages["Verification"] = "Attempting session verification"
+        self._render_account_stages()
         self.auth_status.setText("Verifying cookie access and YouTube session…")
-        self.task_manager.start("authentication-test", lambda _cancel, _progress, v=values, g=generation: (g, verify_youtube_connection(*v)),
-                                on_result=self._auth_test_delivered, on_error=self._auth_test_error, on_finished=self._auth_test_finished)
+        def verify(_cancel, _progress):
+            try: result = verify_youtube_connection(*values)
+            except Exception: result = None  # Never publish unsanitized exception details or obsolete evidence.
+            return generation, result
+        self.task_manager.start("authentication-test", verify,
+                                on_result=self._auth_test_delivered, on_finished=self._auth_test_finished)
 
     def _authentication_proxy(self):
         mode = self.connection.currentText()
@@ -430,13 +553,23 @@ class SettingsWindow(QDialog):
 
     def _auth_test_delivered(self, payload):
         generation, result = payload
-        if generation == self._auth_generation: self._auth_test_ready(result)
+        if generation == self._auth_generation:
+            if result is None: self._auth_test_error()
+            else: self._auth_test_ready(result)
 
     def _auth_test_ready(self, result: YouTubeConnection):
+        self._verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self._account_stages["Verification"] = ("Signed-in status confirmed — account identity not confirmed" if result.authenticated else
+                                                "Signed-in status unconfirmed — check the selected source and retry")
+        if self.auth_mode.currentText() == "YouTube Companion" and result.cookies_readable:
+            self._account_stages["Keychain"] = "Stored session readable"
+        self._render_account_stages()
         self.auth_status.setText(result.message)
         self.auth_status.setToolTip(f"Verification: {result.state}. Cookie source readable: {result.cookies_readable}. This is not a download/provider or private-content entitlement test.")
 
     def _auth_test_error(self, *_):
+        self._account_stages["Verification"] = "Failed to complete — check connection and retry"
+        self._render_account_stages()
         self.auth_status.setText("Verification could not complete. Check the connection and retry.")
 
     def _auth_test_finished(self, *_):
@@ -471,6 +604,7 @@ class SettingsWindow(QDialog):
 
     def _runtime_action_finished(self, _task_id: str = ""):
         self._refresh_runtime_status()
+        self._invalidate_auth()
         for button in self.runtime_action_buttons: button.setEnabled(True)
 
     def _collect(self) -> AppSettings:
@@ -491,4 +625,6 @@ class SettingsWindow(QDialog):
     def apply(self):
         self.working = self._collect(); self.apply_callback(copy.deepcopy(self.working), {
             "http": self.http_proxy_password.text(), "socks": self.socks_proxy_password.text()})
+        self.original = copy.deepcopy(self.working)
+        self._render_account_stages()
     def _ok(self): self.apply(); self.accept()

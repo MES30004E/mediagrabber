@@ -75,6 +75,20 @@ def test_settings_pages_scroll_and_auth_disclosure_preserves_config(tmp_path, mo
     finally: window.close(); APP.processEvents()
 
 
+def test_account_activation_uses_current_applied_settings_not_pending_form(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch)
+    try:
+        panel = window.settings_panel
+        window.settings.quality = "1080p"
+        panel.quality.setCurrentText("360p")
+        panel._persist_account_choice("YouTube Companion")
+        assert window.settings.authentication_mode == "YouTube Companion"
+        assert window.settings.quality == "1080p"
+        assert window.settings_store.load().quality == "1080p"
+        assert panel.quality.currentText() == "360p"
+    finally: window.close(); APP.processEvents()
+
+
 def test_download_primary_action_and_empty_states_are_actionable(tmp_path, monkeypatch):
     window = _window(tmp_path, monkeypatch)
     try:

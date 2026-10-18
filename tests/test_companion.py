@@ -37,6 +37,33 @@ def test_native_capture_requires_pending_origin_consent_and_is_single_use(tmp_pa
     with pytest.raises(ValueError): controller.handle(packet, ORIGIN)
 
 
+def test_native_readiness_is_reported_only_for_current_authorized_operation(tmp_path):
+    from morgan_media_downloader.youtube_companion.bridge import CompanionController, ORIGIN
+    controller = CompanionController(tmp_path, MemoryStore()); operation = controller.begin()
+    controller.handle({"type": "ping", "incognito": True, "incognito_allowed": True}, ORIGIN)
+    status = controller.poll_status(operation)
+    assert status["extension_ready"] is True and status["operation_id"] == operation
+    assert "nonce" not in status and "cookies" not in status
+    assert controller.poll_status("other-operation") is None
+    controller.handle({"type": "ping", "incognito": False, "incognito_allowed": True}, ORIGIN)
+    assert controller.poll_status(operation)["extension_ready"] is False
+
+
+def test_poll_reconciles_completed_capture_before_expiry_and_defers_while_locked(tmp_path):
+    from morgan_media_downloader.youtube_companion.bridge import CompanionController, ORIGIN
+    controller = CompanionController(tmp_path, MemoryStore()); operation = controller.begin()
+    with controller._lock():
+        assert controller.poll_status(operation, expire=True) == {"busy": True}
+    hello = controller.handle({"type": "hello"}, ORIGIN)
+    controller.handle(dict(type="capture", operation_id=operation, nonce=hello["nonce"], consent=True,
+                          incognito=True, store_id="incognito-store", cookies=[sample()]), ORIGIN)
+    assert controller.poll_status(operation, expire=True)["receipt"]["status"] == "imported"
+    next_operation = controller.begin()
+    assert controller.poll_status(next_operation, expire=True) == {"expired": True}
+    with pytest.raises(ValueError): controller.handle({"type": "hello"}, ORIGIN)
+    assert "synthetic-session" not in json.dumps(controller.poll_status(operation))
+
+
 @pytest.mark.parametrize("change", [
     {"domain": "google.com"}, {"domain": "youtube.com.attacker.test"}, {"storeId": "normal"},
     {"value": "bad\nCookie: injected"}, {"expirationDate": float("nan")},

@@ -390,7 +390,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._queue_tab(), "Queue"); self.tabs.addTab(self._history_tab(), "History")
         self.console_tab = self._console_tab(); self.tabs.addTab(self.console_tab, "Console")
         self.settings_panel = SettingsWindow(self.settings, self.managed_tor, self._apply_settings, self,
-                                             self.runtime_manager, self.task_manager, embedded=True)
+                                             self.runtime_manager, self.task_manager, embedded=True,
+                                             account_callback=self._apply_account_choice)
         self.tabs.addTab(self.settings_panel, "Settings")
         self.provider_label = QLabel(); self.runtime_label = QLabel(); self.connection_bar_label = QLabel()
         self.statusBar().addPermanentWidget(self.provider_label); self.statusBar().addPermanentWidget(self.runtime_label); self.statusBar().addPermanentWidget(self.connection_bar_label)
@@ -1666,6 +1667,15 @@ class MainWindow(QMainWindow):
         self.show_preferences()
         self.settings_panel.sidebar.setCurrentRow(list(self.settings_panel.pages).index("Accounts"))
         self.settings_panel.connect_youtube.setFocus()
+
+    def _apply_account_choice(self, mode: str) -> AppSettings:
+        if mode not in {"YouTube Companion", "None"}: raise ValueError("Unsupported account action")
+        updated = copy.deepcopy(self.settings)
+        updated.authentication_mode = mode; updated.cookies_file = ""
+        # Persist first: failure must not be described as an activated choice.
+        self.settings_store.save(updated)
+        self.settings = updated
+        return copy.deepcopy(updated)
 
     def _apply_settings(self, settings: AppSettings, proxy_passwords: object):
         self.settings = settings

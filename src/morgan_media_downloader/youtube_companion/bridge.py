@@ -80,6 +80,28 @@ class CompanionController:
         except BlockingIOError:
             return None  # Native host may be awaiting Keychain approval; don't freeze Qt.
 
+    def poll_status(self, operation_id, *, expire=False):
+        """Reconcile completion and expiry atomically with the capture writer.
+
+        A Keychain prompt can outlive the authorization deadline. While its
+        writer owns the lock, defer rather than losing a later success receipt.
+        """
+        try:
+            with self._lock():
+                receipt = self._read("receipt.json")
+                if receipt and receipt.get("operation_id") == operation_id:
+                    return {"receipt": receipt}
+                pending = self._read("pending.json")
+                if not pending or pending.get("operation_id") != operation_id:
+                    return {"expired": True} if expire else None
+                if expire or time.time() >= pending["expires"]:
+                    (self.root / "pending.json").unlink()
+                    return {"expired": True}
+                return {"operation_id": operation_id, "extension_ready": pending.get("extension_ready"),
+                        "reported_at": pending.get("reported_at")}
+        except BlockingIOError:
+            return {"busy": True}
+
     def disconnect(self):
         with self._lock():
             self.store.delete()  # Failure must not claim that the session was deleted.
@@ -90,6 +112,20 @@ class CompanionController:
         if origin != ORIGIN or not isinstance(message, dict): raise ValueError("origin.rejected")
         kind = message.get("type")
         if kind == "ping" and set(message) == {"type"}: return {"status": "ready", "protocol": 1}
+        if kind == "ping":
+            if set(message) != {"type", "incognito", "incognito_allowed"} or any(
+                    type(message[key]) is not bool for key in ("incognito", "incognito_allowed")):
+                raise ValueError("message.invalid")
+            try:
+                with self._lock():
+                    pending = self._read("pending.json")
+                    if pending and time.time() < pending["expires"]:
+                        pending["extension_ready"] = message["incognito"] and message["incognito_allowed"]
+                        pending["reported_at"] = time.time()
+                        self._write("pending.json", pending)
+            except BlockingIOError:
+                pass  # Host is reachable even while an approved capture stores its session.
+            return {"status": "ready", "protocol": 1}
         with self._lock():
             pending = self._read("pending.json")
             if not pending or time.time() >= pending["expires"]: raise ValueError("operation.missing_or_expired")

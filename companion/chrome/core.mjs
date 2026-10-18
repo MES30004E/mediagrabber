@@ -5,7 +5,10 @@ const youtube = value => {
 };
 
 export async function connectivity(api) {
-  try { return (await api.runtime.sendNativeMessage(HOST, {type: "ping"})).status === "ready"; }
+  try { return (await api.runtime.sendNativeMessage(HOST, {
+    type: "ping", incognito: api.extension.inIncognitoContext === true,
+    incognito_allowed: await api.extension.isAllowedIncognitoAccess(),
+  })).status === "ready"; }
   catch { return false; }
 }
 

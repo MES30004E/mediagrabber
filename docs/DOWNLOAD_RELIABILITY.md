@@ -92,8 +92,10 @@ temporary artifacts are not release assets and must not be committed.
    component actions, not unsaved settings edits; no extra Apply is needed for a
    runtime action. Do not infer account verification from update success.
 3. In Accounts, select/verify the already captured **YouTube Companion** session
-   and Apply if its authentication method was changed. This checkpoint does not
-   yet change managed-import Apply semantics.
+   and Apply if manually changing its authentication method. A new successful
+   Companion capture now activates that method automatically, without saving
+   unrelated pending settings. Verify Session and Check downloader/provider
+   remain separate checks; neither is a successful individual download.
 4. Explicitly retry one authorized video, initially the reported failing test
    video if appropriate. Check the active runtime version, failure stage,
    authentication and playable-format count in Details. Separately verify the

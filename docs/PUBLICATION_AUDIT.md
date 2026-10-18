@@ -61,3 +61,20 @@ GitHub repository metadata confirmed `MES30004E/mediagrabber` is **Public**.
 Recheck it and the target remote before pushing. Re-run history/index checks for
 the final commit; verify the remote branch SHA afterward. No force push, merge
 to main or release publication is authorized by this audit.
+
+## Accounts observability checkpoint
+
+The subsequent Accounts checkpoint repeated all-local-refs/reflog/history and
+provider-history scans: 20 application commits / one public manifest-key finding,
+148 provider commits / the same two upstream protocol constants. No new history
+finding was identified. The manifest DER was independently parsed as a public
+key. Full staged-source export (2,814,798 bytes before this audit wording update)
+returned only that same public manifest key; staged filenames contain no private
+or generated runtime data. Final commit history is rescanned before pushing.
+
+Accounts tests use synthetic MemoryStore cookies and isolated settings, never a
+personal browser/session. The full local suite passed **367 Python tests** and
+the extension suite passed **10 tests**. The standalone macOS storage roundtrip
+uses its own random synthetic Keychain service/account, with deletion afterward;
+it does not read the Companion's stored account. Source changes do not alter the
+pinned provider, main or the qualified Swift implementation.

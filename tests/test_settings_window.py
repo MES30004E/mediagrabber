@@ -159,6 +159,10 @@ def test_companion_accounts_capture_selects_secure_mode_without_saving_cookies(t
         generation = dialog._auth_generation
         dialog.connect_youtube.click()
         assert installed and "--incognito" in opened[0] and not persisted
+        assert "Capture: Authorized" in dialog.auth_progress.text()
+        controller.handle({"type": "ping", "incognito": True, "incognito_allowed": True}, ORIGIN)
+        dialog._poll_companion()
+        assert "Chrome reported Incognito readiness" in dialog.auth_progress.text()
         assert dialog._auth_generation > generation, "Reconnect must invalidate old verification callbacks"
         generation = dialog._auth_generation
         hello = controller.handle({"type": "hello"}, ORIGIN)
@@ -168,6 +172,9 @@ def test_companion_accounts_capture_selects_secure_mode_without_saving_cookies(t
         assert dialog._auth_generation > generation, "Replacement import must not reuse earlier verification evidence"
         assert dialog.auth_mode.currentText() == "YouTube Companion"
         assert "imported" in dialog.auth_status.text().lower() and "Verify" in dialog.auth_status.text()
+        assert persisted and persisted[-1].authentication_mode == "YouTube Companion", "Successful capture activates without manual Apply"
+        assert "Keychain: Stored" in dialog.auth_progress.text()
+        assert "Verification: Not yet verified" in dialog.auth_progress.text()
         dialog.apply()
         assert persisted[-1].authentication_mode == "YouTube Companion" and persisted[-1].cookies_file == ""
         assert "synthetic-session" not in str(persisted[-1])
@@ -175,6 +182,129 @@ def test_companion_accounts_capture_selects_secure_mode_without_saving_cookies(t
         assert controller.store.data is not None, "Deletion is asynchronous"
         fn, callbacks = tasks[-1]; callbacks["on_result"](fn(None, None)); callbacks["on_finished"]()
         assert controller.store.data is None and dialog.auth_mode.currentText() == "None"
+    finally: _dispose(dialog)
+
+
+def test_verification_timestamp_and_provider_preflight_are_separate(tmp_path, monkeypatch):
+    from morgan_media_downloader.auth import YouTubeConnection
+    from morgan_media_downloader.provider import ProviderStatus
+    settings = AppSettings(authentication_mode="YouTube Companion")
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path))
+    tasks = []
+    monkeypatch.setattr(dialog.task_manager, "start", lambda kind, fn, **kw: tasks.append((fn, kw)))
+    monkeypatch.setattr("morgan_media_downloader.settings_window.check_provider", lambda *_: ProviderStatus("available", "token=must-not-display", "http"))
+    monkeypatch.setattr("morgan_media_downloader.settings_window.find_runtime", lambda **kw: Path("/private/synthetic/node"))
+    try:
+        dialog._auth_test_ready(YouTubeConnection("authenticated", "Signed in — account identity not confirmed", True))
+        assert dialog._verified_at and "Signed-in status confirmed" in dialog.auth_progress.text()
+        assert "Not checked" in dialog.auth_progress.text(), "Sign-in must not assert provider readiness"
+        dialog.readiness_check.click()
+        fn, callbacks = tasks[-1]; callbacks["on_result"](fn(None, None)); callbacks["on_finished"]()
+        text = dialog.auth_progress.text()
+        assert "HTTP provider responding" in text and "download not tested" in text
+        assert "must-not-display" not in text and "/private/synthetic" not in text
+        dialog._runtime_action_finished()
+        assert "HTTP provider responding" not in dialog.auth_progress.text()
+        dialog.auth_mode.setCurrentText("None")
+        assert "Needs verification" in dialog.auth_progress.text()
+    finally: _dispose(dialog)
+
+
+def test_managed_import_autosaves_only_authentication_not_unrelated_edits(tmp_path):
+    from morgan_media_downloader.youtube_companion.bridge import CompanionController, ORIGIN
+    from test_companion import MemoryStore, sample
+    settings = AppSettings(quality="1080p", theme="Light")
+    store = SettingsStore(tmp_path / "settings.json"); store.save(settings)
+    controller = CompanionController(tmp_path / "control", MemoryStore())
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda value, _: store.save(value),
+                            runtime_manager=_runtime(tmp_path), companion_controller=controller)
+    try:
+        dialog.quality.setCurrentText("360p"); dialog.theme.setCurrentText("Dark")
+        dialog._pending_companion = controller.begin(); dialog._companion_deadline = float("inf")
+        hello = controller.handle({"type": "hello"}, ORIGIN)
+        controller.handle(dict(type="capture", operation_id=hello["operation_id"], nonce=hello["nonce"],
+                              consent=True, incognito=True, store_id="incognito-store", cookies=[sample()]), ORIGIN)
+        dialog._companion_deadline = 0  # Accepted capture may complete after the GUI's deadline.
+        dialog._poll_companion()
+        saved = store.load()
+        assert saved.authentication_mode == "YouTube Companion"
+        assert (saved.quality, saved.theme) == ("1080p", "Light")
+        assert (dialog.quality.currentText(), dialog.theme.currentText()) == ("360p", "Dark")
+        assert "synthetic-session" not in store.path.read_text()
+        dialog.reject()
+        assert store.load().quality == "1080p"
+    finally: _dispose(dialog)
+
+
+def test_provider_edit_invalidates_preflight_and_late_result(tmp_path, monkeypatch):
+    from morgan_media_downloader.provider import ProviderStatus
+    settings = AppSettings()
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path))
+    tasks = []
+    monkeypatch.setattr(dialog.task_manager, "start", lambda kind, fn, **kw: tasks.append((fn, kw)))
+    monkeypatch.setattr("morgan_media_downloader.settings_window.check_provider", lambda *_: ProviderStatus("available", "", "http"))
+    monkeypatch.setattr("morgan_media_downloader.settings_window.find_runtime", lambda **kw: None)
+    try:
+        dialog.readiness_check.click()
+        fn, callbacks = tasks[-1]; payload = fn(None, None)
+        dialog.provider_url.setText("http://127.0.0.1:9999")
+        callbacks["on_result"](payload); callbacks["on_finished"]()
+        assert "HTTP provider responding" not in dialog.auth_progress.text()
+        assert "Not checked" in dialog.auth_progress.text()
+    finally: _dispose(dialog)
+
+
+def test_apply_refreshes_active_authentication_label(tmp_path):
+    settings = AppSettings()
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path))
+    try:
+        dialog.auth_mode.setCurrentText("Browser Cookies"); dialog.apply()
+        assert "Active authentication: Browser Cookies" in dialog.auth_progress.text()
+    finally: _dispose(dialog)
+
+
+def test_failed_checks_do_not_leak_details_or_overwrite_changed_source(tmp_path, monkeypatch):
+    settings = AppSettings(connection_mode="Direct / Normal Network")
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path))
+    tasks = []
+    monkeypatch.setattr(dialog.task_manager, "start", lambda kind, fn, **kw: tasks.append((fn, kw)))
+    def fail(*_args, **_kw): raise RuntimeError("private-token-must-not-leak")
+    monkeypatch.setattr("morgan_media_downloader.settings_window.check_provider", fail)
+    monkeypatch.setattr("morgan_media_downloader.settings_window.verify_youtube_connection", fail)
+    try:
+        for button in (dialog.readiness_check, dialog.auth_test):
+            button.click(); fn, callbacks = tasks[-1]
+            payload = fn(None, None)
+            assert "private-token" not in str(payload)
+            dialog.profile.setEditText(dialog.profile.currentText() + "changed")
+            callbacks["on_result"](payload); callbacks["on_finished"]()
+            assert "Needs verification" in dialog.auth_progress.text()
+            assert "Failed to complete" not in dialog.auth_progress.text()
+        dialog.auth_test.click(); fn, callbacks = tasks[-1]
+        callbacks["on_result"](fn(None, None)); callbacks["on_finished"]()
+        assert "Failed to complete" in dialog.auth_progress.text()
+    finally: _dispose(dialog)
+
+
+def test_capture_activation_failure_does_not_claim_active_mode(tmp_path):
+    from morgan_media_downloader.youtube_companion.bridge import CompanionController, ORIGIN
+    from test_companion import MemoryStore, sample
+    settings = AppSettings()
+    controller = CompanionController(tmp_path / "control", MemoryStore())
+    def fail(_mode): raise OSError("synthetic-private-error-must-not-display")
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None,
+                            runtime_manager=_runtime(tmp_path), companion_controller=controller, account_callback=fail)
+    try:
+        dialog._pending_companion = controller.begin(); dialog._companion_deadline = float("inf")
+        hello = controller.handle({"type": "hello"}, ORIGIN)
+        controller.handle(dict(type="capture", operation_id=hello["operation_id"], nonce=hello["nonce"],
+                              consent=True, incognito=True, store_id="incognito-store", cookies=[sample()]), ORIGIN)
+        dialog._poll_companion()
+        assert controller.store.data is not None
+        assert "Keychain: Stored" in dialog.auth_progress.text()
+        assert "Active authentication: Auto" in dialog.auth_progress.text()
+        assert "activation could not be saved" in dialog.auth_status.text()
+        assert "synthetic-private-error" not in dialog.auth_status.text()
     finally: _dispose(dialog)
 
 
