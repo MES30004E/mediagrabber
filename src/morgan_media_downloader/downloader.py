@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .auth import (authentication_options, configured_authentication_options, format_unavailable,
+from .auth import (authentication_options, configured_authentication_options,
                    normalise_authentication_mode, requires_authentication, fresh_authentication_options)
 from .compatibility import (COMPATIBLE_PROFILES, compatibility_summary,
                             ensure_compatible_output)
@@ -23,7 +23,7 @@ from .models import DownloadJob, JobStatus, MediaItem
 from .network import classify_tor_target
 from .parsing import as_yt_dlp_target, ensure_output_directory, input_kind, is_watch_later
 from .paths import find_binary
-from .provider import provider_extractor_args
+from .provider import provider_extractor_args, yt_dlp_javascript_options
 from .spotify import fetch_public_metadata, match_confidence
 from .subtitle_mux import mux_subtitles_atomically, parse_subtitle_languages, subtitle_download_flags
 from .yt_runtime import RuntimeSnapshot
@@ -88,6 +88,7 @@ def analyse_target(value: str, proxy: str | None = None, provider_url: str = "ht
         "extractor_args": provider_extractor_args(provider_url, provider_home),
     }
     common.update(fresh_authentication_options(auth_options or {}))
+    common.update(yt_dlp_javascript_options())
     if input_kind(value) == "spotify":
         results: list[MediaItem] = []
         with ydl_class(common) as ydl:
@@ -128,13 +129,9 @@ def analyse_with_authentication(value: str, proxy: str | None, provider_url: str
             if status: status(f"Authentication required. Retrying with {configured_name}…")
             return analyse_target(value, proxy, provider_url, provider_home, configured, runtime), f"Auto -> {configured_name}"
     selected = authentication_options(mode, browser, profile, cookies_file)
-    try:
-        return analyse_target(value, proxy, provider_url, provider_home, selected, runtime), mode
-    except BaseException as error:
-        if selected and format_unavailable(error) and not requires_authentication(error) and not is_watch_later(value):
-            if status: status("Authenticated format selection failed. Retrying without account cookies…")
-            return analyse_target(value, proxy, provider_url, provider_home, {}, runtime), f"{mode} -> None"
-        raise
+    # Explicit authentication is an attempt invariant. Format/player failures
+    # must not turn a selected account into an unauthenticated request.
+    return analyse_target(value, proxy, provider_url, provider_home, selected, runtime), mode
 
 
 def friendly_error(error: BaseException) -> str:
@@ -246,11 +243,15 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
         def error(self, message): emit("YT-DLP", str(message), "error")
 
     def run_attempt(auth_name: str, auth_values: dict[str, Any]) -> tuple[dict[str, Any], Any]:
+        job.metadata_success = False
+        job.formats_total = job.formats_playable = 0
+        job.playable_format_summary = []
         # Subtitles are acquired in a separate optional pass after a valid media
         # output exists, so subtitle failures can never destroy or block media.
         ydl_options = build_ydl_options(job.options, proxy, include_subtitles=False, include_authentication=False)
         ydl_options.pop("cookiesfrombrowser", None); ydl_options.pop("cookiefile", None)
         ydl_options.update(fresh_authentication_options(auth_values))
+        ydl_options.update(yt_dlp_javascript_options())
         ydl_options.update({
             "progress_hooks": [hook], "postprocessor_hooks": [post_hook],
             "post_hooks": [completed_file],
@@ -307,16 +308,24 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
                 job.postprocessing_stage = "Retrying after HTTP 403"
                 progress(job)
                 emit("DOWNLOAD", "HTTP 403 received; refreshing media information and retrying once", "warning")
+                job.failure_stage = "Metadata refresh"
+                job.metadata_success = False
+                job.formats_total = job.formats_playable = 0
+                job.playable_format_summary = []
                 refreshed = ydl.extract_info(job.item.source_url, download=False)
+                if not refreshed: raise ValueError("No compatible format was found while refreshing media metadata.")
+                job.metadata_success = True
                 refreshed_playable = playable_formats(refreshed or {})
                 job.formats_total = len((refreshed or {}).get("formats") or []) or 1
                 job.formats_playable = len(refreshed_playable)
                 job.playable_format_summary = safe_format_summary(refreshed_playable)
+                job.failure_stage = "Format resolution"
                 refreshed_selector, refreshed_warnings = resolve_available_format(
                     refreshed_playable, job.options.quality, job.options.container, job.options.audio_format,
                     job.options.compatibility)
                 job.warnings.extend(w for w in refreshed_warnings if w not in job.warnings)
                 ydl.params["format"] = refreshed_selector
+                job.failure_stage = "Video transfer"
                 result = (ydl.process_ie_result(refreshed, download=True) if hasattr(ydl, "process_ie_result")
                           else ydl.extract_info(job.item.source_url, download=True))
             return result or info, ydl
@@ -367,6 +376,7 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
         subtitle_options.pop("embedthumbnail", None)
         subtitle_options.pop("cookiesfrombrowser", None); subtitle_options.pop("cookiefile", None)
         subtitle_options.update(fresh_authentication_options(auth_values))
+        subtitle_options.update(yt_dlp_javascript_options())
         if ffmpeg := find_binary("ffmpeg"):
             subtitle_options["ffmpeg_location"] = str(Path(ffmpeg).parent)
         ydl_class = _ydl_class(runtime) if runtime is not None else _ydl_class()
@@ -412,10 +422,6 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
                 job.technical_details = f"Authentication required. Retrying with {configured_name}…"
                 progress(job)
                 result, ydl = run_with_tor_retries(f"Auto -> {configured_name}", configured); successful_auth = configured
-            elif first_auth and format_unavailable(first_error) and not requires_authentication(first_error):
-                job.technical_details = "Authenticated format selection failed. Retrying without account cookies…"
-                progress(job)
-                result, ydl = run_with_tor_retries(f"{mode} -> None", {}); successful_auth = {}
             else:
                 raise
         candidates = [result.get("filepath"), result.get("_filename")]

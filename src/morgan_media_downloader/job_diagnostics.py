@@ -56,6 +56,10 @@ def classify_failure(error: BaseException | str, *, metadata_success: bool = Fal
     safe = redact_secrets(str(error))
     lower = safe.casefold()
     rules = [
+        (("the page needs to be reloaded",), "YouTube player extraction",
+         "YouTube's player rejected per-video extraction. Playlist analysis does not prove download readiness. Check the yt-dlp runtime channel/update; keep the selected authentication."),
+        (("po-token", "po token", "potoken", "token provider"), "PO-token provider",
+         "The PO-token provider could not satisfy this request. Check provider compatibility and readiness separately from sign-in."),
         (("http error 403", "status code: 403", "http 403", "access forbidden"), "HTTP 403",
          "Metadata loaded, but the media server denied the download." if metadata_success else "HTTP 403 — the server refused access."),
         (("http error 404", "status code: 404", "http 404"), "HTTP 404", "HTTP 404 — the media was not found."),
@@ -84,6 +88,8 @@ def classify_failure(error: BaseException | str, *, metadata_success: bool = Fal
         # health check confirms the proxy itself is working.
         friendly = "The target returned HTTP 403 while using Managed Tor. Test Tor Internet connectivity to distinguish a site rejection."
     retry_options = {
+        "YouTube player extraction": ["Check yt-dlp Updates", "Retry with configured authentication", "Technical Details"],
+        "PO-token provider": ["Check Provider", "Technical Details"],
         "HTTP 403": ["Retry", "Retry Direct", "Retry with configured authentication", "Open Console"],
         "No playable formats": ["Retry Best Available", "Retry Without Authentication", "Technical Details"],
         "Requested format unavailable": ["Retry Best Available", "Retry Without Authentication", "Technical Details"],

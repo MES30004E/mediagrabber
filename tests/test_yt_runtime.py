@@ -113,6 +113,41 @@ def test_same_version_does_not_download_and_newer_can_be_check_only(tmp_path: Pa
     assert mgr.snapshot().source == "Bundled"
 
 
+def test_explicit_nightly_channel_verifies_installs_restarts_and_rolls_back(tmp_path):
+    nightly_api = "https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest"
+    prefix = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/"
+    stable = ReleaseServer("2026.08.19")
+    mgr = manager(tmp_path, stable); mgr.initialize(); install(mgr, stable)
+    before = mgr.snapshot()
+    artifact = zipapp("2026.10.10.233141"); calls = []
+    def nightly(url, _timeout):
+        calls.append(url)
+        if url == nightly_api:
+            return json.dumps({"tag_name": "2026.10.10.233141", "draft": False, "prerelease": True, "assets": [
+                {"name": name, "browser_download_url": prefix + "2026.10.10.233141/" + name}
+                for name in ("yt-dlp", "SHA2-256SUMS")]}).encode()
+        if url.endswith("/SHA2-256SUMS"): return f"{hashlib.sha256(artifact).hexdigest()}  yt-dlp\n".encode()
+        if url.endswith("/yt-dlp"): return artifact
+        raise AssertionError(url)
+    mgr._fetcher = nightly
+    assert mgr.check_and_update(False, channel="nightly")["status"] == "Update available"
+    assert mgr.snapshot() is before and calls == [nightly_api]
+    result = mgr.check_and_update(True, channel="nightly")
+    assert result["active_version"] == "2026.10.10.233141" and result["active_channel"] == "nightly"
+    assert before.version == "2026.08.19" and mgr.snapshot().youtube_dl is not before.youtube_dl
+    restarted = manager(tmp_path, stable)
+    assert restarted.initialize().version == "2026.10.10.233141"
+    assert restarted.rollback().version == "2026.08.19"
+
+
+def test_runtime_install_rejects_mismatched_channel_assets_before_download(tmp_path):
+    server = ReleaseServer("2026.08.19"); mgr = manager(tmp_path, server); mgr.initialize()
+    with pytest.raises(RuntimeVerificationError):
+        mgr.install(ReleaseInfo("2026.08.19", "https://github.com/attacker/runtime/releases/download/2026.08.19/yt-dlp",
+                                OFFICIAL_RELEASE_PREFIX + "2026.08.19/SHA2-256SUMS"))
+    assert not server.calls and mgr.snapshot().source == "Bundled"
+
+
 def test_successful_verified_atomic_activation_and_user_runtime_precedence(tmp_path: Path):
     server = ReleaseServer("2026.07.04")
     mgr = manager(tmp_path, server); mgr.initialize()
@@ -210,8 +245,52 @@ def test_provider_incompatibility_keeps_update_but_uses_working_fallback(tmp_pat
     result = mgr.check_and_update()
     assert result["source"] == "Bundled"
     assert "provider API changed" in result["compatibility_error"]
-    assert json.loads(mgr.metadata_path.read_text())["current"]["version"] == "2026.07.04"
+    metadata = json.loads(mgr.metadata_path.read_text())
+    assert metadata["current"] is None
+    assert metadata["rejected_candidate"]["version"] == "2026.07.04"
     assert calls >= 1
+
+
+def test_incompatible_candidate_does_not_replace_successful_runtime_metadata(tmp_path):
+    server = ReleaseServer("2026.08.19"); state = {"version": "bundled"}
+    mgr = manager(tmp_path, server)
+    def load(record, source):
+        state["version"] = record["version"]
+        return RuntimeSnapshot(record["version"], source, type("Runtime", (), {}), record["artifact"])
+    def check():
+        if state["version"] == "2026.10.10.233141": raise RuntimeError("candidate provider API incompatible")
+    mgr._artifact_loader = load; mgr._provider_checker = check
+    mgr.initialize(); install(mgr, server)
+    previous_time = mgr.describe()["last_update"]
+    candidate = ReleaseServer("2026.10.10.233141"); mgr._fetcher = candidate
+    prefix = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.10.10.233141/"
+    mgr.install(ReleaseInfo(candidate.version, prefix + "yt-dlp", prefix + "SHA2-256SUMS", "nightly"))
+    assert mgr.snapshot().version == "2026.08.19"
+    metadata = json.loads(mgr.metadata_path.read_text())
+    assert metadata["current"]["version"] == "2026.08.19"
+    assert mgr.describe()["last_update"] == previous_time
+
+
+def test_rejected_candidate_keeps_user_selected_bundled_runtime(tmp_path):
+    server = ReleaseServer("2026.08.19"); state = {"version": "bundled"}
+    mgr = manager(tmp_path, server)
+    def bundled():
+        state["version"] = "bundled"
+        return RuntimeSnapshot("2025.01.01", "Bundled", BundledYDL)
+    def load(record, source):
+        state["version"] = record["version"]
+        return RuntimeSnapshot(record["version"], source, type("Runtime", (), {}), record["artifact"])
+    def check():
+        if state["version"] == "2026.10.10.233141": raise RuntimeError("provider mismatch")
+    mgr._bundled_loader = bundled; mgr._artifact_loader = load; mgr._provider_checker = check
+    mgr.initialize(); install(mgr, server); mgr.use_bundled()
+    candidate = ReleaseServer("2026.10.10.233141"); mgr._fetcher = candidate
+    prefix = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.10.10.233141/"
+    mgr.install(ReleaseInfo(candidate.version, prefix + "yt-dlp", prefix + "SHA2-256SUMS", "nightly"))
+    assert mgr.snapshot().version == "2025.01.01" and mgr.snapshot().source == "Bundled"
+    assert json.loads(mgr.metadata_path.read_text())["use_bundled"] is True
+    restarted = manager(tmp_path, server)
+    assert restarted.initialize().version == "2025.01.01"
 
 
 def test_official_source_is_required(tmp_path: Path):

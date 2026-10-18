@@ -25,6 +25,11 @@ LOGGER = logging.getLogger(__name__)
 LATEST_RELEASE_API = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
 OFFICIAL_RELEASE_PREFIX = "https://github.com/yt-dlp/yt-dlp/releases/download/"
 STABLE_VERSION = re.compile(r"^\d{4}\.\d{1,2}\.\d{1,2}$")
+NIGHTLY_VERSION = re.compile(r"^\d{4}\.\d{1,2}\.\d{1,2}\.\d{6}$")
+NIGHTLY_RELEASE_API = "https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest"
+NIGHTLY_RELEASE_PREFIX = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/"
+CHANNELS = {"stable": (LATEST_RELEASE_API, OFFICIAL_RELEASE_PREFIX, STABLE_VERSION),
+            "nightly": (NIGHTLY_RELEASE_API, NIGHTLY_RELEASE_PREFIX, NIGHTLY_VERSION)}
 _VERSION_ASSIGNMENT = re.compile(r"^__version__\s*=\s*['\"]([^'\"]+)['\"]", re.MULTILINE)
 
 
@@ -41,6 +46,7 @@ class ReleaseInfo:
     version: str
     asset_url: str
     checksums_url: str
+    channel: str = "stable"
 
 
 @dataclass(frozen=True)
@@ -52,7 +58,7 @@ class RuntimeSnapshot:
 
 
 def version_key(value: str) -> tuple[int, ...]:
-    if not STABLE_VERSION.fullmatch(value):
+    if not (STABLE_VERSION.fullmatch(value) or NIGHTLY_VERSION.fullmatch(value)):
         return (0,)
     return tuple(int(part) for part in value.split("."))
 
@@ -99,7 +105,7 @@ class YtDlpRuntimeManager:
 
     @staticmethod
     def _https_get(url: str, timeout: int) -> bytes:
-        if not (url == LATEST_RELEASE_API or url.startswith(OFFICIAL_RELEASE_PREFIX)):
+        if not any(url == api or url.startswith(prefix) for api, prefix, _pattern in CHANNELS.values()):
             raise ValueError("Refusing non-official yt-dlp update URL")
         request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
                                                        "User-Agent": "MorganMediaDownloader/0.1"})
@@ -156,6 +162,9 @@ class YtDlpRuntimeManager:
                 "current_runtime_version": str(current.get("version") or active.version),
                 "bundled_version": self.bundled_version,
                 "latest_stable": str(self._metadata.get("latest_stable") or "Not checked"),
+                "latest_nightly": str(self._metadata.get("latest_nightly") or "Not checked"),
+                "active_channel": str(current.get("channel", "stable")) if active.artifact else "bundled",
+                "last_error": self.last_error,
                 "last_checked": str(self._metadata.get("last_checked") or "Never"),
                 "last_update": str(self._metadata.get("last_update") or "Never"),
                 "source": active.source,
@@ -163,22 +172,24 @@ class YtDlpRuntimeManager:
                 "compatibility_error": str(self._metadata.get("compatibility_error") or ""),
             }
 
-    def fetch_latest(self, timeout: int = 8) -> ReleaseInfo:
-        payload = json.loads(self._fetcher(LATEST_RELEASE_API, timeout).decode("utf-8"))
+    def fetch_latest(self, timeout: int = 8, *, channel: str = "stable") -> ReleaseInfo:
+        if channel not in CHANNELS: raise RuntimeVerificationError("Unsupported runtime channel")
+        api, prefix, pattern = CHANNELS[channel]
+        payload = json.loads(self._fetcher(api, timeout).decode("utf-8"))
         version = str(payload.get("tag_name") or "")
-        if not STABLE_VERSION.fullmatch(version) or payload.get("prerelease") or payload.get("draft"):
-            raise RuntimeVerificationError("Latest GitHub release is not a stable yt-dlp version")
+        if not pattern.fullmatch(version) or (channel == "stable" and payload.get("prerelease")) or payload.get("draft"):
+            raise RuntimeVerificationError("Latest GitHub release does not match the selected runtime channel")
         assets = {asset.get("name"): asset.get("browser_download_url") for asset in payload.get("assets", [])}
         asset_url, sums_url = assets.get("yt-dlp"), assets.get("SHA2-256SUMS")
-        if not asset_url or not sums_url or not asset_url.startswith(OFFICIAL_RELEASE_PREFIX) or not sums_url.startswith(OFFICIAL_RELEASE_PREFIX):
+        if asset_url != f"{prefix}{version}/yt-dlp" or sums_url != f"{prefix}{version}/SHA2-256SUMS":
             raise RuntimeVerificationError("Official release assets are incomplete")
-        return ReleaseInfo(version, asset_url, sums_url)
+        return ReleaseInfo(version, asset_url, sums_url, channel)
 
-    def check_and_update(self, auto_install: bool = True, force: bool = False) -> dict[str, str]:
+    def check_and_update(self, auto_install: bool = True, force: bool = False, *, channel: str = "stable") -> dict[str, str]:
         with self._lock:
             self.status = "Checking..."; self.last_error = ""
         try:
-            release = self.fetch_latest()
+            release = self.fetch_latest(channel=channel)
         except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError) as error:
             self.last_error = redact_secrets(str(error))
             self.status = "Check failed / Offline"
@@ -192,11 +203,12 @@ class YtDlpRuntimeManager:
 
         checked = datetime.now(timezone.utc).isoformat()
         with self._lock:
-            self._metadata["latest_stable"] = release.version
+            self._metadata[f"latest_{channel}"] = release.version
+            self._metadata["last_checked_channel"] = channel
             self._metadata["last_checked"] = checked
             self._save_metadata()
         active = self.snapshot()
-        LOGGER.info("yt-dlp update check: current %s, latest stable %s", active.version, release.version)
+        LOGGER.info("yt-dlp update check: current %s, latest %s %s", active.version, channel, release.version)
         current_record = self._metadata.get("current") or {}
         installed_version = str(current_record.get("version") or "")
         try:
@@ -220,6 +232,11 @@ class YtDlpRuntimeManager:
         return self.describe()
 
     def install(self, release: ReleaseInfo) -> RuntimeSnapshot:
+        if release.channel not in CHANNELS: raise RuntimeVerificationError("Unsupported runtime channel")
+        _api, prefix, pattern = CHANNELS[release.channel]
+        if (not pattern.fullmatch(release.version) or release.asset_url != f"{prefix}{release.version}/yt-dlp"
+                or release.checksums_url != f"{prefix}{release.version}/SHA2-256SUMS"):
+            raise RuntimeVerificationError("Runtime assets do not match the official channel and version")
         with self._lock:
             self.status = "Downloading update..."
             LOGGER.info("yt-dlp update start: %s", release.version)
@@ -242,19 +259,20 @@ class YtDlpRuntimeManager:
                 artifact = version_dir / "yt-dlp"
                 os.replace(temporary, artifact)
                 os.chmod(artifact, 0o700)
-                record = {"version": release.version, "artifact": str(artifact), "sha256": actual_sha,
+                record = {"version": release.version, "channel": release.channel, "artifact": str(artifact), "sha256": actual_sha,
                           "source": release.asset_url, "downloaded_at": datetime.now(timezone.utc).isoformat()}
                 old_current = self._metadata.get("current")
                 try:
                     snapshot = self._import_artifact(record, "User Updated")
                     self._provider_checker()
                 except Exception as error:
-                    self._metadata["current"] = record
+                    # A downloaded but incompatible candidate is not a successful
+                    # activation. Preserve current/previous and their timestamps
+                    # so restart and rollback do not select the rejected build.
+                    self._metadata["rejected_candidate"] = record
                     self._metadata["compatibility_error"] = redact_secrets(str(error))
-                    self._metadata["last_update"] = record["downloaded_at"]
-                    self._metadata["use_bundled"] = False
                     self._save_metadata()
-                    if not self._activate_record(old_current, "Previous User Updated"):
+                    if self._metadata.get("use_bundled") or not self._activate_record(old_current, "Previous User Updated"):
                         self._activate_bundled("Using bundled fallback")
                     self.status = f"PO-token provider incompatible — using {self._active.version}"
                     LOGGER.warning("yt-dlp %s installed but provider compatibility failed: %s", release.version,
@@ -264,6 +282,7 @@ class YtDlpRuntimeManager:
                 self._metadata["current"] = record
                 self._metadata["last_update"] = record["downloaded_at"]
                 self._metadata["compatibility_error"] = ""
+                self._metadata.pop("rejected_candidate", None)
                 self._metadata["use_bundled"] = False
                 self._active = snapshot
                 self._save_metadata()
@@ -323,7 +342,9 @@ class YtDlpRuntimeManager:
             raise RuntimeVerificationError("Downloaded runtime version does not match the release")
 
     def _record_valid(self, record: dict[str, Any] | None) -> bool:
-        if not record or not STABLE_VERSION.fullmatch(str(record.get("version") or "")):
+        if not record or record.get("channel", "stable") not in CHANNELS:
+            return False
+        if not CHANNELS[record.get("channel", "stable")][2].fullmatch(str(record.get("version") or "")):
             return False
         artifact = Path(str(record.get("artifact") or ""))
         expected = str(record.get("sha256") or "")

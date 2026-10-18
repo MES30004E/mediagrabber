@@ -201,3 +201,20 @@ def test_auth_test_routes_custom_proxy_and_stale_result_is_ignored(tmp_path, mon
         callbacks["on_result"](result)
         assert "signed in" not in dialog.auth_status.text().lower()
     finally: _dispose(dialog)
+
+
+def test_nightly_runtime_choice_is_explicit_and_captured_before_background_work(tmp_path, monkeypatch):
+    settings = AppSettings()
+    runtime = _runtime(tmp_path); calls = []; tasks = []
+    monkeypatch.setattr(runtime, "check_and_update", lambda *args, **kw: calls.append((args, kw)))
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=runtime)
+    monkeypatch.setattr(dialog.task_manager, "start", lambda kind, fn, **kw: tasks.append(fn))
+    try:
+        assert dialog.runtime_channel.currentData() == "stable"
+        dialog.runtime_channel.setCurrentIndex(1)
+        next(button for button in dialog.runtime_action_buttons if button.text() == "Update Now").click()
+        dialog.runtime_channel.setCurrentIndex(0)
+        tasks[-1](None, None)
+        assert calls == [((True, True), {"channel": "nightly"})]
+        assert settings.yt_dlp_auto_install_updates == dialog.yt_auto_install.isChecked()
+    finally: _dispose(dialog)

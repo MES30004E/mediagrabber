@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -44,7 +45,7 @@ def find_script_home(configured: str = "") -> Path | None:
     return None
 
 
-def find_runtime() -> Path | None:
+def find_runtime(*, for_player: bool = False) -> Path | None:
     candidates: list[Path] = []
     if found := shutil.which("node"):
         candidates.append(Path(found))
@@ -57,13 +58,24 @@ def find_runtime() -> Path | None:
             continue
         try:
             output = subprocess.run([str(runtime), "--version"], capture_output=True, text=True, timeout=3, check=False).stdout
-            version = output.splitlines()[0].lstrip("v").split(".")
-            minimum = 20 if runtime.name == "node" else 2
-            if version and int(version[0]) >= minimum:
+            version = re.match(r"(?:v|deno\s+)?(\d+)\.(\d+)\.(\d+)", output)
+            minimum = ((22, 0, 0) if runtime.name == "node" else (2, 3, 0)) if for_player else (
+                (20, 0, 0) if runtime.name == "node" else (2, 0, 0))
+            if version and tuple(map(int, version.groups())) >= minimum:
                 return runtime
         except (OSError, ValueError, subprocess.TimeoutExpired):
             continue
     return None
+
+
+def yt_dlp_javascript_options() -> dict:
+    """Enable the discovered engine explicitly; yt-dlp checks its own minimum.
+
+    PO-token generation and player JS challenge solving are different services.
+    In particular yt-dlp enables only Deno by default, not a discovered Node.
+    """
+    runtime = find_runtime(for_player=True)
+    return {"js_runtimes": {runtime.name: {"path": str(runtime)}}} if runtime else {}
 
 
 def check_provider(base_url: str, script_home: str = "") -> ProviderStatus:

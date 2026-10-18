@@ -130,17 +130,16 @@ def test_auto_login_required_retries_with_selected_browser_profile(monkeypatch):
     assert effective == "Auto -> Browser Cookies"
 
 
-def test_public_cookie_format_failure_retries_once_without_cookies(monkeypatch):
+def test_explicit_cookie_format_failure_keeps_authentication(monkeypatch):
     attempts = []
     def analyse(*args, **_kwargs):
         attempts.append(args[4])
         if len(attempts) == 1: raise RuntimeError("Requested format is not available")
         return []
     monkeypatch.setattr("morgan_media_downloader.downloader.analyse_target", analyse)
-    _, effective = analyse_with_authentication("url", None, "provider", "", "Browser Cookies",
-                                                "Firefox", "qa", "")
-    assert len(attempts) == 2 and attempts[1] == {}
-    assert effective == "Browser Cookies -> None"
+    with pytest.raises(RuntimeError, match="Requested format"):
+        analyse_with_authentication("url", None, "provider", "", "Browser Cookies", "Firefox", "qa", "")
+    assert attempts == [{"cookiesfrombrowser": ("firefox", "qa", None, None)}]
 
 
 def test_private_cookie_failure_never_drops_authentication(monkeypatch):

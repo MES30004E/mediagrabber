@@ -339,15 +339,19 @@ class SettingsWindow(QDialog):
         self.yt_check_startup = QCheckBox(); self.yt_check_startup.setChecked(self.working.yt_dlp_check_updates_on_startup)
         self.yt_auto_install = QCheckBox(); self.yt_auto_install.setChecked(self.working.yt_dlp_auto_install_updates)
         self.yt_runtime_status = QLabel(); self.yt_runtime_status.setWordWrap(True); self.yt_runtime_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.runtime_channel = QComboBox()
+        self.runtime_channel.addItem("Stable (automatic checks)", "stable")
+        self.runtime_channel.addItem("Nightly (explicit opt-in; rollback available)", "nightly")
         runtime_buttons = QHBoxLayout(); self.runtime_action_buttons = []
         manager = self.runtime_manager
-        for text, action in [("Check Now", lambda m=manager: m.check_and_update(False)),
-                             ("Update Now", lambda m=manager: m.check_and_update(True, True)),
+        for text, action in [("Check Now", None),
+                             ("Update Now", None),
                              ("Roll Back", manager.rollback),
                              ("Use Bundled Version", manager.use_bundled)]:
-            button = QPushButton(text); button.clicked.connect(lambda _checked=False, fn=action: self._run_runtime_action(fn)); runtime_buttons.addWidget(button); self.runtime_action_buttons.append(button)
+            button = QPushButton(text); button.clicked.connect(lambda _checked=False, label=text, fn=action: self._select_runtime_action(label, fn)); runtime_buttons.addWidget(button); self.runtime_action_buttons.append(button)
         self._refresh_runtime_status()
-        form.addRow("yt-dlp Updates", QLabel("Verified stable releases from the official yt-dlp GitHub repository"))
+        form.addRow("yt-dlp Updates", QLabel("Official release assets: checksum, structure, import and provider compatibility checks before activation. Nightly is not a live download guarantee."))
+        form.addRow("Manual update channel", self.runtime_channel)
         form.addRow("Check for updates on startup", self.yt_check_startup); form.addRow("Automatically install stable updates", self.yt_auto_install)
         form.addRow("yt-dlp", self.yt_runtime_status); form.addRow("", runtime_buttons)
         open_logs = QPushButton("Open Logs Folder"); open_logs.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_dir()))))
@@ -449,7 +453,16 @@ class SettingsWindow(QDialog):
         self.yt_runtime_status.setText(
             f"Current version: {info['active_version']}\nBundled version: {info['bundled_version']}\n"
             f"Latest stable: {info['latest_stable']}\nLast checked: {info['last_checked']}\n"
-            f"Last update: {info['last_update']}\nRuntime source: {info['source']}\nStatus: {info['status']}{compatibility}")
+            f"Latest nightly: {info.get('latest_nightly', 'Not checked')}\nActive channel: {info.get('active_channel', 'bundled')}\n"
+            f"Last update: {info['last_update']}\nRuntime source: {info['source']}\nStatus: {info['status']}{compatibility}\nLast error: {info.get('last_error') or 'None'}")
+
+    def _select_runtime_action(self, label, action):
+        if action is None:
+            channel = self.runtime_channel.currentData()
+            install = label == "Update Now"
+            manager = self.runtime_manager
+            action = lambda: manager.check_and_update(install, install, channel=channel)
+        self._run_runtime_action(action)
 
     def _run_runtime_action(self, action: Callable[[], object]):
         for button in self.runtime_action_buttons: button.setEnabled(False)

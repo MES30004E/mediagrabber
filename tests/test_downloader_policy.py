@@ -67,13 +67,14 @@ def test_auto_login_failure_retries_with_real_chrome_profile(tmp_path, monkeypat
     assert result.effective_authentication == "Auto -> Browser Cookies"
 
 
-def test_public_cookie_format_failure_retries_once_without_authentication(tmp_path, monkeypatch):
+def test_explicit_cookie_format_failure_never_drops_authentication(tmp_path, monkeypatch):
     job, run = _run(tmp_path, monkeypatch, mode="Browser Cookies")
     FakeYDL.fail_cookie_format = True
     result = run()
-    assert len(FakeYDL.attempts) == 2
-    assert "cookiesfrombrowser" in FakeYDL.attempts[0] and "cookiesfrombrowser" not in FakeYDL.attempts[1]
-    assert result.effective_authentication == "Browser Cookies -> None"
+    assert len(FakeYDL.attempts) == 1
+    assert "cookiesfrombrowser" in FakeYDL.attempts[0]
+    assert result.effective_authentication == "Browser Cookies"
+    assert result.status == JobStatus.FAILED
 
 
 def test_quality_fallback_becomes_completed_with_warning(tmp_path, monkeypatch):
@@ -116,3 +117,34 @@ def test_companion_download_consumes_only_memory_snapshot(tmp_path, monkeypatch)
     assert result.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS}
     assert result.effective_authentication == "YouTube Companion" and len(loads) == 1
     assert "synthetic-session" not in str(result.to_dict())
+
+
+def test_player_failure_does_not_reuse_playlist_or_previous_attempt_success(tmp_path, monkeypatch):
+    job, run = _run(tmp_path, monkeypatch, mode="Browser Cookies")
+    job.metadata_success = True; job.formats_playable = 828; job.formats_total = 828
+    def fail(*_args, **_kwargs): raise RuntimeError("[youtube] synthetic: The page needs to be reloaded.")
+    monkeypatch.setattr(FakeYDL, "extract_info", fail)
+    result = run()
+    assert result.status == JobStatus.FAILED and result.failure_stage == "Analysis"
+    assert result.failure_code == "YouTube player extraction"
+    assert not result.metadata_success and result.formats_playable == 0 and result.formats_total == 0
+    assert len(FakeYDL.attempts) == 1 and "cookiesfrombrowser" in FakeYDL.attempts[0]
+
+
+def test_transfer_refresh_player_failure_reports_refresh_stage_and_retains_auth(tmp_path, monkeypatch):
+    job, run = _run(tmp_path, monkeypatch, mode="Browser Cookies")
+    extracts = []; transfers = []
+    original = FakeYDL.extract_info
+    def extract(self, *args, **kwargs):
+        extracts.append(True)
+        assert "cookiesfrombrowser" in self.params
+        if len(extracts) > 1: raise RuntimeError("The page needs to be reloaded.")
+        return original(self, *args, **kwargs)
+    def transfer(self, *_args, **_kwargs):
+        transfers.append(True); raise RuntimeError("HTTP Error 403")
+    monkeypatch.setattr(FakeYDL, "extract_info", extract)
+    monkeypatch.setattr(FakeYDL, "process_ie_result", transfer)
+    result = run()
+    assert len(extracts) == 2 and len(transfers) == 1 and result.retry_count == 1
+    assert result.failure_stage == "Metadata refresh" and not result.metadata_success
+    assert result.failure_code == "YouTube player extraction" and result.formats_playable == 0

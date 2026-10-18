@@ -2,7 +2,7 @@ name: Migration validation
 
 on:
   push:
-    branches: [main, migration/swift-design, migration/backend-protocol, migration/swift-bridge]
+    branches: [main, migration/swift-design, migration/backend-protocol, migration/swift-bridge, improvement/download-reliability]
   pull_request:
   workflow_dispatch:
 
@@ -59,6 +59,10 @@ jobs:
           export MORGAN_LOG_DIR="$test_root/logs"
           export MORGAN_CACHE_DIR="$test_root/cache"
           python -m pytest -p no:cacheprovider
+      - name: Cookie Companion JavaScript regression tests
+        run: |
+          node --version
+          node --test companion/tests/core.test.mjs
 
   swift-tests:
     runs-on: macos-15
