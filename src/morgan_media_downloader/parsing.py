@@ -63,6 +63,10 @@ def input_kind(value: str) -> str:
     return "url"
 
 
+def is_watch_later(value: str) -> bool:
+    return _watch_later_target(value) is not None
+
+
 def as_yt_dlp_target(value: str, result_count: int = 10) -> str:
     if target := _watch_later_target(value):
         return target

@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Morgan YouTube Cookie Companion",
+  "description": "Explicitly transfer a YouTube Incognito session to Morgan's local Keychain-backed native host.",
+  "version": "1.0.0",
+  "minimum_chrome_version": "119",
+  "incognito": "split",
+  "permissions": ["cookies", "nativeMessaging"],
+  "host_permissions": ["https://*.youtube.com/*"],
+  "action": {"default_popup": "popup.html", "default_title": "Morgan YouTube Session"},
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxc2o5lWYHrytAmnrXnzjrqRoY+FwfR2Frs3jGsLQ3nj5QPGyY7pgKmrahkUq/y6C6tGvfXEzBEJAFDb9arbFFmLYpLlUBtD+s2YZTrwINfPUBHjzOnpy4Fl/9fHGMWPPZ2+yXOKCi9Jn6GGb3ttiDS5sIeTYtAs0uTCopjBWxnGJqHMqa3SOEXyAU2L6v/BFEGSUZ0P6n6qHzAdvlCyGb7ns7IHVs0nVRcrY7d7Pu8L3iqyqoG2XnBeRMHfChqv4ACg+wwQwam1YYpoJ0g+DjXzp3xUGJgcxTXSme9VupjA/N7D/KOEbTMFKqGeR4zBW84xJLj5zdh4ppWwGaZzdswIDAQAB"
+}

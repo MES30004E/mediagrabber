@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .auth import (authentication_options, configured_authentication_options, format_unavailable,
-                   normalise_authentication_mode, requires_authentication)
+                   normalise_authentication_mode, requires_authentication, fresh_authentication_options)
 from .compatibility import (COMPATIBLE_PROFILES, compatibility_summary,
                             ensure_compatible_output)
 from .file_ownership import classify_job_file, record_job_file
@@ -21,7 +21,7 @@ from .logging_setup import redact_secrets
 from .media_verification import verify_requested_postprocessing
 from .models import DownloadJob, JobStatus, MediaItem
 from .network import classify_tor_target
-from .parsing import as_yt_dlp_target, ensure_output_directory, input_kind
+from .parsing import as_yt_dlp_target, ensure_output_directory, input_kind, is_watch_later
 from .paths import find_binary
 from .provider import provider_extractor_args
 from .spotify import fetch_public_metadata, match_confidence
@@ -87,7 +87,7 @@ def analyse_target(value: str, proxy: str | None = None, provider_url: str = "ht
         "proxy": proxy,
         "extractor_args": provider_extractor_args(provider_url, provider_home),
     }
-    common.update(auth_options or {})
+    common.update(fresh_authentication_options(auth_options or {}))
     if input_kind(value) == "spotify":
         results: list[MediaItem] = []
         with ydl_class(common) as ydl:
@@ -114,6 +114,9 @@ def analyse_with_authentication(value: str, proxy: str | None, provider_url: str
                                 status: Callable[[str], None] | None = None) -> tuple[list[MediaItem], str]:
     mode = normalise_authentication_mode(mode)
     if mode == "Auto":
+        if is_watch_later(value):
+            configured_name, configured = configured_authentication_options(browser, profile, "")
+            return analyse_target(value, proxy, provider_url, provider_home, configured, runtime), f"Auto -> {configured_name}"
         try:
             return analyse_target(value, proxy, provider_url, provider_home, {}, runtime), "Auto -> None"
         except BaseException as error:
@@ -128,7 +131,7 @@ def analyse_with_authentication(value: str, proxy: str | None, provider_url: str
     try:
         return analyse_target(value, proxy, provider_url, provider_home, selected, runtime), mode
     except BaseException as error:
-        if selected and format_unavailable(error) and not requires_authentication(error):
+        if selected and format_unavailable(error) and not requires_authentication(error) and not is_watch_later(value):
             if status: status("Authenticated format selection failed. Retrying without account cookies…")
             return analyse_target(value, proxy, provider_url, provider_home, {}, runtime), f"{mode} -> None"
         raise
@@ -245,9 +248,9 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
     def run_attempt(auth_name: str, auth_values: dict[str, Any]) -> tuple[dict[str, Any], Any]:
         # Subtitles are acquired in a separate optional pass after a valid media
         # output exists, so subtitle failures can never destroy or block media.
-        ydl_options = build_ydl_options(job.options, proxy, include_subtitles=False)
+        ydl_options = build_ydl_options(job.options, proxy, include_subtitles=False, include_authentication=False)
         ydl_options.pop("cookiesfrombrowser", None); ydl_options.pop("cookiefile", None)
-        ydl_options.update(auth_values)
+        ydl_options.update(fresh_authentication_options(auth_values))
         ydl_options.update({
             "progress_hooks": [hook], "postprocessor_hooks": [post_hook],
             "post_hooks": [completed_file],
@@ -355,7 +358,7 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
                                 "downloaded": False, "embedded": False, "verified": False}
         job.failure_stage = "Subtitle transfer"; job.postprocessing_stage = "Downloading subtitles"
         emit("SUBTITLE", f"Requesting subtitle language(s): {', '.join(languages)}"); progress(job)
-        subtitle_options = build_ydl_options(job.options, proxy, include_subtitles=False)
+        subtitle_options = build_ydl_options(job.options, proxy, include_subtitles=False, include_authentication=False)
         subtitle_options.update({"skip_download": True, "writesubtitles": normal,
                                  "writeautomaticsub": automatic, "subtitleslangs": languages,
                                  "writethumbnail": False, "postprocessors": [], "logger": _YdlLogger(),
@@ -363,7 +366,7 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
         subtitle_options.pop("format", None)
         subtitle_options.pop("embedthumbnail", None)
         subtitle_options.pop("cookiesfrombrowser", None); subtitle_options.pop("cookiefile", None)
-        subtitle_options.update(auth_values)
+        subtitle_options.update(fresh_authentication_options(auth_values))
         if ffmpeg := find_binary("ffmpeg"):
             subtitle_options["ffmpeg_location"] = str(Path(ffmpeg).parent)
         ydl_class = _ydl_class(runtime) if runtime is not None else _ydl_class()
@@ -394,10 +397,10 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
             for track in tracks: Path(str(track["filepath"])).unlink(missing_ok=True)
 
     mode = normalise_authentication_mode(job.options.authentication_mode)
-    first_name, first_auth = (("Auto -> None", {}) if mode == "Auto" else
-                              (mode, authentication_options(mode, job.options.cookies_browser,
-                                                            job.options.browser_profile, job.options.cookies_file)))
     try:
+        first_name, first_auth = (("Auto -> None", {}) if mode == "Auto" else
+                                  (mode, authentication_options(mode, job.options.cookies_browser,
+                                                                job.options.browser_profile, job.options.cookies_file)))
         job.effective_connection = job.effective_connection or ("Proxy" if proxy else "Direct / Normal Network")
         try:
             result, ydl = run_with_tor_retries(first_name, first_auth)

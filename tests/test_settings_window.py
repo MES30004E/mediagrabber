@@ -117,10 +117,15 @@ def test_authentication_controls_and_targeted_reset_do_not_change_other_settings
 def test_accounts_connect_disconnect_and_verification_invalidation(tmp_path, monkeypatch):
     from morgan_media_downloader.auth import YouTubeConnection
     settings = AppSettings(connection_mode="Direct / Normal Network")
-    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path))
+    from morgan_media_downloader.youtube_companion.bridge import CompanionController
+    from test_companion import MemoryStore
+    controller = CompanionController(tmp_path / "control", MemoryStore())
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=_runtime(tmp_path), companion_controller=controller)
+    tasks = []
+    monkeypatch.setattr(dialog.task_manager, "start", lambda kind, fn, **kw: tasks.append((fn, kw)))
     try:
         assert "Accounts" in dialog.pages, "Settings needs a discoverable account connection page"
-        dialog.connect_youtube.click()
+        dialog.connect_browser.click()
         assert dialog.auth_mode.currentText() == "Browser Cookies"
         dialog._auth_test_ready(YouTubeConnection("authenticated", "YouTube reports signed in.", True))
         assert "signed" in dialog.auth_status.text().lower()
@@ -128,9 +133,48 @@ def test_accounts_connect_disconnect_and_verification_invalidation(tmp_path, mon
         assert "verified" in dialog.auth_status.text().lower() or "not tested" in dialog.auth_status.text().lower()
         assert "authenticated" not in dialog.auth_status.toolTip()
         dialog.disconnect_youtube.click()
+        assert tasks, "Keychain deletion must run outside the GUI callback"
+        fn, callbacks = tasks[-1]; callbacks["on_result"](fn(None, None)); callbacks["on_finished"]()
         collected = dialog._collect()
         assert collected.authentication_mode == "None" and collected.cookies_file == "" and collected.browser_profile == ""
         assert settings.authentication_mode == "Auto", "Working copy must not persist before Apply"
+    finally: _dispose(dialog)
+
+
+def test_companion_accounts_capture_selects_secure_mode_without_saving_cookies(tmp_path, monkeypatch):
+    from morgan_media_downloader.youtube_companion.bridge import CompanionController, ORIGIN
+    from morgan_media_downloader.auth import BrowserSource
+    from test_companion import MemoryStore, sample
+    controller = CompanionController(tmp_path / "control", MemoryStore())
+    installed = []; opened = []; persisted = []
+    monkeypatch.setattr("morgan_media_downloader.youtube_companion.setup.install", lambda **kw: installed.append(kw))
+    monkeypatch.setattr("morgan_media_downloader.settings_window.discover_browsers", lambda: [BrowserSource("Chrome", Path("/Applications/Google Chrome.app"))])
+    monkeypatch.setattr("morgan_media_downloader.settings_window.subprocess.Popen", lambda argv, **kw: opened.append(argv))
+    settings = AppSettings(authentication_mode="YouTube Companion")
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda value, _: persisted.append(value),
+                            runtime_manager=_runtime(tmp_path), companion_controller=controller)
+    tasks = []
+    monkeypatch.setattr(dialog.task_manager, "start", lambda kind, fn, **kw: tasks.append((fn, kw)))
+    try:
+        generation = dialog._auth_generation
+        dialog.connect_youtube.click()
+        assert installed and "--incognito" in opened[0] and not persisted
+        assert dialog._auth_generation > generation, "Reconnect must invalidate old verification callbacks"
+        generation = dialog._auth_generation
+        hello = controller.handle({"type": "hello"}, ORIGIN)
+        controller.handle(dict(type="capture", operation_id=hello["operation_id"], nonce=hello["nonce"],
+                              consent=True, incognito=True, store_id="incognito-store", cookies=[sample()]), ORIGIN)
+        dialog._poll_companion()
+        assert dialog._auth_generation > generation, "Replacement import must not reuse earlier verification evidence"
+        assert dialog.auth_mode.currentText() == "YouTube Companion"
+        assert "imported" in dialog.auth_status.text().lower() and "Verify" in dialog.auth_status.text()
+        dialog.apply()
+        assert persisted[-1].authentication_mode == "YouTube Companion" and persisted[-1].cookies_file == ""
+        assert "synthetic-session" not in str(persisted[-1])
+        dialog.disconnect_youtube.click()
+        assert controller.store.data is not None, "Deletion is asynchronous"
+        fn, callbacks = tasks[-1]; callbacks["on_result"](fn(None, None)); callbacks["on_finished"]()
+        assert controller.store.data is None and dialog.auth_mode.currentText() == "None"
     finally: _dispose(dialog)
 
 

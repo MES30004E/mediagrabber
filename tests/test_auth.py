@@ -91,6 +91,32 @@ def test_auto_public_starts_without_cookies(monkeypatch):
     assert effective == "Auto -> None"
 
 
+@pytest.mark.parametrize("value", [":ytwatchlater", "https://www.youtube.com/playlist?list=WL", "https://www.youtube.com/feed/watch_later"])
+def test_auto_watch_later_starts_with_configured_authentication(monkeypatch, value):
+    attempts = []
+    monkeypatch.setattr("morgan_media_downloader.downloader.analyse_target", lambda *args: attempts.append(args[4]) or [])
+    _, effective = analyse_with_authentication(value, None, "provider", "", "Auto", "Firefox", "chosen", "")
+    assert attempts == [{"cookiesfrombrowser": ("firefox", "chosen", None, None)}]
+    assert effective == "Auto -> Browser Cookies"
+
+
+def test_arbitrary_missing_playlist_does_not_trigger_auth_fallback(monkeypatch):
+    attempts = []
+    def fail(*args):
+        attempts.append(args[4]); raise RuntimeError("The playlist does not exist")
+    monkeypatch.setattr("morgan_media_downloader.downloader.analyse_target", fail)
+    with pytest.raises(RuntimeError, match="does not exist"):
+        analyse_with_authentication("https://www.youtube.com/playlist?list=missing", None, "", "", "Auto", "Chrome", "", "")
+    assert attempts == [{}]
+
+
+def test_explicit_none_watch_later_does_not_read_cookies(monkeypatch):
+    attempts = []
+    monkeypatch.setattr("morgan_media_downloader.downloader.analyse_target", lambda *args: attempts.append(args[4]) or [])
+    analyse_with_authentication(":ytwatchlater", None, "", "", "None", "Chrome", "", "")
+    assert attempts == [{}]
+
+
 def test_auto_login_required_retries_with_selected_browser_profile(monkeypatch):
     attempts = []
     def analyse(*args, **_kwargs):

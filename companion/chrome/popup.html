@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Morgan YouTube Session</title>
+<link rel="stylesheet" href="popup.css"></head><body>
+<h1>YouTube session</h1>
+<p id="status" role="status" aria-live="polite">Checking permissions and local connection…</p>
+<p>Enable <strong>Allow in Incognito</strong> on this extension's Chrome Details page. Start Connect in Morgan, then sign in to YouTube in one Incognito tab.</p>
+<label><input id="consent" type="checkbox"> I approve transferring this Incognito YouTube session to Morgan's macOS Keychain. No cookies go to a server.</label>
+<button id="capture" disabled>Capture YouTube Session</button>
+<button id="check">Check local connection</button>
+<button id="open">Open YouTube Incognito</button>
+<p>Capture prepares the current tab at YouTube's robots.txt page. After success, close the Incognito window promptly. Keep this extension trusted: session cookies grant account access.</p>
+<script type="module" src="popup.js"></script></body></html>

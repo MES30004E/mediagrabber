@@ -90,3 +90,29 @@ def test_private_authenticated_failure_does_not_retry_without_cookies(tmp_path, 
     result = run()
     assert len(FakeYDL.attempts) == 1
     assert result.status == JobStatus.FAILED
+
+
+def test_companion_download_consumes_only_memory_snapshot(tmp_path, monkeypatch):
+    from test_companion import sample
+    from morgan_media_downloader.youtube_companion.storage import KeychainSessionStore
+    from yt_dlp.cookies import YoutubeDLCookieJar
+    import io
+    loads = []
+    def load(_):
+        loads.append(True)
+        assert len(loads) == 1, "Download attempt must not reread secure storage"
+        return {"cookies": [sample()]}
+    monkeypatch.setattr(KeychainSessionStore, "load", load)
+    job, run = _run(tmp_path, monkeypatch, mode="YouTube Companion")
+    extract = FakeYDL.extract_info
+    def authenticated_extract(self, *args, **kw):
+        source = self.params["cookiefile"]
+        assert isinstance(source, io.StringIO) and "cookiesfrombrowser" not in self.params
+        jar = YoutubeDLCookieJar(source); jar.load()
+        assert [(cookie.name, cookie.value) for cookie in jar] == [("SID", "synthetic-session")]
+        return extract(self, *args, **kw)
+    monkeypatch.setattr(FakeYDL, "extract_info", authenticated_extract)
+    result = run()
+    assert result.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS}
+    assert result.effective_authentication == "YouTube Companion" and len(loads) == 1
+    assert "synthetic-session" not in str(result.to_dict())

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import configparser
 import re
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,11 @@ def normalise_authentication_mode(mode: str) -> str:
 def authentication_options(mode: str, browser: str = "Chrome", profile: str = "",
                            cookies_file: str = "") -> dict[str, Any]:
     mode = normalise_authentication_mode(mode)
+    if mode == "YouTube Companion":
+        from .youtube_companion.session import cookie_file
+        try: return {"cookiefile": cookie_file()}
+        except Exception:
+            raise ValueError("Authentication required: secure YouTube session unavailable. Reconnect with Chrome Incognito and capture again.") from None
     if mode == "Browser Cookies":
         browser_key = BROWSER_KEYS.get(browser, browser.casefold())
         return {"cookiesfrombrowser": (browser_key, profile or None, None, None)}
@@ -39,6 +45,18 @@ def authentication_options(mode: str, browser: str = "Chrome", profile: str = ""
             raise ValueError("cookies.txt invalid: expected Netscape cookies.txt format")
         return {"cookiefile": str(path)}
     return {}
+
+
+def fresh_authentication_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Give each yt-dlp context its own memory stream, including retry passes.
+
+    yt-dlp consumes and saves file-like cookie sources on close. Never share a
+    mutable cursor or an updated jar between contexts or persist it to disk.
+    """
+    result = dict(options)
+    source = result.get("cookiefile")
+    if isinstance(source, io.StringIO): result["cookiefile"] = io.StringIO(source.getvalue())
+    return result
 
 
 def configured_authentication_options(browser: str = "Chrome", profile: str = "",
@@ -203,10 +221,12 @@ def verify_youtube_connection(mode: str, browser: str, profile: str, cookies_fil
                 except (ValueError, RecursionError): continue
                 if isinstance(config, dict) and type(config.get("LOGGED_IN")) is bool:
                     if config["LOGGED_IN"]:
-                        return YouTubeConnection("authenticated", "YouTube reports a signed-in session. Private playlist/video permission is checked separately when you analyse it. No private library was enumerated.", True)
+                        return YouTubeConnection("authenticated", "Signed in — account identity not confirmed. Private playlist/video permission is checked separately when you analyse it. No private library was enumerated.", True)
                     return YouTubeConnection("reconnect", "Cookies are readable, but YouTube reports signed out. Sign in again using the selected profile, then retry.", True)
             return YouTubeConnection("unconfirmed", "Cookies are readable, but this response did not confirm a signed-in session. Retry or analyse an authorised private URL; no private-access claim is made.", True)
     except (FileNotFoundError, ValueError):
+        if mode == "YouTube Companion":
+            return YouTubeConnection("reconnect", "The secure session is unavailable, expired or Keychain access was denied. Reconnect with Chrome Incognito and capture again; no browser-profile fallback was used.", False)
         return YouTubeConnection("source_missing", "The selected cookie source is missing or invalid. Choose another profile or a valid Netscape cookies.txt file.", False)
     except Exception as error:
         return connection_failure(error, readable)

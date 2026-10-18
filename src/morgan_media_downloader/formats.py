@@ -95,7 +95,8 @@ def resolve_available_format(formats: list[dict[str, Any]], quality: str, contai
     return f"{best_video['format_id']}+{best_audio['format_id']}", warnings
 
 
-def build_ydl_options(options: Any, proxy: str | None = None, *, include_subtitles: bool = True) -> dict[str, Any]:
+def build_ydl_options(options: Any, proxy: str | None = None, *, include_subtitles: bool = True,
+                      include_authentication: bool = True) -> dict[str, Any]:
     languages = parse_subtitle_languages(options.subtitle_language)
     normal_subtitles, automatic_subtitles = subtitle_download_flags(
         getattr(options, "subtitle_source", "Normal subtitles"))
@@ -124,12 +125,13 @@ def build_ydl_options(options: Any, proxy: str | None = None, *, include_subtitl
     }
     if proxy:
         output["proxy"] = proxy
-    output.update(authentication_options(
-        getattr(options, "authentication_mode", "Auto"),
-        getattr(options, "cookies_browser", "Chrome"),
-        getattr(options, "browser_profile", ""),
-        getattr(options, "cookies_file", ""),
-    ))
+    if include_authentication:
+        output.update(authentication_options(
+            getattr(options, "authentication_mode", "Auto"),
+            getattr(options, "cookies_browser", "Chrome"),
+            getattr(options, "browser_profile", ""),
+            getattr(options, "cookies_file", ""),
+        ))
     compatibility = getattr(options, "compatibility", "macOS / QuickTime")
     if options.audio_format == "Original/best audio":
         if compatibility in {"macOS / QuickTime", "Universal"}:

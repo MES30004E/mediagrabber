@@ -84,7 +84,9 @@ def test_analysis_uses_existing_parser_and_item_flow(service, input, target):
 
 def test_private_auth_proxy_provider_preserved_by_real_policy(service):
     worker, messages = service; FixtureYDL.private = True
-    send(worker, 'analysis.start', {'inputs': [':ytwatchlater'], 'config': {
+    # Ordinary private inputs still exercise Auto's public-first retry policy.
+    # Watch Later is now an explicitly known account-only route, tested below.
+    send(worker, 'analysis.start', {'inputs': ['https://www.youtube.com/watch?v=private-fixture'], 'config': {
         'authentication_mode': 'Auto', 'cookies_browser': 'Firefox', 'browser_profile': 'qa',
         'provider_url': 'http://127.0.0.1:4416',
         'proxy': {'mode': 'Custom SOCKS5 Proxy', 'host': '127.0.0.1', 'port': 1080}}})
@@ -97,6 +99,17 @@ def test_private_auth_proxy_provider_preserved_by_real_policy(service):
     assert events(messages, 'auth.required')
     assert events(messages, 'analysis.completed')[0]['payload']['effective_authentication'] == 'Auto -> Browser Cookies'
     assert 'private-value' not in json.dumps(messages)
+
+
+def test_watch_later_worker_uses_configured_auth_before_extraction(service):
+    worker, messages = service; FixtureYDL.private = True
+    send(worker, 'analysis.start', {'inputs': [':ytwatchlater'], 'config': {
+        'authentication_mode': 'Auto', 'cookies_browser': 'Firefox', 'browser_profile': 'qa'}})
+    assert worker.wait_idle(5)
+    assert len(FixtureYDL.calls) == 1
+    assert FixtureYDL.calls[0][0] == ':ytwatchlater'
+    assert FixtureYDL.calls[0][1]['cookiesfrombrowser'] == ('firefox', 'qa', None, None)
+    assert events(messages, 'analysis.completed')[0]['payload']['effective_authentication'] == 'Auto -> Browser Cookies'
 
 
 def test_explicit_private_failure_is_safe_and_never_drops_auth(service, monkeypatch):

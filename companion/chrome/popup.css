@@ -1,0 +1,6 @@
+:root { color-scheme: light dark; font: 14px system-ui; }
+body { width: 330px; padding: 16px; margin: 0; }
+h1 { font-size: 20px; } p { line-height: 1.45; }
+label { display: block; line-height: 1.5; margin: 16px 0; }
+button { display: block; width: 100%; padding: 10px; margin-top: 8px; cursor: pointer; }
+button:disabled { cursor: not-allowed; } #status { font-weight: 600; }
