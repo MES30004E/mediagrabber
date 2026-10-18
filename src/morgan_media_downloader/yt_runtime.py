@@ -382,6 +382,20 @@ class YtDlpRuntimeManager:
 
     @staticmethod
     def _purge_runtime_modules() -> None:
+        # yt-dlp patches a shared urllib3 regex at import. Unloading yt-dlp
+        # without undoing its own override stacks wrappers at the next import;
+        # 2026.08.19's __getattribute__ forwarding then loses .sub in urllib3 2.8.
+        # Release only a verified chain of yt-dlp-owned wrappers ending in a
+        # real regex. Never patch third-party classes or discard foreign wrappers.
+        url_module = sys.modules.get("urllib3.util.url")
+        original = getattr(url_module, "_PERCENT_RE", None) if url_module else None
+        current = original
+        seen = set()
+        while (type(current).__module__ == "yt_dlp.networking._requests"
+               and type(current).__name__ == "Urllib3PercentREOverride" and id(current) not in seen):
+            seen.add(id(current)); current = vars(current).get("re")
+        if current is not original and isinstance(current, re.Pattern):
+            url_module._PERCENT_RE = current
         for name in list(sys.modules):
             if name == "yt_dlp" or name.startswith("yt_dlp.") or name == "yt_dlp_plugins" or name.startswith("yt_dlp_plugins."):
                 sys.modules.pop(name, None)
