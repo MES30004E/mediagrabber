@@ -55,6 +55,30 @@ def test_youtube_account_action_opens_accounts_without_changing_saved_auth(tmp_p
         window.close(); _APP.processEvents()
 
 
+def test_startup_runtime_check_respects_persisted_daily_interval(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch)
+    calls = []
+    from test_yt_runtime import release_payload
+    window.runtime_manager._fetcher = lambda url, timeout: calls.append(url) or release_payload("2026.07.04")
+    # Keep the production startup operation and manager; only run its worker
+    # inline instead of using the Qt thread pool so this test has no event race.
+    def start(kind, operation, **callbacks):
+        if kind == "yt-runtime": operation(None, None)
+    monkeypatch.setattr(window.task_manager, "start", start)
+    try:
+        window.settings.yt_dlp_check_updates_on_startup = True
+        window._start_yt_dlp_update_check()
+        window._start_yt_dlp_update_check()
+        assert len(calls) == 1
+        assert window.runtime_manager.describe()["stable_last_checked"] != "Never"
+        assert window.startup_timer.isActive() and window.startup_timer.interval() == 3_600_000
+        window.settings.yt_dlp_check_updates_on_startup = False
+        window._start_yt_dlp_update_check()
+        assert len(calls) == 1 and not window.startup_timer.isActive()
+    finally:
+        window.close(); _APP.processEvents()
+
+
 def test_thumbnail_preview_slots_render_real_pixmap_and_handle_known_unknown_progress(tmp_path, monkeypatch):
     window = _window(tmp_path, monkeypatch)
     image = QPixmap(80, 40); image.fill(); path = tmp_path / "thumbnail.png"; assert image.save(str(path))

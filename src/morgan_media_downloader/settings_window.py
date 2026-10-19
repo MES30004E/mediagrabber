@@ -453,6 +453,7 @@ class SettingsWindow(QDialog):
         self.console_detail = _combo(["Normal", "Verbose", "Debug"], self.working.console_detail)
         form.addRow("Console detail", self.console_detail)
         self.yt_check_startup = QCheckBox(); self.yt_check_startup.setChecked(self.working.yt_dlp_check_updates_on_startup)
+        self.yt_check_startup.setToolTip("Automatic stable checks at most once every 24 hours; failed checks retry after 1 hour. Check Now bypasses this interval.")
         self.yt_auto_install = QCheckBox(); self.yt_auto_install.setChecked(self.working.yt_dlp_auto_install_updates)
         self.yt_runtime_status = QLabel(); self.yt_runtime_status.setWordWrap(True); self.yt_runtime_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.runtime_channel = QComboBox()
@@ -587,6 +588,9 @@ class SettingsWindow(QDialog):
             f"Current version: {info['active_version']}\nBundled version: {info['bundled_version']}\n"
             f"Latest stable: {info['latest_stable']}\nLast checked: {info['last_checked']}\n"
             f"Latest nightly: {info.get('latest_nightly', 'Not checked')}\nActive channel: {info.get('active_channel', 'bundled')}\n"
+            f"Stable last successful check: {info['stable_last_checked']}\nStable last check error: {info['stable_last_error'] or 'None'}\n"
+            f"Nightly last successful check: {info['nightly_last_checked']}\nNightly last check error: {info['nightly_last_error'] or 'None'}\n"
+            f"Rollback: {info['rollback_available']}\n"
             f"Last update: {info['last_update']}\nRuntime source: {info['source']}\nStatus: {info['status']}{compatibility}\nLast error: {info.get('last_error') or 'None'}")
 
     def _select_runtime_action(self, label, action):

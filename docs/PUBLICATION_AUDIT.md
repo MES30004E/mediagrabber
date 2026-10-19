@@ -112,3 +112,16 @@ Review-driven regressions cover exact-ID selector keywords, yt-dlp's compiled
 selector, 403 metadata refresh and stale dialog Apply. This does not claim live
 download success, package validation or a release. Main, Swift schema/branches
 and provider pin remain unchanged.
+
+## Runtime history/cadence checkpoint — 19 October 2026
+
+Full local verification passed **414 Python tests**, **10 extension tests**,
+protocol drift and dependency checks. Read-only review found and then verified
+fixes for empty-message timeout backoff and invalid previous-artifact status.
+The new ledger is user-local; no runtime metadata or real update error is staged.
+
+Pre-commit all-ref/reflog scans covered 23 application commits (the known public
+manifest key) and 148 provider commits (the same two public protocol constants).
+Final staged source and the resulting commit history are scanned again before
+publication. The full components interface, hosted app packaging and release
+updater remain pending as described in `docs/RUNTIME_UPDATES.md`.

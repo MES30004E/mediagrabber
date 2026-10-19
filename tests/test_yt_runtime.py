@@ -113,6 +113,127 @@ def test_same_version_does_not_download_and_newer_can_be_check_only(tmp_path: Pa
     assert mgr.snapshot().source == "Bundled"
 
 
+def test_automatic_checks_are_daily_but_manual_checks_bypass_interval(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    now = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    server = ReleaseServer("2026.07.04")
+    mgr = manager(tmp_path, server); mgr.initialize()
+    monkeypatch.setattr(mgr, "_now", lambda: now)
+    mgr.check_and_update(False, automatic=True)
+    assert len(server.calls) == 1
+    mgr.check_and_update(False, automatic=True)
+    assert len(server.calls) == 1
+    mgr.check_and_update(False)
+    assert len(server.calls) == 2
+    now += timedelta(hours=24)
+    mgr.check_and_update(False, automatic=True)
+    assert len(server.calls) == 3
+
+
+def test_failed_check_survives_restart_without_losing_last_success_and_backs_off(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    now = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    server = ReleaseServer("2026.07.04")
+    mgr = manager(tmp_path, server); mgr.initialize()
+    monkeypatch.setattr(mgr, "_now", lambda: now)
+    mgr.check_and_update(False)
+    checked = mgr.describe()["last_checked"]
+    now += timedelta(days=1)
+    server.offline = True
+    mgr.check_and_update(False, automatic=True)
+    restarted = manager(tmp_path, server); restarted.initialize()
+    monkeypatch.setattr(restarted, "_now", lambda: now)
+    info = restarted.describe()
+    assert info["last_error"] == "offline"
+    assert info["last_checked"] == checked
+    calls = len(server.calls)
+    restarted.check_and_update(False, automatic=True)
+    assert len(server.calls) == calls
+    now += timedelta(hours=1)
+    restarted.check_and_update(False, automatic=True)
+    assert len(server.calls) == calls + 1
+
+
+def test_channel_history_does_not_claim_nightly_check_was_a_stable_check(tmp_path):
+    server = ReleaseServer("2026.07.04")
+    mgr = manager(tmp_path, server); mgr.initialize()
+    mgr.check_and_update(False)
+    stable_checked = mgr.describe()["stable_last_checked"]
+    mgr._fetcher = lambda *_: (_ for _ in ()).throw(OSError("nightly offline"))
+    mgr.check_and_update(False, channel="nightly")
+    info = mgr.describe()
+    assert info["stable_last_checked"] == stable_checked
+    assert info["nightly_last_checked"] == "Never"
+    assert info["nightly_last_error"] == "nightly offline"
+    assert info["stable_last_error"] == ""
+
+
+def test_rollback_description_distinguishes_previous_and_bundled_fallback(tmp_path):
+    first = ReleaseServer("2026.06.01")
+    mgr = manager(tmp_path, first); mgr.initialize()
+    assert mgr.describe()["rollback_available"] == "No — bundled runtime active"
+    install(mgr, first)
+    assert mgr.describe()["rollback_available"] == "Bundled 2025.01.01"
+    second = ReleaseServer("2026.07.04"); mgr._fetcher = second; install(mgr, second)
+    assert mgr.describe()["rollback_available"] == "Previous 2026.06.01; bundled 2025.01.01"
+
+
+@pytest.mark.parametrize("failure", [OSError("https://synthetic:fixture-password@example.test/path"), TimeoutError()])
+def test_direct_update_error_is_redacted_persisted_and_cleared_by_success(tmp_path, failure):
+    server = ReleaseServer("2026.07.04")
+    mgr = manager(tmp_path, server); mgr.initialize()
+    mgr._fetcher = lambda *_: (_ for _ in ()).throw(failure)
+    with pytest.raises(OSError):
+        install(mgr, server)
+    restarted = manager(tmp_path, server); restarted.initialize()
+    assert restarted.describe()["last_error"]
+    assert "fixture-password" not in restarted.metadata_path.read_text()
+    assert "fixture-password" not in restarted.describe()["last_error"]
+    install(restarted, server)
+    again = manager(tmp_path, server); again.initialize()
+    assert again.describe()["last_error"] == ""
+
+
+def test_concurrent_automatic_checks_only_fetch_once(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    server = ReleaseServer("2026.07.04")
+    mgr = manager(tmp_path, server); mgr.initialize()
+    with ThreadPoolExecutor(max_workers=4) as workers:
+        results = list(workers.map(lambda _: mgr.check_and_update(False, automatic=True), range(4)))
+    assert all(result["latest_stable"] == "2026.07.04" for result in results)
+    assert len(server.calls) == 1
+
+
+def test_empty_timeout_still_uses_hourly_failure_backoff_after_restart(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    now = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    calls = []
+    def timeout(*_):
+        calls.append(True)
+        raise TimeoutError()
+    server = ReleaseServer("2026.07.04")
+    mgr = manager(tmp_path, server); mgr.initialize(); mgr._fetcher = timeout
+    monkeypatch.setattr(mgr, "_now", lambda: now)
+    mgr.check_and_update(False, automatic=True)
+    restarted = manager(tmp_path, server); restarted.initialize(); restarted._fetcher = timeout
+    monkeypatch.setattr(restarted, "_now", lambda: now)
+    restarted.check_and_update(False, automatic=True)
+    assert len(calls) == 1
+    now += timedelta(hours=1)
+    restarted.check_and_update(False, automatic=True)
+    assert len(calls) == 2
+    assert restarted.describe()["last_error"] == "TimeoutError"
+
+
+def test_rollback_status_does_not_offer_missing_previous_artifact(tmp_path):
+    first = ReleaseServer("2026.06.01")
+    mgr = manager(tmp_path, first); mgr.initialize(); install(mgr, first)
+    old = mgr.snapshot().artifact
+    second = ReleaseServer("2026.07.04"); mgr._fetcher = second; install(mgr, second)
+    Path(old).unlink()
+    assert mgr.describe()["rollback_available"] == "Bundled 2025.01.01"
+
+
 def test_explicit_nightly_channel_verifies_installs_restarts_and_rolls_back(tmp_path):
     nightly_api = "https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest"
     prefix = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/"

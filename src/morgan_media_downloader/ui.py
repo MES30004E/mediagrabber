@@ -1891,6 +1891,10 @@ class MainWindow(QMainWindow):
         self.verify_postprocessing.setChecked(settings.verify_postprocessing)
         self.connection_selector.blockSignals(True); self.connection_selector.setCurrentText(settings.connection_mode); self.connection_selector.blockSignals(False)
         self.settings_store.save(settings); self._apply_theme(); self._update_provider_status()
+        if settings.yt_dlp_check_updates_on_startup:
+            if not self.startup_timer.isActive(): self.startup_timer.start(250)
+        else:
+            self.startup_timer.stop()
         self._refresh_connection_status()
         if settings.connection_mode == "Managed Tor" and settings.managed_tor_auto_start and self.managed_tor.state == "Stopped":
             self.managed_tor.start()
@@ -1909,13 +1913,18 @@ class MainWindow(QMainWindow):
                                   level="info" if result.state == "available" else "warning")
 
     def _start_yt_dlp_update_check(self):
+        if not self.settings.yt_dlp_check_updates_on_startup:
+            self.startup_timer.stop()
+            return
+        self.startup_timer.start(3_600_000)
         auto_install = self.settings.yt_dlp_auto_install_updates
         manager = self.runtime_manager
-        self.task_manager.start("yt-runtime", lambda _cancel, _progress, m=manager: m.check_and_update(auto_install),
+        self.task_manager.start("yt-runtime", lambda _cancel, _progress, m=manager: m.check_and_update(auto_install, automatic=True),
                                 on_result=self._yt_update_ready)
 
     def _yt_update_ready(self, _result: object):
         self._update_provider_status()
+        self.settings_panel._refresh_runtime_status()
         self.runtime_label.setText(f"● yt-dlp {self.runtime_manager.snapshot().version}")
         self.console_store.append("APP", f"yt-dlp runtime ready: {self.runtime_manager.snapshot().version}")
 

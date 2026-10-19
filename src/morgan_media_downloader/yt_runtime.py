@@ -88,6 +88,7 @@ class YtDlpRuntimeManager:
         self._provider_checker = provider_checker or self._check_provider_imports
         self._artifact_loader = artifact_loader
         self._lock = threading.RLock()
+        self._check_lock = threading.Lock()
         self._active: RuntimeSnapshot | None = None
         self._bundled: RuntimeSnapshot | None = None
         self._metadata: dict[str, Any] = self._default_metadata()
@@ -101,7 +102,12 @@ class YtDlpRuntimeManager:
             "schema": 1, "current": None, "previous": None, "use_bundled": False,
             "latest_stable": "", "last_checked": "", "last_update": "",
             "compatibility_error": "",
+            "last_error": "", "checks": {},
         }
+
+    @staticmethod
+    def _now() -> datetime:
+        return datetime.now(timezone.utc)
 
     @staticmethod
     def _https_get(url: str, timeout: int) -> bytes:
@@ -121,6 +127,7 @@ class YtDlpRuntimeManager:
                 self.downloads_dir.mkdir(parents=True, exist_ok=True)
                 self._remove_abandoned_downloads()
                 self._metadata = self._load_metadata()
+                self.last_error = str(self._metadata.get("last_error") or "")
             except OSError as error:
                 self.last_error = redact_secrets(str(error))
                 self._metadata = self._default_metadata()
@@ -157,7 +164,10 @@ class YtDlpRuntimeManager:
         active = self.snapshot()
         with self._lock:
             current = self._metadata.get("current") or {}
-            return {
+            previous = self._metadata.get("previous") or {}
+            rollback = (f"Previous {previous['version']}; bundled {self.bundled_version}" if self._record_valid(previous) else
+                        f"Bundled {self.bundled_version}") if active.artifact else "No — bundled runtime active"
+            info = {
                 "active_version": active.version,
                 "current_runtime_version": str(current.get("version") or active.version),
                 "bundled_version": self.bundled_version,
@@ -170,7 +180,14 @@ class YtDlpRuntimeManager:
                 "source": active.source,
                 "status": self.status,
                 "compatibility_error": str(self._metadata.get("compatibility_error") or ""),
+                "rollback_available": rollback,
             }
+            for channel in CHANNELS:
+                check = self._metadata.get("checks", {}).get(channel, {})
+                info[f"{channel}_last_checked"] = str(check.get("last_success") or "Never")
+                info[f"{channel}_last_attempt"] = str(check.get("last_attempt") or "Never")
+                info[f"{channel}_last_error"] = str(check.get("last_error") or "")
+            return info
 
     def fetch_latest(self, timeout: int = 8, *, channel: str = "stable") -> ReleaseInfo:
         if channel not in CHANNELS: raise RuntimeVerificationError("Unsupported runtime channel")
@@ -185,27 +202,56 @@ class YtDlpRuntimeManager:
             raise RuntimeVerificationError("Official release assets are incomplete")
         return ReleaseInfo(version, asset_url, sums_url, channel)
 
-    def check_and_update(self, auto_install: bool = True, force: bool = False, *, channel: str = "stable") -> dict[str, str]:
+    def check_and_update(self, auto_install: bool = True, force: bool = False, *, channel: str = "stable",
+                         automatic: bool = False) -> dict[str, str]:
+        if channel not in CHANNELS:
+            raise RuntimeVerificationError("Unsupported runtime channel")
+        self.snapshot()
+        # A startup check and a manual action must not race candidate activation
+        # or overwrite one another's channel/check ledger.
+        with self._check_lock:
+            with self._lock:
+                check = self._metadata.setdefault("checks", {}).setdefault(channel, {})
+                now = self._now()
+                if automatic and not force:
+                    try:
+                        elapsed = (now - datetime.fromisoformat(check["last_attempt"])).total_seconds()
+                        interval = 3600 if check.get("last_error") else 86400
+                        if 0 <= elapsed < interval:
+                            return self.describe()
+                    except (KeyError, TypeError, ValueError):
+                        pass
+                check["last_attempt"] = now.isoformat()
+                self._save_metadata()
+            return self._check_and_update(auto_install, force, channel=channel)
+
+    def _check_failed(self, error: Exception, status: str, channel: str) -> dict[str, str]:
+        with self._lock:
+            self.last_error = redact_secrets(str(error)) or type(error).__name__
+            self.status = status
+            self._metadata["last_error"] = self.last_error
+            self._metadata["checks"][channel]["last_error"] = self.last_error
+            self._save_metadata()
+        LOGGER.warning("yt-dlp %s: %s", status, self.last_error)
+        return self.describe()
+
+    def _check_and_update(self, auto_install: bool, force: bool, *, channel: str) -> dict[str, str]:
         with self._lock:
             self.status = "Checking..."; self.last_error = ""
         try:
             release = self.fetch_latest(channel=channel)
         except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError) as error:
-            self.last_error = redact_secrets(str(error))
-            self.status = "Check failed / Offline"
-            LOGGER.warning("yt-dlp update check failed: %s", self.last_error)
-            return self.describe()
+            return self._check_failed(error, "Check failed / Offline", channel)
         except Exception as error:
-            self.last_error = redact_secrets(str(error))
-            self.status = "Check failed"
-            LOGGER.warning("yt-dlp release check failed: %s", self.last_error)
-            return self.describe()
+            return self._check_failed(error, "Check failed", channel)
 
-        checked = datetime.now(timezone.utc).isoformat()
+        checked = self._now().isoformat()
         with self._lock:
             self._metadata[f"latest_{channel}"] = release.version
             self._metadata["last_checked_channel"] = channel
             self._metadata["last_checked"] = checked
+            self._metadata["last_error"] = ""
+            self._metadata["checks"][channel].update(last_success=checked, last_error="")
             self._save_metadata()
         active = self.snapshot()
         LOGGER.info("yt-dlp update check: current %s, latest %s %s", active.version, channel, release.version)
@@ -226,9 +272,12 @@ class YtDlpRuntimeManager:
             else:
                 self.status = "Up to date"
         except Exception as error:
-            self.last_error = redact_secrets(str(error))
+            self.last_error = redact_secrets(str(error)) or type(error).__name__
             self.status = "Update failed"
             LOGGER.warning("yt-dlp update failed: %s", self.last_error)
+            with self._lock:
+                self._metadata["last_error"] = self.last_error
+                self._save_metadata()
         return self.describe()
 
     def install(self, release: ReleaseInfo) -> RuntimeSnapshot:
@@ -282,6 +331,8 @@ class YtDlpRuntimeManager:
                 self._metadata["current"] = record
                 self._metadata["last_update"] = record["downloaded_at"]
                 self._metadata["compatibility_error"] = ""
+                self.last_error = ""
+                self._metadata["last_error"] = ""
                 self._metadata.pop("rejected_candidate", None)
                 self._metadata["use_bundled"] = False
                 self._active = snapshot
@@ -291,7 +342,9 @@ class YtDlpRuntimeManager:
                 LOGGER.info("yt-dlp activated: %s", release.version)
                 return snapshot
             except Exception as error:
-                self.status = "Update failed"; self.last_error = redact_secrets(str(error))
+                self.status = "Update failed"; self.last_error = redact_secrets(str(error)) or type(error).__name__
+                self._metadata["last_error"] = self.last_error
+                self._save_metadata()
                 LOGGER.warning("yt-dlp verification/update failed: %s", self.last_error)
                 raise
             finally:
@@ -458,7 +511,12 @@ class YtDlpRuntimeManager:
         try:
             value = json.loads(self.metadata_path.read_text(encoding="utf-8"))
             if not isinstance(value, dict): raise ValueError("metadata root is not an object")
-            return {**self._default_metadata(), **value}
+            metadata = {**self._default_metadata(), **value}
+            if not isinstance(metadata.get("checks"), dict):
+                metadata["checks"] = {}
+            metadata["checks"] = {channel: check for channel, check in metadata["checks"].items()
+                                  if channel in CHANNELS and isinstance(check, dict)}
+            return metadata
         except (OSError, ValueError, json.JSONDecodeError):
             broken = self.metadata_path.with_name(f"metadata.json.broken-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
             try: self.metadata_path.replace(broken)

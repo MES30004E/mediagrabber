@@ -88,6 +88,21 @@ def test_real_settings_dialog_apply_ok_cancel_and_restart(tmp_path: Path):
     assert (SettingsStore(path).load().quality, SettingsStore(path).load().theme) == ("1080p", "Light")
 
 
+def test_runtime_status_separates_check_channels_and_reports_rollback(tmp_path):
+    settings = AppSettings()
+    runtime = _runtime(tmp_path)
+    runtime.check_and_update(False, channel="nightly")
+    dialog = SettingsWindow(settings, ManagedTor(settings.tor_browser_path), lambda *_: None, runtime_manager=runtime)
+    try:
+        status = dialog.yt_runtime_status.text()
+        assert "Stable last successful check: Never" in status
+        assert "Nightly last successful check: Never" in status
+        assert "Nightly last check error: offline" in status
+        assert "Rollback: No — bundled runtime active" in status
+        assert "24 hours" in dialog.yt_check_startup.toolTip()
+    finally:
+        _dispose(dialog)
+
 def test_authentication_controls_and_targeted_reset_do_not_change_other_settings(tmp_path: Path, monkeypatch):
     # A fresh Mac (and Cloud) may have no Chrome profile. Never depend on
     # the developer's browser installation or create a synthetic profile.

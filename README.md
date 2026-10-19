@@ -46,7 +46,7 @@ The local development Mac cannot accept the Xcode licence. Do not run Xcode, `xc
 - URLs, multi-line input, playlists/collections, YouTube Music, text search, and drag/drop
 - One-click Download/Download All with internal independent analysis, plus optional cancellable Analyse/Analyse All previews
 - Structured yt-dlp analysis, progress hooks, fragment progress, speed, ETA, and postprocessor state
-- Background stable yt-dlp updates from official GitHub releases, with SHA256 verification, user-local versioned activation, rollback, and a permanently bundled fallback
+- Background stable yt-dlp updates from official GitHub releases, with SHA256 verification, user-local versioned activation, rollback, a permanently bundled fallback and [persistent check history / daily scheduling](docs/RUNTIME_UPDATES.md)
 - Video quality/container and audio conversion settings, subtitle/metadata/thumbnail options, editable filename templates
 - [On-demand media inspection](docs/MEDIA_INSPECTION.md): reported formats/audio
   languages, original/default labels, manual/automatic subtitles, and per-item
@@ -116,7 +116,7 @@ Watch Later accepts `:ytwatchlater` unchanged, `https://www.youtube.com/playlist
 
 Watch Later/private collections need an account authorised to access them. Choose Browser Cookies or Imported cookies.txt explicitly when Auto does not recognise the site's authentication error. Parsing support does not prove live account access. Never commit cookie files, browser exports, or local cookie paths. See the [official yt-dlp cookie FAQ](https://github.com/yt-dlp/yt-dlp/wiki/FAQ) for supported authentication and export security guidance.
 
-`Auto` is the default: public YouTube extraction begins without account cookies. When YouTube explicitly requires authentication, Auto retries with the selected browser profile. Explicit Browser Cookies and Imported cookies.txt modes use yt-dlp's `cookiesfrombrowser` and `cookiefile` Python parameters. If authenticated extraction of otherwise public media returns no usable formats, the app retries once without authentication and records the safe effective mode. Settings includes the exact `https://www.youtube.com/robots.txt` cookies.txt export guide.
+`Auto` is the default: public YouTube extraction begins without account cookies. When YouTube explicitly requires authentication, Auto retries with the selected browser profile. Explicit Browser Cookies and Imported cookies.txt modes use yt-dlp's `cookiesfrombrowser` and `cookiefile` Python parameters. Format/player failures do not silently discard explicitly selected authentication; an unauthenticated retry requires a separate user action. Settings includes the exact `https://www.youtube.com/robots.txt` cookies.txt export guide.
 
 Restart is intentionally different from Resume and Retry. Resume/Retry retain job-owned `.part`/`.ytdl` state; Restart waits for the worker, deletes only paths in that job's inventory, resets transfer metrics, and starts again. Remove offers list-only retention or deletion of recorded files, moving completed output to the user's Trash where practical. Unrelated files and unverified directory contents are never wildcard-deleted.
 
