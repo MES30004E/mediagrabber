@@ -4,6 +4,27 @@ from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, QListWidget,
                                QListWidgetItem, QStackedWidget, QToolButton, QStyle,
                                QScrollArea, QFrame, QFormLayout)
+from PySide6.QtWidgets import QTableWidget
+
+
+class MediaSelectionTable(QTableWidget):
+    """Space checks/unchecks the highlighted visible rows as one operation."""
+    checksChanged = Signal()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Space and event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            rows = sorted({index.row() for index in self.selectionModel().selectedRows()
+                           if not self.isRowHidden(index.row())})
+            if rows:
+                checked = self.item(rows[0], 0).checkState() != Qt.CheckState.Checked
+                previous = self.blockSignals(True)
+                try:
+                    for row in rows:
+                        self.item(row, 0).setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+                finally: self.blockSignals(previous)
+                self.checksChanged.emit()
+                event.accept(); return
+        super().keyPressEvent(event)
 
 
 class NavigationShell(QWidget):

@@ -48,7 +48,10 @@ The local development Mac cannot accept the Xcode licence. Do not run Xcode, `xc
 - Structured yt-dlp analysis, progress hooks, fragment progress, speed, ETA, and postprocessor state
 - Background stable yt-dlp updates from official GitHub releases, with SHA256 verification, user-local versioned activation, rollback, and a permanently bundled fallback
 - Video quality/container and audio conversion settings, subtitle/metadata/thumbnail options, editable filename templates
-- Select-all, select-none, and invert-selection playlist/match table
+- [Large-playlist workspace](docs/PLAYLIST_WORKSPACE.md): local search/filter,
+  select-all-visible / none / invert-visible, checked-item counts, multi-row
+  Space selection, lazy current-row preview, collapsible options and remembered
+  panel proportions; native fullscreen where supported
 - Persistent SQLite queue and local searchable history
 - Two concurrent downloads by default (configurable from one to four)
 - Pause/resume via yt-dlp partial files, cancel, retry, open, reveal in Finder, and clear-completed controls

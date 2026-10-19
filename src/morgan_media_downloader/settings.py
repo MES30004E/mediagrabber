@@ -30,6 +30,9 @@ class AppSettings:
     window_height: int = 760
     window_x: int | None = None
     window_y: int | None = None
+    playlist_panel_sizes: list[int] = field(default_factory=lambda: [650, 170])
+    playlist_options_expanded: bool = False
+    playlist_preview_expanded: bool = False
 
     download_dir: str = str(default_download_dir())
     filename_template: str = "%(title)s.%(ext)s"

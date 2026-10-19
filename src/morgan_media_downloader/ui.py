@@ -4,6 +4,7 @@ import copy
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from PySide6.QtCore import QTimer, Qt, QUrl, Slot
+from PySide6.QtCore import QTimer, Qt, QUrl, Slot, QEvent
 from PySide6.QtGui import QAction, QDesktopServices, QFontDatabase, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -52,7 +53,7 @@ from .subtitle_mux import friendly_language
 from .torrent import (TORRENT_TOR_ERROR, TorrentMetadata, analyse_torrent, download_torrent,
                       fetch_magnet_metadata, validate_torrent_connection)
 from .yt_runtime import RuntimeSnapshot, YtDlpRuntimeManager, get_runtime_manager
-from .ui_components import NavigationShell, page_heading, polish_table
+from .ui_components import NavigationShell, page_heading, polish_table, DisclosureSection, MediaSelectionTable
 from .theme import apply_theme
 from .auth import connection_failure, requires_authentication
 
@@ -261,6 +262,7 @@ class MainWindow(QMainWindow):
         self.previous_crash = self.clean_marker.exists()
         self.clean_marker.write_text(str(os.getpid()), encoding="utf-8")
         self.setWindowTitle("Morgan Media Downloader")
+        self.setWindowFlag(Qt.WindowType.WindowFullscreenButtonHint, True)
         self.setMinimumSize(900, 650)
         if self.settings.remember_window_size: self.resize(self.settings.window_width, self.settings.window_height)
         else: self.resize(1180, 760)
@@ -286,8 +288,7 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         self.tabs = NavigationShell(); self.setCentralWidget(self.tabs)
         download_tab = QWidget(); outer = QVBoxLayout(download_tab)
-        outer.setContentsMargins(22, 18, 22, 16); outer.setSpacing(10)
-        page_heading(outer, "Download", "Paste a link or search. Analyse playlists and review your selection before downloading.")
+        outer.setContentsMargins(22, 14, 22, 12); outer.setSpacing(6)
         self.banner = QWidget(); banner_row = QHBoxLayout(self.banner); banner_row.setContentsMargins(8, 4, 8, 4)
         self.banner_text = QLabel(); self.banner_analyse = QPushButton("Analyse"); self.banner_download = QPushButton("Download"); self.banner_dismiss = QPushButton("Dismiss")
         banner_row.addWidget(self.banner_text, 1); banner_row.addWidget(self.banner_analyse); banner_row.addWidget(self.banner_download); banner_row.addWidget(self.banner_dismiss)
@@ -298,7 +299,8 @@ class MainWindow(QMainWindow):
             self.banner_text.setText("Morgan Media Downloader did not close normally last time.")
             self.banner_analyse.setText("Open Logs"); self.banner_download.hide(); self.banner.show()
         top = QHBoxLayout(); self.input = DropInput(); self.analyse_button = QPushButton("Analyse"); self.download_button = QPushButton("Download")
-        self.input.setAccessibleName("Media URLs or search terms"); self.input.setMaximumHeight(88)
+        self.input.setAccessibleName("Media URLs or search terms"); self.input.setMaximumHeight(54)
+        self.input.setToolTip("Paste links or search terms, then Analyse to review playlist entries before downloading.")
         self.download_button.setProperty("primary", True)
         self.download_button.setToolTip("Analyse and download using the current options; review Spotify matches with Analyse first.")
         self.analyse_button.setDefault(True); self.analyse_button.clicked.connect(self.analyse)
@@ -317,25 +319,41 @@ class MainWindow(QMainWindow):
         self.analysis_diagnostics = QPushButton("View diagnostic details…"); self.analysis_diagnostics.clicked.connect(self._show_analysis_diagnostics)
         self.analysis_diagnostics.hide(); outer.addWidget(self.analysis_diagnostics, 0, Qt.AlignmentFlag.AlignLeft)
         self._analysis_error_details = ""
-        preview = QGroupBox("Media Preview"); preview_layout = QHBoxLayout(preview)
+        self.preview_section = DisclosureSection("Media Preview", self.settings.playlist_preview_expanded)
+        preview = self.preview_section
+        preview_body = QWidget(); preview_layout = QHBoxLayout(preview_body)
+        preview_scroll = QScrollArea(); preview_scroll.setWidgetResizable(True); preview_scroll.setWidget(preview_body)
+        preview_scroll.setMinimumHeight(80)
+        QVBoxLayout(preview.content).addWidget(preview_scroll)
         self.thumbnail = QLabel("No preview"); self.thumbnail.setFixedSize(160, 90); self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter); self.thumbnail.setStyleSheet("background: palette(midlight); border-radius: 6px;")
         self.preview_details = QLabel("Title\nChannel / artist\nDuration\nSource"); self.preview_details.setWordWrap(True)
         thumbnail_box = QVBoxLayout(); thumbnail_box.addWidget(self.thumbnail)
         self.thumbnail_progress = QProgressBar(); self.thumbnail_progress.setFixedWidth(160); self.thumbnail_progress.hide()
         thumbnail_box.addWidget(self.thumbnail_progress)
-        preview_layout.addLayout(thumbnail_box); preview_layout.addWidget(self.preview_details, 1); outer.addWidget(preview)
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        preview_layout.addLayout(thumbnail_box); preview_layout.addWidget(self.preview_details, 1)
+        self.playlist_filter = QLineEdit(); self.playlist_filter.setClearButtonEnabled(True)
+        self.playlist_filter.setPlaceholderText("Filter analysed titles, artists or sources…")
+        self.playlist_filter.setAccessibleName("Filter analysed playlist entries")
+        self.playlist_filter.textChanged.connect(self._filter_playlist)
+        outer.addWidget(self.playlist_filter)
+        self.playlist_splitter = splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setChildrenCollapsible(False)
-        self.item_table = QTableWidget(0, 7)
+        self.item_table = MediaSelectionTable(0, 7)
         self.item_table.setMinimumHeight(180)
         self.item_table.setHorizontalHeaderLabels(["✓", "#", "Title", "Uploader / artist", "Duration", "Source", "Match"])
         self.item_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         for column, width in ((0, 38), (1, 42), (3, 154), (4, 80), (5, 95), (6, 65)):
             self.item_table.setColumnWidth(column, width)
         self.item_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.item_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.item_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.item_table.itemChanged.connect(self._update_selection_count)
+        self.item_table.checksChanged.connect(self._update_selection_count)
+        self.item_table.currentCellChanged.connect(self._preview_current_item)
         polish_table(self.item_table)
+        self.item_table.verticalHeader().setDefaultSectionSize(32)
         splitter.addWidget(self.item_table)
-        settings_box = QGroupBox("Download Options"); grid = QGridLayout(settings_box)
+        settings_box = QWidget(); grid = QGridLayout(settings_box)
         grid.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.quality = QComboBox(); self.quality.addItems(["Best", "2160p", "1440p", "1080p", "720p", "480p", "360p"]); self.quality.setCurrentText(self.settings.quality)
         self.compatibility = QComboBox(); self.compatibility.addItems(["macOS / QuickTime", "Universal", "Original / Best Available"]); self.compatibility.setCurrentText(self.settings.compatibility)
@@ -356,25 +374,41 @@ class MainWindow(QMainWindow):
         grid.addWidget(QLabel("Compatibility"), 0, 0); grid.addWidget(self.compatibility, 0, 1); grid.addWidget(QLabel("Quality"), 0, 2); grid.addWidget(self.quality, 0, 3)
         self.more_options = QWidget(); more_grid = QGridLayout(self.more_options); more_grid.setContentsMargins(0, 0, 0, 0)
         for index, widget in enumerate([self.embed_thumb, self.embed_meta, self.embed_chapters, self.embed_subtitles, self.write_subtitles, self.keep_original]):
-            more_grid.addWidget(widget, index // 3, index % 3)
-        more_grid.addWidget(QLabel("Subtitle language"), 2, 0); more_grid.addWidget(self.subtitle_language, 2, 1)
-        more_grid.addWidget(QLabel("Subtitle source"), 2, 2); more_grid.addWidget(self.subtitle_source, 2, 3)
-        more_grid.addWidget(self.verify_postprocessing, 3, 0, 1, 2)
-        more_grid.addWidget(QLabel("Filename"), 4, 0); more_grid.addWidget(self.template, 4, 1, 1, 3)
-        more_grid.addWidget(QLabel("Container"), 5, 0); more_grid.addWidget(self.container, 5, 1)
-        more_grid.addWidget(QLabel("Audio"), 5, 2); more_grid.addWidget(self.audio_format, 5, 3)
-        more_grid.addWidget(QLabel("Bitrate"), 6, 0); more_grid.addWidget(self.audio_bitrate, 6, 1)
+            more_grid.addWidget(widget, index // 2, index % 2)
+        more_grid.addWidget(QLabel("Subtitle language"), 3, 0); more_grid.addWidget(self.subtitle_language, 3, 1)
+        more_grid.addWidget(QLabel("Subtitle source"), 4, 0); more_grid.addWidget(self.subtitle_source, 4, 1)
+        more_grid.addWidget(self.verify_postprocessing, 5, 0, 1, 2)
+        more_grid.addWidget(QLabel("Filename"), 6, 0); more_grid.addWidget(self.template, 6, 1)
+        more_grid.addWidget(QLabel("Container"), 7, 0); more_grid.addWidget(self.container, 7, 1)
+        more_grid.addWidget(QLabel("Audio"), 8, 0); more_grid.addWidget(self.audio_format, 8, 1)
+        more_grid.addWidget(QLabel("Bitrate"), 9, 0); more_grid.addWidget(self.audio_bitrate, 9, 1)
         self.more_options.hide(); self.more_button = QToolButton(); self.more_button.setText("More Options ▾"); self.more_button.clicked.connect(self._toggle_more_options)
         grid.addWidget(QLabel("Folder"), 1, 0); grid.addWidget(self.folder, 1, 1, 1, 2); grid.addWidget(choose, 1, 3)
         grid.addWidget(self.more_button, 2, 0); grid.addWidget(self.more_options, 3, 0, 1, 4)
-        outer.insertWidget(outer.indexOf(preview), settings_box)
+        self.options_section = DisclosureSection("Download Options · batch defaults", self.settings.playlist_options_expanded)
+        options_layout = QVBoxLayout(self.options_section.content); options_layout.setContentsMargins(0, 0, 0, 0)
+        options_scroll = QScrollArea(); options_scroll.setWidgetResizable(True); options_scroll.setWidget(settings_box)
+        options_scroll.setMinimumHeight(160); options_scroll.setMaximumHeight(260)
+        options_layout.addWidget(options_scroll)
+        outer.insertWidget(outer.indexOf(self.playlist_filter), self.options_section)
+        splitter.addWidget(preview)
+        splitter.setStretchFactor(0, 4); splitter.setStretchFactor(1, 1)
+        sizes = self.settings.playlist_panel_sizes
+        if not isinstance(sizes, list) or len(sizes) != 2 or any(type(n) is not int or not 0 < n < 100000 for n in sizes):
+            sizes = [650, 170]
+        self._expanded_preview_sizes = list(sizes)
+        splitter.setSizes(sizes)
+        self.preview_section.toggle.toggled.connect(self._preview_visibility_changed)
+        if not self.preview_section.toggle.isChecked():
+            self.preview_section.setMaximumHeight(self.preview_section.sizeHint().height())
         outer.addWidget(splitter, 1)
         buttons = QHBoxLayout()
-        select_all = QPushButton("Select All"); select_none = QPushButton("Select None"); invert = QPushButton("Invert Selection")
+        select_all = QPushButton("Select All Visible"); select_none = QPushButton("Select None"); invert = QPushButton("Invert Visible")
         select_all.clicked.connect(lambda: self._select_items(True)); select_none.clicked.connect(lambda: self._select_items(False)); invert.clicked.connect(self._invert_items)
         self.add_button = QPushButton("Download Selected"); self.add_button.clicked.connect(self.enqueue_selected); self.add_button.setEnabled(False)
         self.add_button.setProperty("primary", True)
         buttons.addWidget(select_all); buttons.addWidget(select_none); buttons.addWidget(invert); buttons.addStretch(); buttons.addWidget(self.add_button)
+        self.selection_count = QLabel("0 selected · 0 visible · 0 total"); self.selection_count.setWordWrap(True)
         outer.addLayout(buttons)
         self.activity_label = QLabel("Current activity: No active downloads"); outer.addWidget(self.activity_label)
         # Preserve control size hints rather than crushing the options inside a
@@ -385,7 +419,7 @@ class MainWindow(QMainWindow):
         download_scroll = QScrollArea(); download_scroll.setWidgetResizable(True); download_scroll.setWidget(download_tab)
         download_layout.addWidget(download_scroll, 1)
         footer = QWidget(); footer_layout = QVBoxLayout(footer); footer_layout.setContentsMargins(22, 4, 22, 12)
-        footer_layout.addLayout(buttons); footer_layout.addWidget(self.activity_label); download_layout.addWidget(footer)
+        footer_layout.addWidget(self.selection_count); footer_layout.addLayout(buttons); footer_layout.addWidget(self.activity_label); download_layout.addWidget(footer)
         self.tabs.addTab(download_page, "Download")
         self.tabs.addTab(self._queue_tab(), "Queue"); self.tabs.addTab(self._history_tab(), "History")
         self.console_tab = self._console_tab(); self.tabs.addTab(self.console_tab, "Console")
@@ -521,6 +555,11 @@ class MainWindow(QMainWindow):
         quit_action = QAction("Quit", self); quit_action.setShortcut("Meta+Q"); quit_action.triggered.connect(self.close)
         file_menu.addActions([new, open_torrent, convert_video, folder]); file_menu.addSeparator(); file_menu.addAction(quit_action)
         edit = self.menuBar().addMenu("Edit"); preferences = QAction("Settings…", self); preferences.setShortcut("Meta+,"); preferences.setMenuRole(QAction.MenuRole.PreferencesRole); preferences.triggered.connect(self.show_preferences); edit.addAction(preferences)
+        view = self.menuBar().addMenu("View")
+        self.fullscreen_action = QAction("Full Screen", self); self.fullscreen_action.setCheckable(True)
+        self.fullscreen_action.setShortcut("Ctrl+Meta+F" if sys.platform == "darwin" else "F11")
+        self.fullscreen_action.triggered.connect(lambda enabled: self.showFullScreen() if enabled else self.showNormal())
+        view.addAction(self.fullscreen_action)
         downloads = self.menuBar().addMenu("Downloads")
         pause_all = QAction("Pause All", self); pause_all.triggered.connect(self.pause_all)
         resume_all = QAction("Resume All", self); resume_all.triggered.connect(self.resume_all)
@@ -825,16 +864,20 @@ class MainWindow(QMainWindow):
             return
         self.displayed_input = context.original_input.strip(); self.analysis_stale = False
         self.torrent_context = payload.get("torrent")
-        self.items = items; self.item_table.setRowCount(len(items))
+        self.items = items
+        self.item_table.blockSignals(True)
+        self.item_table.clearContents(); self.item_table.setRowCount(len(items))
         if self.torrent_context:
             self.item_table.setHorizontalHeaderLabels(["✓", "#", "Filename", "Path", "Size", "Source", "Match"])
         else:
             self.item_table.setHorizontalHeaderLabels(["✓", "#", "Title", "Uploader / artist", "Duration", "Source", "Match"])
         for row, item in enumerate(items):
-            check = QTableWidgetItem(); check.setFlags(check.flags() | Qt.ItemFlag.ItemIsUserCheckable); check.setCheckState(Qt.CheckState.Checked)
+            check = QTableWidgetItem(); check.setFlags(check.flags() | Qt.ItemFlag.ItemIsUserCheckable); check.setCheckState(Qt.CheckState.Checked if item.selected else Qt.CheckState.Unchecked)
             measure = human_bytes(item.file_size) if self.torrent_context else human_duration(item.duration)
             cells = [check, QTableWidgetItem(str(item.playlist_index or row + 1)), QTableWidgetItem(item.title), QTableWidgetItem(item.uploader), QTableWidgetItem(measure), QTableWidgetItem(item.source), QTableWidgetItem(f"{item.confidence:.0f}%" if item.confidence is not None else "—")]
             for column, cell in enumerate(cells): self.item_table.setItem(row, column, cell)
+        self.item_table.blockSignals(False)
+        self._filter_playlist()
         if self.torrent_context:
             privacy = "Private" if self.torrent_context.is_private else "Public"
             self.summary.setText(f"{self.torrent_context.name} — {human_bytes(self.torrent_context.total_size)}, {len(self.torrent_context.files)} file(s), {self.torrent_context.tracker_count} tracker(s), {privacy}. BitTorrent uses Direct or System / Proton VPN only.")
@@ -847,35 +890,100 @@ class MainWindow(QMainWindow):
         fallback = next((value for value in authentication if value.endswith("-> None") and not value.startswith("Auto")), "")
         if fallback:
             self.statusBar().showMessage(f"Authentication fallback: {fallback}", 10_000)
-        self.add_button.setEnabled(bool(items))
+        self._update_selection_count()
         if items:
-            first = items[0]
-            subtitles = ", ".join(friendly_language(code) for code in first.available_subtitles) or "None"
-            automatic = ", ".join(friendly_language(code) for code in first.automatic_captions) or "None"
-            self.preview_details.setText(
-                f"{first.title}\n{first.uploader or 'Unknown channel / artist'}\n{human_duration(first.duration)}\n"
-                f"{first.source or 'Unknown source'}\nSubtitles available: {subtitles}\nAutomatic captions: {automatic}")
-            if first.thumbnail: self._start_thumbnail_preview(first)
-            else: self.thumbnail.setText("No thumbnail")
+            self._preview_current_item(0)
+        else:
+            self._clear_thumbnail_preview(); self.preview_details.setText("No analysed items")
+
+    def _preview_current_item(self, row: int, *_):
+        if not 0 <= row < len(self.items): return
+        item = self.items[row]
+        self._preview_item_row = row
+        self.preview_details.setText(
+            f"{item.title}\n{item.uploader or 'Unknown channel / artist'}\n{human_duration(item.duration)}\n"
+            f"{item.source or 'Unknown source'}\n"
+            f"Subtitles reported: {', '.join(friendly_language(code) for code in item.available_subtitles) or 'Not reported'}\n"
+            f"Automatic captions reported: {', '.join(friendly_language(code) for code in item.automatic_captions) or 'Not reported'}")
+        self._clear_thumbnail_preview()
+        if item.thumbnail and self.preview_section.toggle.isChecked(): self._start_thumbnail_preview(item)
+
+    def _preview_visibility_changed(self, expanded: bool):
+        if expanded:
+            self.preview_section.setMaximumHeight(16777215)
+            self.playlist_splitter.setSizes(getattr(self, "_expanded_preview_sizes", [650, 170]))
+            self._preview_current_item(getattr(self, "_preview_item_row", 0))
+        else:
+            self._expanded_preview_sizes = self.playlist_splitter.sizes()
+            self.preview_section.setMaximumHeight(self.preview_section.sizeHint().height())
+            self._clear_thumbnail_preview()
+
+    def _clear_thumbnail_preview(self):
+        previous = getattr(self, "_thumbnail_worker_id", "")
+        self.thumbnail_task_id = ""
+        self._pending_thumbnail_item = None
+        if previous: self.task_manager.cancel(previous)
+        self.thumbnail.setPixmap(QPixmap()); self.thumbnail.setText("No thumbnail")
+        self.thumbnail_progress.hide()
+
+    def _filter_playlist(self, *_):
+        query = self.playlist_filter.text().strip().casefold()
+        for row, item in enumerate(self.items):
+            text = " ".join((item.title, item.uploader, item.source, str(item.playlist_index or row + 1))).casefold()
+            self.item_table.setRowHidden(row, bool(query and query not in text))
+        self._update_selection_count()
+
+    def _update_selection_count(self, *_):
+        selected = visible = 0
+        for row, item in enumerate(self.items):
+            cell = self.item_table.item(row, 0)
+            if cell is None: continue
+            item.selected = cell.checkState() == Qt.CheckState.Checked
+            selected += item.selected
+            visible += not self.item_table.isRowHidden(row)
+        self.selection_count.setText(f"{selected} selected · {visible} visible · {len(self.items)} total")
+        self.add_button.setEnabled(bool(selected) and not self.analysis_stale)
 
     def _start_thumbnail_preview(self, item: MediaItem):
-        previous = getattr(self, "thumbnail_task_id", "")
-        if previous: self.task_manager.cancel(previous)
+        previous = getattr(self, "_thumbnail_worker_id", "")
+        if previous:
+            self.task_manager.cancel(previous)
+            self.thumbnail_task_id = ""
+            self._pending_thumbnail_item = copy.deepcopy(item)
+            self.thumbnail.setText("Waiting for previous thumbnail request to stop…")
+            self.thumbnail_progress.setRange(0, 0); self.thumbnail_progress.show()
+            return
         task_id = f"thumbnail-preview-{uuid4()}"; self.thumbnail_task_id = task_id
         self.thumbnail.setPixmap(QPixmap()); self.thumbnail.setText("Loading thumbnail…")
         self.thumbnail_progress.setRange(0, 0); self.thumbnail_progress.show()
         self.console_store.append("THUMBNAIL", "Loading preview thumbnail")
         try: proxy = self._proxy()
-        except (ValueError, ConnectionError): proxy = None
+        except (ValueError, ConnectionError):
+            self.thumbnail_task_id = ""; self.thumbnail_progress.hide()
+            self._thumbnail_error("Selected connection unavailable; thumbnail was not fetched.", "")
+            return
         runtime = self.runtime_manager.snapshot()
-        operation = lambda _cancel, report, u=item.thumbnail, h=dict(item.thumbnail_headers), p=proxy, r=runtime: fetch_thumbnail(
-            u, h, lambda value: report({"thumbnail_progress": value}), p, r)
+        def operation(_cancel, report, u=item.thumbnail, h=dict(item.thumbnail_headers), p=proxy, r=runtime, identity=task_id):
+            try:
+                path = fetch_thumbnail(u, h, lambda value: report({"thumbnail_progress": value, "thumbnail_task_id": identity}), p, r,
+                                       cancel_event=_cancel)
+            except Exception:
+                path = None
+            return identity, path
+        self._thumbnail_worker_id = task_id
         self.task_manager.start("thumbnail-preview", operation, task_id=task_id,
-                                on_result=self._thumbnail_ready, on_progress=self._thumbnail_progress_ready,
-                                on_error=self._thumbnail_error, on_finished=self._thumbnail_finished)
+                                on_result=self._thumbnail_delivered, on_progress=self._thumbnail_progress_ready,
+                                on_finished=self._thumbnail_finished)
+
+    def _thumbnail_delivered(self, payload):
+        task_id, path = payload
+        if task_id != getattr(self, "thumbnail_task_id", ""): return
+        if path is None: self._thumbnail_error("Thumbnail could not be loaded; retry the selected item.", "")
+        else: self._thumbnail_ready(path)
 
     def _thumbnail_progress_ready(self, payload: object):
         if not isinstance(payload, dict) or "thumbnail_progress" not in payload: return
+        if payload.get("thumbnail_task_id", getattr(self, "thumbnail_task_id", "")) != getattr(self, "thumbnail_task_id", ""): return
         value = payload["thumbnail_progress"]
         if value is None: self.thumbnail_progress.setRange(0, 0)
         else:
@@ -894,8 +1002,14 @@ class MainWindow(QMainWindow):
         self.console_store.append("THUMBNAIL", message, level="warning")
 
     def _thumbnail_finished(self, task_id: str):
+        if getattr(self, "_thumbnail_worker_id", "") == task_id:
+            self._thumbnail_worker_id = ""
         if getattr(self, "thumbnail_task_id", "") == task_id:
             self.thumbnail_task_id = ""; self.thumbnail_progress.hide()
+        pending = getattr(self, "_pending_thumbnail_item", None)
+        self._pending_thumbnail_item = None
+        if pending is not None and not self._closing and self.preview_section.toggle.isChecked():
+            self._start_thumbnail_preview(pending)
 
     def _show_worker_error(self, message: str, details: str):
         from .logging_setup import redact_secrets
@@ -939,11 +1053,20 @@ class MainWindow(QMainWindow):
         finally: self.settings.authentication_mode = previous
 
     def _select_items(self, selected: bool):
-        for row in range(self.item_table.rowCount()): self.item_table.item(row, 0).setCheckState(Qt.CheckState.Checked if selected else Qt.CheckState.Unchecked)
+        self.item_table.blockSignals(True)
+        for row in range(self.item_table.rowCount()):
+            if selected and self.item_table.isRowHidden(row): continue
+            self.item_table.item(row, 0).setCheckState(Qt.CheckState.Checked if selected else Qt.CheckState.Unchecked)
+        self.item_table.blockSignals(False)
+        self._update_selection_count()
 
     def _invert_items(self):
+        self.item_table.blockSignals(True)
         for row in range(self.item_table.rowCount()):
+            if self.item_table.isRowHidden(row): continue
             item = self.item_table.item(row, 0); item.setCheckState(Qt.CheckState.Unchecked if item.checkState() == Qt.CheckState.Checked else Qt.CheckState.Checked)
+        self.item_table.blockSignals(False)
+        self._update_selection_count()
 
     def _current_options(self) -> DownloadOptions:
         return DownloadOptions(
@@ -960,6 +1083,7 @@ class MainWindow(QMainWindow):
         )
 
     def enqueue_selected(self):
+        if self.analysis_stale: return
         selected = [item for row, item in enumerate(self.items) if self.item_table.item(row, 0).checkState() == Qt.CheckState.Checked]
         if not selected: QMessageBox.information(self, "Queue", "Select at least one item."); return
         self._enqueue_payload(selected, self.torrent_context, self._current_options())
@@ -1727,10 +1851,15 @@ class MainWindow(QMainWindow):
     def _persist_settings(self):
         self.settings.download_dir = self.folder.text().strip(); self.settings.compatibility = self.compatibility.currentText(); self.settings.quality = self.quality.currentText(); self.settings.container = self.container.currentText(); self.settings.audio_format = self.audio_format.currentText(); self.settings.audio_bitrate = self.audio_bitrate.currentText(); self.settings.filename_template = self.template.currentText()
         self.settings.embed_thumbnail = self.embed_thumb.isChecked(); self.settings.embed_metadata = self.embed_meta.isChecked(); self.settings.embed_chapters = self.embed_chapters.isChecked(); self.settings.embed_subtitles = self.embed_subtitles.isChecked(); self.settings.write_subtitles = self.write_subtitles.isChecked(); self.settings.keep_original = self.keep_original.isChecked(); self.settings.subtitle_languages = self.subtitle_language.text().strip(); self.settings.subtitle_source = self.subtitle_source.currentText(); self.settings.verify_postprocessing = self.verify_postprocessing.isChecked()
+        self.settings.playlist_panel_sizes = (self.playlist_splitter.sizes() if self.preview_section.toggle.isChecked()
+                                               else list(self._expanded_preview_sizes))
+        self.settings.playlist_options_expanded = self.options_section.toggle.isChecked()
+        self.settings.playlist_preview_expanded = self.preview_section.toggle.isChecked()
+        geometry = self.normalGeometry() if self.isFullScreen() or self.isMaximized() else self.geometry()
         if self.settings.remember_window_size:
-            self.settings.window_width = self.width(); self.settings.window_height = self.height()
+            self.settings.window_width = geometry.width(); self.settings.window_height = geometry.height()
         if self.settings.remember_window_position:
-            self.settings.window_x = self.x(); self.settings.window_y = self.y()
+            self.settings.window_x = geometry.x(); self.settings.window_y = geometry.y()
         self.settings_store.save(self.settings)
 
     def _apply_theme(self):
@@ -1782,3 +1911,8 @@ class MainWindow(QMainWindow):
         try: self.clean_marker.unlink(missing_ok=True)
         except OSError: pass
         event.accept()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange and hasattr(self, "fullscreen_action"):
+            self.fullscreen_action.setChecked(self.isFullScreen())

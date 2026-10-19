@@ -78,3 +78,20 @@ the extension suite passed **10 tests**. The standalone macOS storage roundtrip
 uses its own random synthetic Keychain service/account, with deletion afterward;
 it does not read the Companion's stored account. Source changes do not alter the
 pinned provider, main or the qualified Swift implementation.
+
+## Playlist workspace checkpoint — 19 October 2026
+
+All-local-ref/reflog scans were repeated before the workspace commit: 21
+application commits / the same one public extension-key finding; 148 provider
+commits / the same two upstream protocol constants. Only synthetic `.test` media
+URLs and controlled thumbnail responses are used by the new regressions. Final
+index export and final history are scanned again before publication; any new
+credential finding stops the push rather than being silently allowlisted.
+
+The final local suite passed **379 Python tests**, with **10 extension tests**,
+protocol drift and dependency checks passing separately. Review caught and
+regression tests now cover bounded thumbnail work, same-URL atomic cache writes,
+collapsed-restart proportions and normal geometry persistence in fullscreen.
+No personal cookies, real private media, build outputs or local preference data
+belong in this checkpoint. Per-video media-detail work remains explicitly pending
+in `docs/PLAYLIST_WORKSPACE.md`; no release qualification is claimed.
