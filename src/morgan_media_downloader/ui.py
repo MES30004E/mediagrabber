@@ -238,6 +238,10 @@ class MainWindow(QMainWindow):
         if not self.runtime_manager.initialized: self.runtime_manager.initialize()
         self.settings_store = SettingsStore(); self.settings = self.settings_store.load()
         self.database = Database(); self.items: list[MediaItem] = []
+        self._item_overrides: dict[int, dict] = {}
+        self._inspection_generation = 0
+        self._inspection_busy = False
+        self.media_details_dialog = None
         self.torrent_context: TorrentMetadata | None = None
         self.jobs = {job.id: job for job in self.database.load_jobs()}
         self.task_manager = TaskManager(self)
@@ -335,7 +339,12 @@ class MainWindow(QMainWindow):
         self.playlist_filter.setPlaceholderText("Filter analysed titles, artists or sources…")
         self.playlist_filter.setAccessibleName("Filter analysed playlist entries")
         self.playlist_filter.textChanged.connect(self._filter_playlist)
-        outer.addWidget(self.playlist_filter)
+        filter_row = QWidget(); filter_layout = QHBoxLayout(filter_row); filter_layout.setContentsMargins(0, 0, 0, 0)
+        self.inspect_button = QPushButton("Inspect Video…"); self.inspect_button.setEnabled(False)
+        self.inspect_button.setToolTip("Load formats, audio languages and subtitles for the current row only")
+        self.inspect_button.clicked.connect(self._inspect_current_video)
+        filter_layout.addWidget(self.playlist_filter, 1); filter_layout.addWidget(self.inspect_button)
+        outer.addWidget(filter_row)
         self.playlist_splitter = splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setChildrenCollapsible(False)
         self.item_table = MediaSelectionTable(0, 7)
@@ -390,7 +399,7 @@ class MainWindow(QMainWindow):
         options_scroll = QScrollArea(); options_scroll.setWidgetResizable(True); options_scroll.setWidget(settings_box)
         options_scroll.setMinimumHeight(160); options_scroll.setMaximumHeight(260)
         options_layout.addWidget(options_scroll)
-        outer.insertWidget(outer.indexOf(self.playlist_filter), self.options_section)
+        outer.insertWidget(outer.indexOf(filter_row), self.options_section)
         splitter.addWidget(preview)
         splitter.setStretchFactor(0, 4); splitter.setStretchFactor(1, 1)
         sizes = self.settings.playlist_panel_sizes
@@ -580,6 +589,7 @@ class MainWindow(QMainWindow):
         self.more_button.setText("More Options ▴" if visible else "More Options ▾")
 
     def _input_changed(self):
+        self._inspection_generation += 1
         self.analysis_diagnostics.hide(); self._analysis_error_details = ""
         count = len(split_input(self.input.toPlainText()))
         if not self.analysis_task_id:
@@ -589,9 +599,11 @@ class MainWindow(QMainWindow):
         if self.displayed_input and current != self.displayed_input:
             self.analysis_stale = True
             self.add_button.setEnabled(False)
+            self.inspect_button.setEnabled(False)
             self.summary.setText("Input changed — analyse the new URL.")
 
     def _connection_changed(self, mode: str):
+        self._inspection_generation += 1
         self.settings.connection_mode = mode
         if hasattr(self, "settings_panel"):
             self.settings_panel.working.connection_mode = mode
@@ -863,6 +875,7 @@ class MainWindow(QMainWindow):
             self.summary.setText("Input changed — analyse the new URL.")
             return
         self.displayed_input = context.original_input.strip(); self.analysis_stale = False
+        self._inspection_generation += 1; self._item_overrides.clear()
         self.torrent_context = payload.get("torrent")
         self.items = items
         self.item_table.blockSignals(True)
@@ -942,7 +955,62 @@ class MainWindow(QMainWindow):
             selected += item.selected
             visible += not self.item_table.isRowHidden(row)
         self.selection_count.setText(f"{selected} selected · {visible} visible · {len(self.items)} total")
+        if self._item_overrides: self.selection_count.setText(self.selection_count.text() + f" · {len(self._item_overrides)} item override(s)")
         self.add_button.setEnabled(bool(selected) and not self.analysis_stale)
+        self.inspect_button.setEnabled(bool(visible) and not self.torrent_context and not self.analysis_stale and not self._inspection_busy)
+
+    def _inspect_current_video(self):
+        if self._inspection_busy or self.analysis_stale or self.torrent_context: return
+        row = self.item_table.currentRow()
+        if row < 0 or self.item_table.isRowHidden(row):
+            row = next((r for r in range(len(self.items)) if not self.item_table.isRowHidden(r)), -1)
+        if row < 0: return
+        item = self.items[row]
+        try: proxy = self._proxy()
+        except (ValueError, ConnectionError):
+            self.statusBar().showMessage("Inspection unavailable — selected connection is not ready. Test Network and retry.", 15000); return
+        settings, runtime = copy.deepcopy(self.settings), self.runtime_manager.snapshot()
+        generation = self._inspection_generation
+        self._inspection_busy = True; self.inspect_button.setEnabled(False)
+        self.statusBar().showMessage("Inspecting one video with the selected authentication and connection…")
+        def inspect(_cancel, _progress):
+            try:
+                items, effective = analyse_with_authentication(item.source_url, proxy, settings.provider_base_url,
+                    settings.provider_server_home, settings.authentication_mode, settings.cookies_browser,
+                    settings.browser_profile, settings.cookies_file, runtime, single_video=True)
+                if len(items) != 1: raise ValueError("No playable formats")
+                return generation, item, runtime.version, runtime.source, items[0].inspection, effective, ""
+            except Exception as error:
+                from .job_diagnostics import classify_failure
+                return generation, item, runtime.version, runtime.source, None, "", classify_failure(error)["code"]
+        self.task_manager.start("media-inspection", inspect, on_result=self._inspection_ready, on_finished=self._inspection_finished)
+
+    def _inspection_ready(self, payload):
+        generation, item, version, source, details, effective, error = payload
+        runtime = self.runtime_manager.snapshot()
+        if generation != self._inspection_generation or (version, source) != (runtime.version, runtime.source) or not any(current is item for current in self.items):
+            self.statusBar().showMessage("Inspection discarded — input, authentication, connection or runtime changed. Inspect again.", 15000); return
+        if details is None:
+            self.statusBar().showMessage(f"Inspection failed — {error}. Check authentication, runtime and provider, then retry.", 15000); return
+        from .media_details_dialog import MediaDetailsDialog
+        item.inspection = details
+        if self.media_details_dialog is not None: self.media_details_dialog.close()
+        def apply(values):
+            active_runtime = self.runtime_manager.snapshot()
+            if generation != self._inspection_generation or (version, source) != (active_runtime.version, active_runtime.source) or self.analysis_stale or not any(current is item for current in self.items):
+                raise ValueError("Source changed")
+            if values is None: self._item_overrides.pop(id(item), None)
+            else: self._item_overrides[id(item)] = dict(values)
+            self._update_selection_count()
+        self.media_details_dialog = MediaDetailsDialog(item.title, details, self._current_options(),
+            self._item_overrides.get(id(item), {}), apply, self)
+        self.media_details_dialog.status.setText(f"Inspected {datetime.now(timezone.utc).isoformat(timespec='seconds')} · yt-dlp {version} · Authentication: {effective}. Not a sign-in or transfer guarantee.")
+        self.media_details_dialog.show()
+        self.statusBar().showMessage("Inspection ready — review formats and apply choices to this item, or keep batch defaults.", 15000)
+
+    def _inspection_finished(self, *_):
+        self._inspection_busy = False
+        self._update_selection_count()
 
     def _start_thumbnail_preview(self, item: MediaItem):
         previous = getattr(self, "_thumbnail_worker_id", "")
@@ -1113,6 +1181,7 @@ class MainWindow(QMainWindow):
         created_directory = organised if Path(organised) != Path(options.download_dir) and not Path(organised).exists() else ""
         for item in selected:
             item_options = copy.deepcopy(options)
+            for key, value in self._item_overrides.get(id(item), {}).items(): setattr(item_options, key, value)
             item_options.download_dir = organised
             if len(selected) > 1 and "playlist_index" not in item_options.filename_template and item.playlist_index:
                 item_options.filename_template = "%(playlist_index)03d - " + item_options.filename_template
@@ -1799,9 +1868,11 @@ class MainWindow(QMainWindow):
         # Persist first: failure must not be described as an activated choice.
         self.settings_store.save(updated)
         self.settings = updated
+        self._inspection_generation += 1
         return copy.deepcopy(updated)
 
     def _apply_settings(self, settings: AppSettings, proxy_passwords: object):
+        self._inspection_generation += 1
         self.settings = settings
         supplied = proxy_passwords if isinstance(proxy_passwords, dict) else {"legacy": str(proxy_passwords or "")}
         for kind, username in (("http", settings.http_proxy_username), ("socks", settings.socks_proxy_username)):

@@ -48,6 +48,9 @@ The local development Mac cannot accept the Xcode licence. Do not run Xcode, `xc
 - Structured yt-dlp analysis, progress hooks, fragment progress, speed, ETA, and postprocessor state
 - Background stable yt-dlp updates from official GitHub releases, with SHA256 verification, user-local versioned activation, rollback, and a permanently bundled fallback
 - Video quality/container and audio conversion settings, subtitle/metadata/thumbnail options, editable filename templates
+- [On-demand media inspection](docs/MEDIA_INSPECTION.md): reported formats/audio
+  languages, original/default labels, manual/automatic subtitles, and per-item
+  stream/subtitle choices revalidated before transfer
 - [Large-playlist workspace](docs/PLAYLIST_WORKSPACE.md): local search/filter,
   select-all-visible / none / invert-visible, checked-item counts, multi-row
   Space selection, lazy current-row preview, collapsible options and remembered

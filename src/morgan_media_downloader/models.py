@@ -40,6 +40,7 @@ class MediaItem:
     available_subtitles: list[str] = field(default_factory=list)
     automatic_captions: list[str] = field(default_factory=list)
     thumbnail_headers: dict[str, str] = field(default_factory=dict, repr=False)
+    inspection: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
 @dataclass
@@ -64,6 +65,8 @@ class DownloadOptions:
     authentication_mode: str = "Auto"
     browser_profile: str = ""
     cookies_file: str = ""
+    video_format_id: str = ""
+    audio_format_id: str = ""
 
 
 @dataclass

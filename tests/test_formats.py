@@ -25,7 +25,7 @@ def test_available_formats_are_inspected_and_best_mp4_pair_is_selected():
         {"format_id": "v1080", "url": "u", "height": 1080, "fps": 30, "tbr": 2000, "ext": "mp4", "vcodec": "avc1", "acodec": "none"},
         {"format_id": "a", "url": "u", "abr": 128, "ext": "m4a", "vcodec": "none", "acodec": "aac"},
     ]
-    assert resolve_available_format(formats, "Best", "MP4", "Original/best audio") == ("v1080+a", [])
+    assert resolve_available_format(formats, "Best", "MP4", "Original/best audio") == ('best*[format_id="v1080"]+best*[format_id="a"]', [])
 
 
 def test_missing_quality_uses_highest_lower_and_reports_warning():
@@ -34,7 +34,7 @@ def test_missing_quality_uses_highest_lower_and_reports_warning():
         {"format_id": "a", "url": "u", "abr": 1, "ext": "webm", "vcodec": "none", "acodec": "opus"},
     ]
     selector, warnings = resolve_available_format(formats, "1080p", "MP4", "Original/best audio")
-    assert selector == "v+a"
+    assert selector == 'best*[format_id="v"]+best*[format_id="a"]'
     assert "1080p unavailable. Using 720p." in warnings
     assert any("MP4 streams were unavailable" in warning for warning in warnings)
 
@@ -54,7 +54,7 @@ def test_real_thumbnail_and_subtitle_postprocessors_are_configured():
 def test_html5_direct_format_with_unknown_codecs_is_playable():
     formats = [{"format_id": "0", "url": "https://media.test/video.mp4", "protocol": "https",
                 "ext": "mp4", "vcodec": None, "acodec": None}]
-    assert resolve_available_format(formats, "Best", "Auto", "Original/best audio") == ("0", [])
+    assert resolve_available_format(formats, "Best", "Auto", "Original/best audio") == ('best*[format_id="0"]', [])
 
 
 def test_automatic_captions_only_is_independent_from_normal_subtitles():
@@ -72,9 +72,9 @@ def test_quicktime_profile_prefers_h264_aac_before_higher_ranked_vp9_opus():
         {"format_id": "aac", "url": "u", "abr": 128, "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2"},
     ]
     assert resolve_available_format(
-        formats, "Best", "Auto", "Original/best audio", "macOS / QuickTime")[0] == "h264+aac"
+        formats, "Best", "Auto", "Original/best audio", "macOS / QuickTime")[0] == 'best*[format_id="h264"]+best*[format_id="aac"]'
     assert resolve_available_format(
-        formats, "Best", "Auto", "Original/best audio", "Original / Best Available")[0] == "vp9+opus"
+        formats, "Best", "Auto", "Original/best audio", "Original / Best Available")[0] == 'best*[format_id="vp9"]+best*[format_id="opus"]'
 
 
 def test_quicktime_profile_sets_mp4_merge_output():

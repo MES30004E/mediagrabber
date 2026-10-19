@@ -45,12 +45,10 @@ replace the current image. A selected proxy/Tor route that is unavailable blocks
 the thumbnail request instead of silently using Direct. No personal cookies or
 private media are used in the automated preview tests.
 
-## Remaining media-detail work
+## Individual media details
 
-This checkpoint does not yet implement per-video format/audio-track inspection,
-original/default or alternative audio-language controls, or per-item format and
-subtitle overrides. Existing batch subtitle-source/language/external/embed
-options remain available. Empty metadata is labelled **Not reported**, not
-invented as a language or a claim that a stream is absent. Expensive individual
-metadata inspection will be an explicit on-demand operation in the next
-checkpoint; there is no eager 828-video extraction here.
+**Inspect Video…** explicitly inspects the current visible row using the applied
+authentication, provider, runtime and selected network route. It never schedules
+828 metadata requests merely because a playlist was analysed. See
+[Media inspection](MEDIA_INSPECTION.md) for reported audio languages, exact stream
+choices, manual/automatic subtitles, per-item overrides and remaining limits.

@@ -20,6 +20,7 @@ from .job_diagnostics import (apply_failure, playable_formats, safe_format_summa
 from .logging_setup import redact_secrets
 from .media_verification import verify_requested_postprocessing
 from .models import DownloadJob, JobStatus, MediaItem
+from .media_details import details_from_info
 from .network import classify_tor_target
 from .parsing import as_yt_dlp_target, ensure_output_directory, input_kind, is_watch_later
 from .paths import find_binary
@@ -73,12 +74,13 @@ def _media_from_info(info: dict[str, Any], original: str, confidence: float | No
         automatic_captions=sorted((info.get("automatic_captions") or {}).keys()),
         thumbnail_headers={key: str(value) for key, value in (info.get("http_headers") or {}).items()
                            if key.casefold() in {"user-agent", "referer", "origin", "accept", "accept-language"}},
+        inspection=details_from_info(info) if "formats" in info else {},
     )
 
 
 def analyse_target(value: str, proxy: str | None = None, provider_url: str = "http://127.0.0.1:4416",
                    provider_home: str = "", auth_options: dict[str, Any] | None = None,
-                   runtime: RuntimeSnapshot | None = None) -> list[MediaItem]:
+                   runtime: RuntimeSnapshot | None = None, *, single_video: bool = False) -> list[MediaItem]:
     ydl_class = _ydl_class(runtime) if runtime is not None else _ydl_class()
     common = {
         "quiet": True,
@@ -89,6 +91,7 @@ def analyse_target(value: str, proxy: str | None = None, provider_url: str = "ht
     }
     common.update(fresh_authentication_options(auth_options or {}))
     common.update(yt_dlp_javascript_options())
+    if single_video: common.update(noplaylist=True, extract_flat=False, socket_timeout=20, extractor_retries=1)
     if input_kind(value) == "spotify":
         results: list[MediaItem] = []
         with ydl_class(common) as ydl:
@@ -102,6 +105,10 @@ def analyse_target(value: str, proxy: str | None = None, provider_url: str = "ht
     with ydl_class(common) as ydl:
         info = ydl.extract_info(as_yt_dlp_target(value), download=False)
     entries = (info or {}).get("entries")
+    if single_video and entries is not None:
+        raise ValueError("Inspect an individual video, not a playlist or search result.")
+    if single_video and info and "formats" not in info:
+        info = dict(info, formats=[info] if info.get("format_id") else [])
     if entries is not None:
         collection_title = str((info or {}).get("title") or (info or {}).get("playlist_title") or "")
         return [_media_from_info(entry, value, collection_title=collection_title, collection_type="Playlist")
@@ -112,14 +119,17 @@ def analyse_target(value: str, proxy: str | None = None, provider_url: str = "ht
 def analyse_with_authentication(value: str, proxy: str | None, provider_url: str, provider_home: str,
                                 mode: str, browser: str, profile: str, cookies_file: str,
                                 runtime: RuntimeSnapshot | None = None,
-                                status: Callable[[str], None] | None = None) -> tuple[list[MediaItem], str]:
+                                status: Callable[[str], None] | None = None, *, single_video: bool = False) -> tuple[list[MediaItem], str]:
+    def analyse(auth):
+        return analyse_target(value, proxy, provider_url, provider_home, auth, runtime,
+                              **({"single_video": True} if single_video else {}))
     mode = normalise_authentication_mode(mode)
     if mode == "Auto":
         if is_watch_later(value):
             configured_name, configured = configured_authentication_options(browser, profile, "")
-            return analyse_target(value, proxy, provider_url, provider_home, configured, runtime), f"Auto -> {configured_name}"
+            return analyse(configured), f"Auto -> {configured_name}"
         try:
-            return analyse_target(value, proxy, provider_url, provider_home, {}, runtime), "Auto -> None"
+            return analyse({}), "Auto -> None"
         except BaseException as error:
             if not requires_authentication(error):
                 raise
@@ -127,16 +137,24 @@ def analyse_with_authentication(value: str, proxy: str | None, provider_url: str
             # cookies.txt path only applies when Imported cookies.txt is selected.
             configured_name, configured = configured_authentication_options(browser, profile, "")
             if status: status(f"Authentication required. Retrying with {configured_name}…")
-            return analyse_target(value, proxy, provider_url, provider_home, configured, runtime), f"Auto -> {configured_name}"
+            return analyse(configured), f"Auto -> {configured_name}"
     selected = authentication_options(mode, browser, profile, cookies_file)
     # Explicit authentication is an attempt invariant. Format/player failures
     # must not turn a selected account into an unauthenticated request.
-    return analyse_target(value, proxy, provider_url, provider_home, selected, runtime), mode
+    return analyse(selected), mode
 
 
 def friendly_error(error: BaseException) -> str:
     from .job_diagnostics import classify_failure
     return str(classify_failure(error)["friendly"])
+
+
+def _activate_resolved_format(ydl, selector: str):
+    # YoutubeDL compiles this at construction; changing params alone does not
+    # change process_ie_result's selector (including after a 403 refresh).
+    if hasattr(ydl, "build_format_selector"):
+        ydl.format_selector = ydl.build_format_selector(selector)
+    ydl.params["format"] = selector
 
 
 def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provider_home: str,
@@ -249,6 +267,7 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
         # Subtitles are acquired in a separate optional pass after a valid media
         # output exists, so subtitle failures can never destroy or block media.
         ydl_options = build_ydl_options(job.options, proxy, include_subtitles=False, include_authentication=False)
+        metadata_selector = ydl_options["format"]  # YoutubeDL may retain and mutate this options dictionary.
         ydl_options.pop("cookiesfrombrowser", None); ydl_options.pop("cookiefile", None)
         ydl_options.update(fresh_authentication_options(auth_values))
         ydl_options.update(yt_dlp_javascript_options())
@@ -282,17 +301,19 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
             emit("YT-DLP", f"Extractor: {job.extractor_key or 'Unknown'}")
             emit("YT-DLP", f"{job.formats_playable} playable format(s) found")
             job.failure_stage = "Format resolution"
+            selected_streams = {key: getattr(job.options, key) for key in ("video_format_id", "audio_format_id")
+                                if getattr(job.options, key, "")}
             try:
                 selector, format_warnings = resolve_available_format(
                     playable, job.options.quality, job.options.container, job.options.audio_format,
-                    job.options.compatibility)
+                    job.options.compatibility, **selected_streams)
             except ValueError as error:
                 availability = str(info.get("availability") or info.get("live_status") or "").casefold()
                 if any(term in availability for term in ("private", "needs_auth", "premium", "subscriber", "members")):
                     raise RuntimeError(f"Authentication required: {error}") from None
                 raise RuntimeError(f"Requested format is not available: {error}") from None
             job.warnings.extend(warning for warning in format_warnings if warning not in job.warnings)
-            ydl.params["format"] = selector
+            _activate_resolved_format(ydl, selector)
             job.active_extractor_task = False; job.active_transfer_task = True
             job.last_state_transition = time.time(); job.postprocessing_stage = "Starting transfer"
             progress(job)
@@ -312,6 +333,10 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
                 job.metadata_success = False
                 job.formats_total = job.formats_playable = 0
                 job.playable_format_summary = []
+                # Re-extraction must not be filtered by expired concrete IDs.
+                # Obtain fresh metadata using the batch selector, then validate
+                # explicit per-item choices against those fresh formats below.
+                _activate_resolved_format(ydl, metadata_selector)
                 refreshed = ydl.extract_info(job.item.source_url, download=False)
                 if not refreshed: raise ValueError("No compatible format was found while refreshing media metadata.")
                 job.metadata_success = True
@@ -322,9 +347,9 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
                 job.failure_stage = "Format resolution"
                 refreshed_selector, refreshed_warnings = resolve_available_format(
                     refreshed_playable, job.options.quality, job.options.container, job.options.audio_format,
-                    job.options.compatibility)
+                    job.options.compatibility, **selected_streams)
                 job.warnings.extend(w for w in refreshed_warnings if w not in job.warnings)
-                ydl.params["format"] = refreshed_selector
+                _activate_resolved_format(ydl, refreshed_selector)
                 job.failure_stage = "Video transfer"
                 result = (ydl.process_ie_result(refreshed, download=True) if hasattr(ydl, "process_ie_result")
                           else ydl.extract_info(job.item.source_url, download=True))

@@ -95,3 +95,20 @@ collapsed-restart proportions and normal geometry persistence in fullscreen.
 No personal cookies, real private media, build outputs or local preference data
 belong in this checkpoint. Per-video media-detail work remains explicitly pending
 in `docs/PLAYLIST_WORKSPACE.md`; no release qualification is claimed.
+
+## On-demand inspection checkpoint — 19 October 2026
+
+Pre-commit scans covered 22 application commits plus reflogs/all refs (one known
+public manifest-key finding) and 148 provider commits (the same two public
+protocol constants). Final index and final commit scans are repeated before push.
+New tests use synthetic `.test` metadata and offline yt-dlp processing; no
+personal cookies or actual alternate-audio/private-media download is part of
+qualification. Inspection summaries exclude raw media/subtitle URLs and headers.
+
+The complete local suite passed **403 Python tests**, plus **10 extension tests**,
+protocol drift and dependency checks. All **16 media-detail backend regressions**
+also passed with the isolated checksum-verified `2026.10.10.233141` nightly.
+Review-driven regressions cover exact-ID selector keywords, yt-dlp's compiled
+selector, 403 metadata refresh and stale dialog Apply. This does not claim live
+download success, package validation or a release. Main, Swift schema/branches
+and provider pin remain unchanged.
