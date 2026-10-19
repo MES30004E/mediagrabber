@@ -125,3 +125,20 @@ manifest key) and 148 provider commits (the same two public protocol constants).
 Final staged source and the resulting commit history are scanned again before
 publication. The full components interface, hosted app packaging and release
 updater remain pending as described in `docs/RUNTIME_UPDATES.md`.
+
+## Components inventory/check checkpoint — 19 October 2026
+
+Local verification passed **433 Python tests**, **10 extension tests**, protocol
+drift and dependency checks. Offscreen rendering and a narrow-window regression
+confirm the Updates page has no horizontal overflow at 790×610. Read-only review
+confirmed response-relative rate-limit timing and the corrected layout. Public
+tokenless metadata probes accepted the documented API version; the app endpoint
+returned 404, provider `2.0.2`, FFmpeg distribution `b6.1.1`. No component was
+downloaded, replaced or qualified for live media by these probes.
+
+Pre-commit scans covered 24 application commits/all refs/reflogs (only the known
+public extension identity key) and 148 provider commits (the same two upstream
+public protocol constants). Final index and resulting history scans are repeated
+before push. No user runtime ledger, browser data, cookies, logs, downloaded media
+or packaging artefact belongs in this checkpoint. Non-yt-dlp installation and
+rollback, app packaging and release publication remain explicitly pending.

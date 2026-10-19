@@ -12,7 +12,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox, QStackedWidget, QGroupBox,
-    QVBoxLayout, QWidget,
+    QVBoxLayout, QWidget, QSizePolicy,
 )
 
 from .auth import YOUTUBE_ROBOTS_URL, browser_profiles, discover_browsers, verify_youtube_connection, YouTubeConnection
@@ -27,6 +27,7 @@ from .tasks import TaskManager
 from .torrent import format_aria2_diagnostic, inspect_aria2c
 from .yt_runtime import YtDlpRuntimeManager, get_runtime_manager
 from .ui_components import settings_page, DisclosureSection
+from .components import ComponentCatalog, runtime_inventory
 
 
 def _combo(values: list[str], current: str) -> QComboBox:
@@ -37,7 +38,7 @@ class SettingsWindow(QDialog):
     def __init__(self, settings: AppSettings, tor: ManagedTor, apply_callback: Callable[[AppSettings, object], None],
                  parent=None, runtime_manager: YtDlpRuntimeManager | None = None,
                  task_manager: TaskManager | None = None, embedded: bool = False, companion_controller=None,
-                 account_callback: Callable[[str], AppSettings] | None = None):
+                 account_callback: Callable[[str], AppSettings] | None = None, component_catalog=None):
         super().__init__(parent)
         self.original = settings; self.working = copy.deepcopy(settings); self.tor = tor; self.apply_callback = apply_callback
         self.runtime_manager = runtime_manager or get_runtime_manager()
@@ -50,6 +51,8 @@ class SettingsWindow(QDialog):
         self._companion_busy = False
         self._companion_deadline = 0
         if not self.runtime_manager.initialized: self.runtime_manager.initialize()
+        self.components = component_catalog or ComponentCatalog(self.runtime_manager, root=self.runtime_manager.root.parent / "components")
+        self._components_busy = False
         if embedded:
             self.setWindowFlags(Qt.WindowType.Widget)
         self.setWindowTitle("Settings"); self.resize(790, 610)
@@ -57,12 +60,14 @@ class SettingsWindow(QDialog):
         self.stack = QStackedWidget(); body.addWidget(self.sidebar); body.addWidget(self.stack, 1); outer.addLayout(body, 1)
         self.pages = {}
         for name, builder in [("General", self._general), ("Downloads", self._downloads), ("Network", self._network),
-                              ("Accounts", self._authentication), ("Torrents", self._torrents), ("Advanced", self._advanced)]:
+                              ("Accounts", self._authentication), ("Torrents", self._torrents),
+                              ("Updates", self._updates), ("Advanced", self._advanced)]:
             self.sidebar.addItem(name); page = builder(); self.pages[name] = page; self.stack.addWidget(page)
             self.sidebar.item(self.sidebar.count() - 1).setSizeHint(QSize(120, 36))
             for label in page.findChildren(QLabel):
                 if label.property("settingsTitle"): label.setText(name)
         self.sidebar.currentRowChanged.connect(self.stack.setCurrentIndex); self.sidebar.setCurrentRow(0)
+        self.sidebar.currentRowChanged.connect(lambda _row: self._refresh_components() if self.stack.currentWidget() is self.pages["Updates"] else None)
         standard = QDialogButtonBox.StandardButton.Apply if embedded else (
             QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Ok)
         self.buttons = QDialogButtonBox(standard)
@@ -452,14 +457,41 @@ class SettingsWindow(QDialog):
         self.provider_home.textChanged.connect(self._invalidate_auth)
         self.console_detail = _combo(["Normal", "Verbose", "Debug"], self.working.console_detail)
         form.addRow("Console detail", self.console_detail)
+        open_logs = QPushButton("Open Logs Folder"); open_logs.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_dir()))))
+        form.addRow("yt-dlp extra safe options", self.safe_options)
+        form.addRow("PO-token HTTP base URL", self.provider_url); form.addRow("Provider script folder", self.provider_home)
+        form.addRow("", open_logs)
+        reset = QPushButton("Reset all settings…"); reset.clicked.connect(self._reset); form.addRow("", reset); return page
+
+    def _updates(self):
+        page, form = self._page()
+        intro = QLabel("Updates & Components — release availability is not compatibility or download success. Non-yt-dlp components are not automatically replaced.")
+        intro.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        intro.setWordWrap(True); form.addRow(intro)
+        self.components_status = QLabel("Installed components have not been inspected yet."); self.components_status.setWordWrap(True)
+        self.components_check = QPushButton("Check app/provider/media-tool releases")
+        self.components_refresh = QPushButton("Refresh installed versions")
+        self.components_check.clicked.connect(lambda: self._refresh_components(check=True))
+        self.components_refresh.clicked.connect(lambda: self._refresh_components())
+        controls = QVBoxLayout(); controls.addWidget(self.components_check); controls.addWidget(self.components_refresh)
+        form.addRow(controls); form.addRow(self.components_status)
+        self.component_labels = {}
+        for key, name in (("app", "Morgan Media Downloader"), ("yt_dlp", "yt-dlp"), ("provider", "PO-token provider"),
+                          ("ffmpeg", "FFmpeg"), ("ffprobe", "FFprobe"), ("companion", "Cookie Companion")):
+            label = QLabel("Not inspected yet"); label.setWordWrap(True); label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            form.addRow(QLabel(name)); form.addRow(label); self.component_labels[key] = label
         self.yt_check_startup = QCheckBox(); self.yt_check_startup.setChecked(self.working.yt_dlp_check_updates_on_startup)
-        self.yt_check_startup.setToolTip("Automatic stable checks at most once every 24 hours; failed checks retry after 1 hour. Check Now bypasses this interval.")
+        self.yt_check_startup.setToolTip("Automatic component/stable checks at most once every 24 hours; failed checks retry after 1 hour. Manual checks bypass this interval.")
         self.yt_auto_install = QCheckBox(); self.yt_auto_install.setChecked(self.working.yt_dlp_auto_install_updates)
         self.yt_runtime_status = QLabel(); self.yt_runtime_status.setWordWrap(True); self.yt_runtime_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.yt_runtime_status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.runtime_channel = QComboBox()
-        self.runtime_channel.addItem("Stable (automatic checks)", "stable")
-        self.runtime_channel.addItem("Nightly (explicit opt-in; rollback available)", "nightly")
-        runtime_buttons = QHBoxLayout(); self.runtime_action_buttons = []
+        self.runtime_channel.addItem("Stable", "stable")
+        self.runtime_channel.addItem("Nightly (manual opt-in)", "nightly")
+        self.runtime_channel.setToolTip("Automatic checks use stable only. Nightly requires an explicit manual update; rollback remains available.")
+        runtime_buttons = QVBoxLayout(); self.runtime_action_buttons = []
         manager = self.runtime_manager
         for text, action in [("Check Now", None),
                              ("Update Now", None),
@@ -467,13 +499,45 @@ class SettingsWindow(QDialog):
                              ("Use Bundled Version", manager.use_bundled)]:
             button = QPushButton(text); button.clicked.connect(lambda _checked=False, label=text, fn=action: self._select_runtime_action(label, fn)); runtime_buttons.addWidget(button); self.runtime_action_buttons.append(button)
         self._refresh_runtime_status()
-        form.addRow("yt-dlp Updates", QLabel("Official release assets: checksum, structure, import and provider compatibility checks before activation. Nightly is not a live download guarantee."))
+        runtime_help = QLabel("Official release assets: checksum, structure, import and provider compatibility checks before activation. Nightly is not a live download guarantee.")
+        runtime_help.setWordWrap(True); runtime_help.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        form.addRow("yt-dlp Updates", runtime_help)
         form.addRow("Manual update channel", self.runtime_channel)
-        form.addRow("Check for updates on startup", self.yt_check_startup); form.addRow("Automatically install stable updates", self.yt_auto_install)
+        form.addRow("Check component updates automatically", self.yt_check_startup); form.addRow("Automatically install stable yt-dlp updates", self.yt_auto_install)
         form.addRow("yt-dlp", self.yt_runtime_status); form.addRow("", runtime_buttons)
-        open_logs = QPushButton("Open Logs Folder"); open_logs.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_dir()))))
-        form.addRow("yt-dlp extra safe options", self.safe_options); form.addRow("ffmpeg", QLabel(find_binary("ffmpeg") or "Not available")); form.addRow("ffprobe", QLabel(find_binary("ffprobe") or "Not available")); form.addRow("aria2", QLabel("See Torrents → Test Torrent Engine")); form.addRow("PO-token provider", QLabel("Live status is shown in the main status bar")); form.addRow("", open_logs)
-        reset = QPushButton("Reset all settings…"); reset.clicked.connect(self._reset); form.addRow("", reset); return page
+        return page
+
+    def _refresh_components(self, *, check=False, automatic=False):
+        if self._components_busy: return
+        self._components_busy = True
+        self.components_check.setEnabled(False); self.components_refresh.setEnabled(False)
+        self.components_status.setText("Checking public releases and local components…" if check else "Inspecting local components…")
+        catalog = self.components
+        def operation(_cancel, _progress):
+            if check: catalog.check_releases(automatic=automatic)
+            return catalog.inventory()
+        self.task_manager.start("components", operation, on_result=self._components_ready,
+                                on_error=self._components_error, on_finished=self._components_finished)
+
+    def _components_ready(self, rows):
+        for row in rows:
+            if row["id"] == "yt_dlp": row = runtime_inventory(self.runtime_manager.describe())
+            self._render_component(row)
+        self.components_status.setText("Inspection complete. Review each component's errors and compatibility limits; nothing was installed by this check.")
+
+    def _render_component(self, row):
+        label = self.component_labels.get(row["id"])
+        if label is None: return
+        label.setText(f"Installed: {row['installed']}\nLatest known: {row['latest']}\nCompatibility: {row['compatibility']}\n"
+                          f"Last successful check: {row['last_checked']}\nLast successful update: {row['last_update']}\n"
+                          f"Last error: {row['last_error']}\nRollback: {row['rollback']}\nAction: {row['action']}")
+
+    def _components_error(self, *_):
+        self.components_status.setText("Component inspection failed. Retry; check network access and local component permissions. No component was replaced.")
+
+    def _components_finished(self, *_):
+        self._components_busy = False
+        self.components_check.setEnabled(True); self.components_refresh.setEnabled(True)
 
     def _choose_directory(self, target: QLineEdit):
         if chosen := QFileDialog.getExistingDirectory(self, "Choose folder", target.text()): target.setText(chosen)
@@ -583,6 +647,7 @@ class SettingsWindow(QDialog):
 
     def _refresh_runtime_status(self):
         info = self.runtime_manager.describe()
+        self._render_component(runtime_inventory(info))
         compatibility = f"\nCompatibility: {info['compatibility_error']}" if info["compatibility_error"] else ""
         self.yt_runtime_status.setText(
             f"Current version: {info['active_version']}\nBundled version: {info['bundled_version']}\n"

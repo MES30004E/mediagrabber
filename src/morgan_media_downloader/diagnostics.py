@@ -29,7 +29,9 @@ def _binary_check(name: str) -> CheckResult:
         return CheckResult(name, False, f"{name} not found")
     try:
         result = subprocess.run([path, "-version"], capture_output=True, text=True, timeout=4, check=False)
-        first = (result.stdout or result.stderr).splitlines()[0]
+        lines = (result.stdout or result.stderr).splitlines()
+        if not lines: return CheckResult(name, False, f"{name} returned no version information")
+        first = lines[0]
         return CheckResult(name, result.returncode == 0, first)
     except (OSError, subprocess.TimeoutExpired) as error:
         return CheckResult(name, False, str(error))

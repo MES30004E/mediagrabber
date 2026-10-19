@@ -1921,6 +1921,7 @@ class MainWindow(QMainWindow):
         manager = self.runtime_manager
         self.task_manager.start("yt-runtime", lambda _cancel, _progress, m=manager: m.check_and_update(auto_install, automatic=True),
                                 on_result=self._yt_update_ready)
+        self.settings_panel._refresh_components(check=True, automatic=True)
 
     def _yt_update_ready(self, _result: object):
         self._update_provider_status()

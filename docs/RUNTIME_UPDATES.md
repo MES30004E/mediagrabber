@@ -1,7 +1,7 @@
 # Runtime update history and cadence
 
 The existing `YtDlpRuntimeManager` remains the only yt-dlp installer. Settings →
-Advanced shows active/bundled versions, latest known stable and nightly releases,
+Updates shows active/bundled versions, latest known stable and nightly releases,
 independent successful-check times and errors for each channel, successful-update
 time, current operation status and rollback choices. These are separate facts:
 a successful release check is not a successful installation or media download.
@@ -31,9 +31,9 @@ previous version is not a promise that an externally modified file is usable.
 
 ## Scope still outstanding
 
-This checkpoint improves the runtime foundation; it does **not** complete the
-requested Updates & Components screen for the app, provider, FFmpeg/FFprobe and
-Cookie Companion. Those components still need consistent inventory/release
-metadata, compatibility and safe update policies. Hosted packaging, app launch
+The [Updates & Components screen](COMPONENT_UPDATES.md) now provides inventory,
+release metadata and explicit compatibility/update-policy limits for the app,
+provider, FFmpeg/FFprobe and Cookie Companion. It does **not** yet install or roll
+back those non-yt-dlp components. Hosted packaging, app launch
 qualification and staged application replacement/rollback also remain pending.
 No application release is published by a runtime action or development commit.

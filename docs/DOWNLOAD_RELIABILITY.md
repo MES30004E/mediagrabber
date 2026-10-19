@@ -38,7 +38,7 @@ user's account. No personal cookie or live YouTube request was used by this work
   provider import compatibility, persistent selection and rollback. Stable
   automatic checks remain stable-only; selecting the manual nightly channel does
   not opt into unattended nightly updates.
-- Settings → Advanced offers a manual channel selector alongside the existing
+- Settings → Updates (originally Advanced) offers a manual channel selector alongside the existing
   Check Now / Update Now / Roll Back / Use Bundled Version controls. Active
   channel, latest nightly and last error are displayed. These are import and
   integrity checks, not a live download-success indicator.
@@ -87,7 +87,7 @@ temporary artifacts are not release assets and must not be committed.
    PYTHONPATH=src .venv/bin/python -m morgan_media_downloader
    ```
 
-2. In Settings → Advanced, choose **Nightly** as the manual update channel, click
+2. In Settings → Updates, choose **Nightly** as the manual update channel, click
    **Check Now**, review the version, then **Update Now**. These are immediate
    component actions, not unsaved settings edits; no extra Apply is needed for a
    runtime action. Do not infer account verification from update success.
