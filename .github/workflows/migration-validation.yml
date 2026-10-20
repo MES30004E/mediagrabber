@@ -113,7 +113,6 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 35
     env:
-      MORGAN_PROVIDER_STAGE: ${{ runner.temp }}/morgan-provider-stage
       HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -131,6 +130,7 @@ jobs:
           python -m pip check
           python -m PyInstaller --version
           test "$(uname -m)" = arm64
+          echo "MORGAN_PROVIDER_STAGE=$RUNNER_TEMP/morgan-provider-stage" >> "$GITHUB_ENV"
       - name: Build pinned provider and verified Node in an isolated stage
         run: |
           brew install pkgconf cairo pango
