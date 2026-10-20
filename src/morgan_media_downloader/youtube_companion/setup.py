@@ -8,9 +8,26 @@ import shlex
 import sys
 
 from .bridge import HOST, ORIGIN
+from ..paths import bundle_root
 
 MARKER = "Morgan Media Downloader development companion v1"
 BUNDLE_ID = "com.morgan.media-downloader.dev"
+
+
+def extension_directory():
+    return bundle_root() / "companion" / "chrome"
+
+
+def packaged_host():
+    if not getattr(sys, "frozen", False): return None
+    host = Path(sys.executable).resolve().with_name("MorganNativeHost")
+    _safe_path(host)
+    extension = extension_directory()
+    if (not host.is_file() or not os.access(host, os.X_OK) or
+            any(not (extension / name).is_file() for name in
+                ("manifest.json", "core.mjs", "popup.js", "popup.html", "popup.css"))):
+        raise ValueError("setup.bundle_incomplete")
+    return host
 
 
 def locations(home=None):
@@ -64,7 +81,9 @@ def _inspect(paths, *, launcher=True):
             raise ValueError("setup.foreign_launcher")
 
 
-def install(*, home=None, repository=None, python=None, launcher=True):
+def install(*, home=None, repository=None, python=None, launcher=False):
+    bundled = packaged_host()  # Validate everything before touching registration.
+    if bundled is not None: launcher = False
     paths = locations(home)
     _inspect(paths, launcher=launcher)  # Inspect only targets this operation changes.
     repository = Path(repository) if repository is not None else Path(__file__).resolve().parents[3]
@@ -81,11 +100,20 @@ raise SystemExit(main())
 # stdout is reserved exclusively for Chrome native-message frames.
 exec {shlex.quote(str(python))} -I {shlex.quote(str(paths["host"] / "bootstrap.py"))} "$@" 2>/dev/null
 '''
-    _write(paths["host"] / "bootstrap.py", bootstrap)
+    if bundled is not None:
+        wrapper = f'''#!/bin/sh
+# {MARKER}
+# Start this independent one-file helper with a fresh PyInstaller environment.
+PYINSTALLER_RESET_ENVIRONMENT=1 exec {shlex.quote(str(bundled))} "$@" 2>/dev/null
+'''
+    else:
+        _write(paths["host"] / "bootstrap.py", bootstrap)
     _write(paths["host"] / "host", wrapper, 0o700)
     manifest = {"name": HOST, "description": MARKER, "path": str(paths["host"] / "host"),
                 "type": "stdio", "allowed_origins": [ORIGIN]}
     _write(paths["manifest"], json.dumps(manifest, indent=2))
+    if bundled is not None:
+        (paths["host"] / "bootstrap.py").unlink(missing_ok=True)
     if launcher:
         script = f'''#!/bin/sh
 # {MARKER}
@@ -110,29 +138,38 @@ PYTHONPATH={shlex.quote(str(repository / "src"))} {shlex.quote(str(python))} -m 
     return paths
 
 
-def remove(*, home=None):
-    paths = locations(home); _inspect(paths)
+def remove(*, home=None, launcher=None):
+    if launcher is None: launcher = not getattr(sys, "frozen", False)
+    paths = locations(home); _inspect(paths, launcher=launcher)
     # Exact files only, never recursive deletion of user directories.
-    for path in (paths["manifest"], paths["host"] / "host", paths["host"] / "bootstrap.py",
-                 paths["launcher"] / "Contents/MacOS/launch", paths["launcher"] / "Contents/Info.plist"):
+    files = [paths["manifest"], paths["host"] / "host", paths["host"] / "bootstrap.py"]
+    if launcher: files += [paths["launcher"] / "Contents/MacOS/launch", paths["launcher"] / "Contents/Info.plist"]
+    for path in files:
         path.unlink(missing_ok=True)
-    for path in (paths["host"], paths["launcher"] / "Contents/MacOS", paths["launcher"] / "Contents", paths["launcher"]):
+    directories = [paths["host"]]
+    if launcher: directories += [paths["launcher"] / "Contents/MacOS", paths["launcher"] / "Contents", paths["launcher"]]
+    for path in directories:
         if path.exists(): path.rmdir()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("install", "remove", "status", "disconnect"))
+    parser.add_argument("--development-launcher", action="store_true", help="Explicitly include the legacy source-dependent Desktop launcher")
     args = parser.parse_args()
     try:
         if args.action == "install":
-            install(); print("User-level host and development launcher installed. Enable the extension in Chrome manually.")
-        elif args.action == "remove": remove(); print("Companion host and development launcher removed. Keychain session unchanged; use disconnect to delete it.")
+            install(launcher=args.development_launcher)
+            print("User-level native host installed. Enable the extension in Chrome manually.")
+            if args.development_launcher and not getattr(sys, "frozen", False): print("Legacy development launcher installed by explicit request.")
+        elif args.action == "remove":
+            remove(launcher=args.development_launcher and not getattr(sys, "frozen", False))
+            print("Requested Companion setup artifacts removed. Keychain session unchanged; use disconnect to delete it.")
         elif args.action == "disconnect":
             from .bridge import CompanionController
             CompanionController().disconnect(); print("Stored session deleted.")
         else:
-            paths = locations(); _inspect(paths)
+            paths = locations(); _inspect(paths, launcher=args.development_launcher and not getattr(sys, "frozen", False))
             print("Native host registered." if paths["manifest"].is_file() else "Native host not registered.")
     except Exception:
         print("Companion setup failed. Check user-folder permissions, existing files and project availability; nothing requires administrator access.", file=sys.stderr)

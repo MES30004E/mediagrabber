@@ -1,9 +1,15 @@
-# YouTube Cookie Companion (development)
+# YouTube Cookie Companion
 
 Morgan's Python/PySide6 app can receive a deliberately captured **Chrome
 Incognito** YouTube session. This is separate from ordinary browser-profile
 cookies. It does not decrypt Spotify, bypass Google verification, prove private
-content permission, or provide a standalone distributed app.
+content permission, or by itself qualify a standalone distributed app.
+
+For the packaged-host implementation and its hosted qualification scope, see
+[Packaged Companion](PACKAGED_COMPANION.md). A packaged app uses its embedded
+console helper and extension files; it does not register a source-Python bootstrap
+or create a Desktop launcher. Chrome extension installation/Incognito approval
+remain explicit user actions in both modes.
 
 ## Install and connect
 
@@ -19,7 +25,10 @@ tools):
 - `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.morgan.media_downloader.youtube.json`
 - `~/Library/Application Support/Morgan Media Downloader/companion-host/host`
 - `~/Library/Application Support/Morgan Media Downloader/companion-host/bootstrap.py`
-- `~/Desktop/Morgan Media Downloader Dev.app`
+
+No Desktop launcher is created by default. The legacy source-dependent launcher
+is available only with an explicit `--development-launcher` request; it is not
+the standalone application and is never created by frozen-app setup.
 
 Existing targets are inspected; foreign/modified layouts are refused rather
 than overwritten. Other native hosts/extensions are untouched. Reinstall after
@@ -32,7 +41,7 @@ absolute paths to this checkout and Python, not bundled dependencies.
    manifest key gives a stable identity; it is not a private signing key.
 3. Open extension **Details → Allow in Incognito**. Pin the extension. These
    Chrome approvals are manual; Morgan never changes browser policy.
-4. Open the development app, or run:
+4. Open an existing development launcher, or run the source application:
 
    ```sh
    PYTHONPATH=src .venv/bin/python -m morgan_media_downloader
@@ -146,8 +155,9 @@ PYTHONPATH=src .venv/bin/python -m morgan_media_downloader.youtube_companion.set
 PYTHONPATH=src .venv/bin/python -m morgan_media_downloader.youtube_companion.setup remove
 ```
 
-`remove` deletes only the inspected host/development-launcher files and empty
-directories it owns; it does not delete the Keychain item implicitly. Run
+`remove` deletes only the inspected host files and empty directories it owns;
+adding `--development-launcher` explicitly includes an owned legacy launcher.
+It does not delete the Keychain item implicitly. Run
 `disconnect` first. In Chrome's extensions page, manually **Remove** the Morgan
 extension. Control files contain no cookies; they may remain after removal, and
 pending authorizations expire after five minutes. No broad user-folder deletion.

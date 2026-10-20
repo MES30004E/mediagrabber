@@ -299,7 +299,8 @@ class SettingsWindow(QDialog):
 
     def _show_companion_setup(self):
         from .youtube_companion.bridge import EXTENSION_ID
-        extension = Path(__file__).resolve().parents[2] / "companion/chrome"
+        from .youtube_companion.setup import extension_directory
+        extension = extension_directory()
         QMessageBox.information(self, "Chrome Incognito companion setup",
             f"1. Open chrome://extensions in Google Chrome. Enable Developer mode, then Load unpacked:\n{extension}\n\n"
             f"2. Confirm extension ID: {EXTENSION_ID}. Open Details → Allow in Incognito. Pin the extension.\n\n"

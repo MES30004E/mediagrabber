@@ -142,3 +142,20 @@ public protocol constants). Final index and resulting history scans are repeated
 before push. No user runtime ledger, browser data, cookies, logs, downloaded media
 or packaging artefact belongs in this checkpoint. Non-yt-dlp installation and
 rollback, app packaging and release publication remain explicitly pending.
+
+## Packaged Companion source checkpoint — 20 October 2026
+
+The full local suite passed **445 Python tests**, plus **10 extension tests**,
+protocol drift and dependency checks. Native-host tests include real source
+subprocess framing, isolated protocol-checker behavior, incomplete-bundle refusal,
+source-to-frozen registration migration and no default Desktop launcher. No local
+PyInstaller build, Apple build tool, signing, browser cookie capture or real
+session read was run. Hosted frozen-helper compilation/protocol/signature checks
+are required separately; this checkpoint does not claim full app qualification.
+
+Pre-commit scans covered 25 application commits/all refs/reflogs (the known public
+extension identity key) and 148 provider commits (the two known upstream public
+protocol constants). Exact staged source and resulting commit history are scanned
+again before push. The workflow has read-only repository permissions, depends on
+existing Python/extension and Swift/backend qualification, and performs no upload,
+release, tag or installation. Main, Swift branches and provider pin are preserved.
