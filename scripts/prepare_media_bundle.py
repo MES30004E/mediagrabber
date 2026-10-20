@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -92,7 +93,12 @@ def prepare(destination: Path, *, fetcher=download, runner=run):
         environment = dict(os.environ, PKG_CONFIG_PATH=os.pathsep.join(str(Path(prefix) / "lib/pkgconfig") for prefix in prefixes),
                            MACOSX_DEPLOYMENT_TARGET="15.0")
         jobs = str(min(os.cpu_count() or 2, 8))
-        runner(["./configure", *FFMPEG_OPTIONS], cwd=sources["ffmpeg"], env=environment)
+        # LAME deliberately uses configure's direct header/library probe, not
+        # pkg-config. Its keg must be visible to the compiler and linker too.
+        compiler_paths = " ".join("-I" + shlex.quote(str(Path(prefix) / "include")) for prefix in prefixes)
+        linker_paths = " ".join("-L" + shlex.quote(str(Path(prefix) / "lib")) for prefix in prefixes)
+        ffmpeg_options = [*FFMPEG_OPTIONS, "--extra-cflags=" + compiler_paths, "--extra-ldflags=" + linker_paths]
+        runner(["./configure", *ffmpeg_options], cwd=sources["ffmpeg"], env=environment)
         runner(["make", "-j" + jobs, "ffmpeg", "ffprobe"], cwd=sources["ffmpeg"], env=environment)
         runner(["./configure", *ARIA2_OPTIONS], cwd=sources["aria2"], env=environment)
         runner(["make", "-j" + jobs], cwd=sources["aria2"], env=environment)
@@ -108,7 +114,7 @@ def prepare(destination: Path, *, fetcher=download, runner=run):
         formulae = json.loads(runner(["brew", "info", "--json=v2", *CODEC_FORMULAE]).stdout)
         (licenses / "codec-build-formulae.json").write_text(json.dumps(formulae, indent=2) + "\n")
         manifest = {"schema": 1, "ffmpeg_version": "9.0.2", "aria2_version": "1.37.0", "sources": SOURCES,
-            "ffmpeg_options": FFMPEG_OPTIONS, "aria2_options": ARIA2_OPTIONS,
+            "ffmpeg_options": ffmpeg_options, "aria2_options": ARIA2_OPTIONS,
             "versions": versions, "deployment_target": "15.0",
             "binaries": {name: {"sha256": hashlib.sha256((binaries / name).read_bytes()).hexdigest()}
                          for name in ("ffmpeg", "ffprobe", "aria2c")},

@@ -100,3 +100,14 @@ def test_media_version_requires_exact_token_not_numeric_prefix(tmp_path, bad_too
             value.stdout = value.stdout.replace("9.0.2" if bad_tool == "ffmpeg" else "1.37.0", bad_version)
         return value
     with pytest.raises(ValueError): packaging.validate_tools(tmp_path, run)
+
+
+def test_ffmpeg_receives_direct_header_and_library_paths_for_non_pkgconfig_lame(tmp_path, monkeypatch):
+    archives = inputs(monkeypatch); original = builder()
+    def run(command, **kwargs):
+        if command[0] == "./configure" and Path(kwargs["cwd"]).name.startswith("ffmpeg"):
+            flags = " ".join(command)
+            assert "-I/fixture/brew/lame/include" in flags
+            assert "-L/fixture/brew/lame/lib" in flags
+        return original(command, **kwargs)
+    assert packaging.prepare(tmp_path / "stage", fetcher=archives.__getitem__, runner=run).is_dir()

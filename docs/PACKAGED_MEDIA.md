@@ -18,7 +18,9 @@ checks. Existing destinations, including symlinks, are refused.
 
 FFmpeg uses explicit external libraries with automatic detection disabled. Hosted
 Homebrew supplies the source build's codec dependencies (`aom`, `lame`, `opus`,
-`libvpx`, `x264`, `x265`) and build tools. Homebrew verifies its downloads;
+`libvpx`, `x264`, `x265`) and build tools. Both pkg-config and explicit compiler/
+linker paths are supplied: FFmpeg's LAME check does not use pkg-config.
+Homebrew verifies its downloads;
 `codec-build-formulae.json` records current formula metadata rather than claiming
 those packages are independently pinned by this repository. The official standard
 [FFmpeg formula](https://formulae.brew.sh/formula/ffmpeg) does not include all the
