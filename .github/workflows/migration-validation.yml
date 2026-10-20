@@ -111,7 +111,7 @@ jobs:
     name: Packaged runtime integration (not release qualification)
     needs: [python-tests, swift-tests]
     runs-on: macos-15
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
@@ -131,11 +131,16 @@ jobs:
           python -m PyInstaller --version
           test "$(uname -m)" = arm64
           echo "MORGAN_PROVIDER_STAGE=$RUNNER_TEMP/morgan-provider-stage" >> "$GITHUB_ENV"
+          echo "MORGAN_MEDIA_STAGE=$RUNNER_TEMP/morgan-media-stage" >> "$GITHUB_ENV"
       - name: Build pinned provider and verified Node in an isolated stage
         run: |
           brew install pkgconf cairo pango
           python scripts/prepare_provider_bundle.py "$MORGAN_PROVIDER_STAGE"
           brew info --json=v2 cairo pango > "$MORGAN_PROVIDER_STAGE/licenses/canvas-build-formulae.json"
+      - name: Build verified media sources with application codec support
+        run: |
+          brew install pkgconf nasm aom lame opus libvpx x264 x265
+          python scripts/prepare_media_bundle.py "$MORGAN_MEDIA_STAGE"
       - name: Build GUI bundle with separate console native host
         # This runs only on the hosted runner, never through the local build
         # script that would replace the user's existing dist installation.
@@ -144,6 +149,7 @@ jobs:
         run: |
           python scripts/check_packaged_companion.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           python scripts/check_packaged_provider.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
+          python scripts/check_packaged_media.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           codesign --verify --deep --strict "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
-      # No upload, release, tag, installation or claim of media-tool/UI launch
-      # qualification. Those gates must be added before release publication.
+      # No upload, release, tag or installation. UI launch, source/license
+      # obligations and full release qualification remain separate gates.

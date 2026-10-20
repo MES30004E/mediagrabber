@@ -23,8 +23,14 @@ if stage:
         if resource.suffix == ".node": runtime_binaries.append((str(resource), destination))
         else: datas.append((str(resource), destination))
     datas.extend([(str(stage / "licenses"), "licenses"), (str(stage / "provider-build.json"), ".")])
-else:
+elif not os.environ.get("MORGAN_MEDIA_STAGE"):
     datas.append((str(root / "resources" / "bin"), "bin"))
+media_stage = os.environ.get("MORGAN_MEDIA_STAGE")
+if media_stage:
+    media_stage = Path(media_stage).resolve(strict=True)
+    if not (media_stage / "media-build.json").is_file(): raise ValueError("Media packaging stage is incomplete")
+    runtime_binaries.extend((str(media_stage / "bin" / name), "bin") for name in ("ffmpeg", "ffprobe", "aria2c"))
+    datas.extend([(str(media_stage / "licenses/media"), "licenses/media"), (str(media_stage / "media-build.json"), ".")])
 hiddenimports = [
     "yt_dlp_plugins.extractor.getpot_bgutil",
     "yt_dlp_plugins.extractor.getpot_bgutil_http",
@@ -60,4 +66,5 @@ coll = COLLECT(host_exe, exe, a.binaries, a.datas, strip=False, upx=False, upx_e
 app = BUNDLE(coll, name="Morgan Media Downloader.app", icon=str(root / "resources" / "AppIcon.icns"),
              bundle_identifier="com.morgan.media-downloader", version="0.1.0",
              info_plist={"CFBundleExecutable": "Morgan Media Downloader", "NSHighResolutionCapable": True,
-                         "LSMinimumSystemVersion": "12.0", "NSHumanReadableCopyright": "Copyright © 2026 Morgan"})
+                         "LSMinimumSystemVersion": "15.0" if media_stage else "12.0",
+                         "NSHumanReadableCopyright": "Copyright © 2026 Morgan"})

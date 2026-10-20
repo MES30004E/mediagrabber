@@ -45,9 +45,10 @@ The staged spec does not silently include the old ignored `resources/bin` media
 binaries. Local inspection found FFmpeg 6.0 configured with `--enable-nonfree`,
 despite the old download script naming a different release. Those existing files
 are preserved locally but are not an approved public-release input. A maintained,
-integrity-checked FFmpeg/FFprobe/aria2 payload with encoder, provenance, matching
-source and licensing review is still required. No full app launch, media-tool
-execution, authenticated download, minimum-macOS compatibility or release approval
-is implied by this integration gate. No assets are uploaded and no tags/releases
+integrity-checked FFmpeg/FFprobe/aria2 payload now has a separate
+[hosted source-build and synthetic-media gate](PACKAGED_MEDIA.md); matching source
+and licensing review remain required before distribution. No full app launch,
+authenticated download, minimum-macOS compatibility or release approval is
+implied by these integration gates. No assets are uploaded and no tags/releases
 are created. Signing/notarization and application replacement/rollback remain
 separate work.

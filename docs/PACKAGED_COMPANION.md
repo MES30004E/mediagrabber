@@ -45,10 +45,11 @@ helper runs; inspect the actual hosted job before declaring that result.
 
 ## Still not a release
 
-This job does not upload, publish, tag, replace an installed app, or qualify media
-tools, UI launch, live Chrome/Keychain interaction or authenticated downloads.
+This job does not upload, publish, tag, replace an installed app, or qualify
+UI launch, live Chrome/Keychain interaction or authenticated downloads.
 The additional offline provider checks are described in [PACKAGED_PROVIDER.md](PACKAGED_PROVIDER.md).
-Full media-tool bundling, supported macOS-version
+Media tools have a separate [source-build/synthetic-media gate](PACKAGED_MEDIA.md).
+Full supported macOS-version
 qualification, app launch smoke tests, controlled assets/checksums/release approval
 and safe application replacement/recovery remain required. The existing plist's
 minimum OS value is not evidence of compatibility on that OS. No release should
