@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from .paths import bundle_root
 
 
 @dataclass
@@ -30,6 +31,8 @@ def find_script_home(configured: str = "") -> Path | None:
     env_home = os.environ.get("MORGAN_BGUTIL_HOME")
     if env_home:
         candidates.append(Path(env_home).expanduser() / "server")
+    if getattr(sys, "frozen", False):
+        candidates.append(bundle_root() / "provider_server")
     candidates.extend([
         Path.cwd() / "bgutil-ytdlp-pot-provider" / "server",
         Path.home() / "bgutil-ytdlp-pot-provider" / "server",
@@ -47,6 +50,8 @@ def find_script_home(configured: str = "") -> Path | None:
 
 def find_runtime(*, for_player: bool = False) -> Path | None:
     candidates: list[Path] = []
+    if getattr(sys, "frozen", False):
+        candidates.append(bundle_root() / "bin" / "node")
     if found := shutil.which("node"):
         candidates.append(Path(found))
     if found := shutil.which("deno"):

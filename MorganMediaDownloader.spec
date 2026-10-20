@@ -1,12 +1,30 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import os
 
 root = Path(SPECPATH)
 datas = [
-    (str(root / "resources" / "bin"), "bin"),
     (str(root / "companion" / "chrome"), "companion/chrome"),
     (str(root / "bgutil-ytdlp-pot-provider" / "plugin" / "yt_dlp_plugins"), "provider_plugin/yt_dlp_plugins"),
 ]
+runtime_binaries = []
+stage = os.environ.get("MORGAN_PROVIDER_STAGE")
+if stage:
+    stage = Path(stage).resolve(strict=True)
+    server = stage / "provider_server"
+    if not (stage / "provider-build.json").is_file() or not (server / "build/generate_once.js").is_file():
+        raise ValueError("Provider packaging stage is incomplete")
+    runtime_binaries.append((str(stage / "bin/node"), "bin"))
+    for resource in server.rglob("*"):
+        if not resource.is_file(): continue
+        if resource.is_symlink() and not resource.resolve().is_relative_to(server):
+            raise ValueError("Provider resource escapes its stage")
+        destination = str(Path("provider_server") / resource.relative_to(server).parent)
+        if resource.suffix == ".node": runtime_binaries.append((str(resource), destination))
+        else: datas.append((str(resource), destination))
+    datas.extend([(str(stage / "licenses"), "licenses"), (str(stage / "provider-build.json"), ".")])
+else:
+    datas.append((str(root / "resources" / "bin"), "bin"))
 hiddenimports = [
     "yt_dlp_plugins.extractor.getpot_bgutil",
     "yt_dlp_plugins.extractor.getpot_bgutil_http",
@@ -16,7 +34,7 @@ hiddenimports = [
 a = Analysis(
     [str(root / "launcher.py")],
     pathex=[str(root / "src"), str(root / "bgutil-ytdlp-pot-provider" / "plugin")],
-    binaries=[], datas=datas, hiddenimports=hiddenimports,
+    binaries=runtime_binaries, datas=datas, hiddenimports=hiddenimports,
     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[], noarchive=False,
 )
 pyz = PYZ(a.pure)

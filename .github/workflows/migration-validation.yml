@@ -108,10 +108,13 @@ jobs:
           swift test
 
   packaged-companion:
-    name: Packaged Companion (not release qualification)
+    name: Packaged runtime integration (not release qualification)
     needs: [python-tests, swift-tests]
     runs-on: macos-15
-    timeout-minutes: 25
+    timeout-minutes: 35
+    env:
+      MORGAN_PROVIDER_STAGE: ${{ runner.temp }}/morgan-provider-stage
+      HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -128,6 +131,11 @@ jobs:
           python -m pip check
           python -m PyInstaller --version
           test "$(uname -m)" = arm64
+      - name: Build pinned provider and verified Node in an isolated stage
+        run: |
+          brew install pkgconf cairo pango
+          python scripts/prepare_provider_bundle.py "$MORGAN_PROVIDER_STAGE"
+          brew info --json=v2 cairo pango > "$MORGAN_PROVIDER_STAGE/licenses/canvas-build-formulae.json"
       - name: Build GUI bundle with separate console native host
         # This runs only on the hosted runner, never through the local build
         # script that would replace the user's existing dist installation.
@@ -135,6 +143,7 @@ jobs:
       - name: Verify actual bundled native protocol and extension identity
         run: |
           python scripts/check_packaged_companion.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
+          python scripts/check_packaged_provider.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           codesign --verify --deep --strict "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
       # No upload, release, tag, installation or claim of media-tool/UI launch
       # qualification. Those gates must be added before release publication.

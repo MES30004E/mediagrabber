@@ -25,7 +25,7 @@ it does not indicate that frozen mode uses a development launcher.
 
 ## Qualification
 
-The hosted **Packaged Companion (not release qualification)** job runs after the
+The hosted **Packaged runtime integration (not release qualification)** job runs after the
 full Linux Python/extension suite and macOS backend/Swift checks. It invokes the
 existing spec directly, in runner-temporary build/output folders; it does not run
 the local replacement script or install an app on the developer's Mac.
@@ -46,8 +46,9 @@ helper runs; inspect the actual hosted job before declaring that result.
 ## Still not a release
 
 This job does not upload, publish, tag, replace an installed app, or qualify media
-tools/provider-server execution, UI launch, live Chrome/Keychain interaction or
-authenticated downloads. Full tool/provider/JS bundling, supported macOS-version
+tools, UI launch, live Chrome/Keychain interaction or authenticated downloads.
+The additional offline provider checks are described in [PACKAGED_PROVIDER.md](PACKAGED_PROVIDER.md).
+Full media-tool bundling, supported macOS-version
 qualification, app launch smoke tests, controlled assets/checksums/release approval
 and safe application replacement/recovery remain required. The existing plist's
 minimum OS value is not evidence of compatibility on that OS. No release should
