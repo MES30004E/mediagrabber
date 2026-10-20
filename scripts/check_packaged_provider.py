@@ -46,6 +46,7 @@ def verify_native_dependencies(app: Path):
         if not resolved.is_relative_to(app): raise RuntimeError("Packaged file escapes bundle")
         if resolved in seen: continue
         seen.add(resolved)
+        path = resolved  # dyld resolves a framework's real location, not its shallow alias.
         with path.open("rb") as stream:
             if stream.read(4) not in magic: continue
         executable = (app / "Contents/MacOS") if (app / "Contents/MacOS").is_dir() else path.parent
@@ -55,7 +56,7 @@ def verify_native_dependencies(app: Path):
                 if value == prefix or value.startswith(prefix + "/"):
                     location = (base / value[len(prefix):].lstrip("/")).resolve()
                     if location.is_relative_to(app): return location
-            raise RuntimeError(f"Packaged Mach-O retains an external path: {value}")
+            raise RuntimeError(f"Packaged Mach-O {path.relative_to(app)} retains an external path: {value}")
         commands = subprocess.run(["/usr/bin/otool", "-l", str(path)], capture_output=True, text=True, timeout=15, check=True).stdout
         rpaths = []
         load_command = ""
@@ -77,7 +78,7 @@ def verify_native_dependencies(app: Path):
             else:
                 candidates = [relative_location(dependency)]
             if not any(candidate.is_relative_to(app) and candidate.is_file() for candidate in candidates):
-                raise RuntimeError(f"Packaged Mach-O dependency missing or external: {dependency}")
+                raise RuntimeError(f"Packaged Mach-O {path.relative_to(app)} dependency missing or external: {dependency}")
 
 
 if __name__ == "__main__":

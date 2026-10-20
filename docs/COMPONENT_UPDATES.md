@@ -48,5 +48,8 @@ This is not a second installer and does not blindly pull the provider submodule.
 Qualified release assets, installed-component provenance, package compatibility,
 application staging/stop/replacement/recovery and rollback must be connected
 before those update actions can be offered. No application release is published
-by Check or a development commit. Hosted packaging and native-host bundle
-integration are still outstanding; local licence-gated packaging is not run.
+by Check or a development commit. Hosted native-host bundle integration has
+passed its narrow protocol checks. Node/provider offline integration now has a
+separate hosted gate; full media-tool/UI/release qualification remains outstanding.
+See [Companion](PACKAGED_COMPANION.md) and [provider](PACKAGED_PROVIDER.md) scope.
+Local licence-gated packaging is not run.

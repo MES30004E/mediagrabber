@@ -80,3 +80,16 @@ def test_native_gate_does_not_treat_dylib_identity_as_loaded_dependency(tmp_path
         return SimpleNamespace(stdout="Load command 1\n          cmd LC_ID_DYLIB\n      cmdsize 48\n         name @rpath/libfoo.dylib (offset 24)\n")
     monkeypatch.setattr("scripts.check_packaged_provider.subprocess.run", run)
     verify_native_dependencies(tmp_path)
+
+
+def test_native_gate_resolves_loader_path_from_real_framework_not_shallow_alias(tmp_path, monkeypatch):
+    from scripts.check_packaged_provider import verify_native_dependencies
+    binary = tmp_path / "Contents/Frameworks/Qt/libfoo.framework/Versions/A/libfoo"
+    (tmp_path / "alias").symlink_to(binary.relative_to(tmp_path))
+    binary.parent.mkdir(parents=True); binary.write_bytes(b"\xcf\xfa\xed\xfe" + b"fixture")
+    (tmp_path / "Contents/Frameworks/libbar.dylib").write_text("fixture dependency")
+    def run(command, **kwargs):
+        if "-L" in command: return SimpleNamespace(stdout=f"{binary}:\n\t@rpath/libbar.dylib (compatibility version 1.0.0)\n")
+        return SimpleNamespace(stdout="Load command 1\n          cmd LC_RPATH\n      cmdsize 48\n         path @loader_path/../../../.. (offset 12)\n")
+    monkeypatch.setattr("scripts.check_packaged_provider.subprocess.run", run)
+    verify_native_dependencies(tmp_path)
