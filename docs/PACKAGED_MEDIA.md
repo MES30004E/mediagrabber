@@ -58,8 +58,9 @@ required in the same hosted job.
 
 ## Remaining release gates
 
-No uploads, tags, releases or local installations occur. GUI launch, deployment
-version compatibility, live authenticated downloads, full corresponding-source/
+No uploads, tags, releases or local installations occur. GUI launch has a
+separate [Cocoa startup gate](PACKAGED_APP.md). Deployment version/volume
+compatibility, live authenticated downloads, full corresponding-source/
 licence review, approved versioned assets/checksums/notes, signing/notarisation
 requirements and safe application replacement/recovery remain separate work.
 This gate does not claim the Python conversion UI's complete interaction flow or

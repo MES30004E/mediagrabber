@@ -150,6 +150,7 @@ jobs:
           python scripts/check_packaged_companion.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           python scripts/check_packaged_provider.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           python scripts/check_packaged_media.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
+          python scripts/check_packaged_app.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           codesign --verify --deep --strict "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
-      # No upload, release, tag or installation. UI launch, source/license
-      # obligations and full release qualification remain separate gates.
+      # No upload, release, tag or installation. Source/license obligations,
+      # supported OS/volume qualification and release approval remain separate.
