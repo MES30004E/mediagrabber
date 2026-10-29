@@ -470,7 +470,7 @@ class SettingsWindow(QDialog):
         intro.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         intro.setWordWrap(True); form.addRow(intro)
         self.components_status = QLabel("Installed components have not been inspected yet."); self.components_status.setWordWrap(True)
-        self.components_check = QPushButton("Check app/provider/media-tool releases")
+        self.components_check = QPushButton("Check app/provider releases (media ships with app)")
         self.components_refresh = QPushButton("Refresh installed versions")
         self.components_check.clicked.connect(lambda: self._refresh_components(check=True))
         self.components_refresh.clicked.connect(lambda: self._refresh_components())
@@ -530,6 +530,7 @@ class SettingsWindow(QDialog):
         label = self.component_labels.get(row["id"])
         if label is None: return
         label.setText(f"Installed: {row['installed']}\nLatest known: {row['latest']}\nCompatibility: {row['compatibility']}\n"
+                          + (f"Build provenance: {row['provenance']}\n" if row.get("provenance") else "") +
                           f"Last successful check: {row['last_checked']}\nLast successful update: {row['last_update']}\n"
                           f"Last error: {row['last_error']}\nRollback: {row['rollback']}\nAction: {row['action']}")
 

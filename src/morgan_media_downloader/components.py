@@ -17,12 +17,34 @@ from pathlib import Path
 from . import __version__
 from .diagnostics import _binary_check
 from .logging_setup import redact_secrets
-from .paths import application_support_dir, bundle_root
+from .paths import application_support_dir, bundle_root, find_binary
 
-REPOSITORIES = {"app": "MES30004E/mediagrabber", "provider": "Brainicism/bgutil-ytdlp-pot-provider",
-                "media_tools": "eugeneware/ffmpeg-static"}
+REPOSITORIES = {"app": "MES30004E/mediagrabber", "provider": "Brainicism/bgutil-ytdlp-pot-provider"}
 ENDPOINTS = {key: f"https://api.github.com/repos/{repo}/releases/latest" for key, repo in REPOSITORIES.items()}
 TAG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}")
+
+
+def media_provenance(name, result):
+    """Attribute a build record only to the bundled executable being inspected."""
+    try:
+        root = bundle_root().resolve(strict=True)
+        executable = find_binary(name)
+        if not executable or not Path(executable).resolve(strict=True).is_relative_to(root):
+            return "Bundled build record not attributed to an external or unavailable executable"
+        with (root / "media-build.json").open("rb") as stream: payload = stream.read(262145)
+        if len(payload) > 262144: raise ValueError("Oversized build record")
+        record = json.loads(payload)
+        if not isinstance(record, dict) or type(record.get("schema")) is not int or record["schema"] != 1:
+            raise ValueError("Unknown build record")
+        version, deployment = record.get("ffmpeg_version"), record.get("deployment_target")
+        if (not isinstance(version, str) or not re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,3}){1,2}", version) or
+                not isinstance(deployment, str) or not re.fullmatch(r"[0-9]{1,3}\.[0-9]{1,3}", deployment)):
+            raise ValueError("Invalid build version")
+        matches = result.available and re.match(rf"{re.escape(name)} version {re.escape(version)}(?:\s|$)", result.detail)
+        observation = "executable version matches" if matches else "executable version differs or is unconfirmed"
+        return f"Bundled build record: FFmpeg {version}; macOS deployment target {deployment}; {observation}. Not runtime qualification."
+    except (OSError, ValueError, TypeError, RecursionError):
+        return "Bundled media build provenance unavailable or invalid; not inferred from the executable version"
 
 
 def runtime_inventory(runtime):
@@ -141,8 +163,10 @@ class ComponentCatalog:
             result = _binary_check(name)
             item = row(name, name, redact_secrets(result.detail)[:500] if result.available else "Not available",
                        "Executable responds; codec/conversion compatibility not tested" if result.available else "Not available — check component paths",
-                       upstream="media_tools")
-            if item["latest"] != "Not checked": item["latest"] = "Distribution release " + item["latest"]
+                       upstream="app")
+            item["latest"] = ("App release " + item["latest"] + "; media versions not confirmed" if item["latest"] != "Not checked"
+                              else "Ships with app; no app release confirmed")
+            item["provenance"] = media_provenance(name, result)
             rows.append(item)
         try:
             manifest = json.loads((bundle_root() / "companion/chrome/manifest.json").read_text())

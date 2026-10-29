@@ -2,8 +2,8 @@
 
 Settings → **Updates** brings the existing yt-dlp controls and a background
 component inventory together. Opening the page inspects local files/executables;
-**Check app/provider/media-tool releases** also queries fixed public GitHub
-endpoints without a token, cookies, media URLs or account information.
+**Check app/provider releases (media ships with app)** also queries fixed public
+GitHub endpoints without a token, cookies, media URLs or account information.
 
 Each card separates installed/shipped version, latest known version, compatibility
 limits, successful-check/update times, last error, rollback and the current update
@@ -32,8 +32,29 @@ and [error/rate-limit guidance](https://docs.github.com/en/rest/using-the-rest-a
 API version `2026-03-10` was accepted by the live public endpoints on 19 October
 2026. The provider endpoint returned `2.0.2`, while this application's provider
 remains pinned at `1.3.1`; it was **not** upgraded or claimed compatible. The
-FFmpeg distribution endpoint returned `b6.1.1` (a distribution release tag, not
-an inventory probe of the local executable). The app endpoint returned 404.
+old FFmpeg distribution endpoint returned `b6.1.1`. That unrelated distribution
+is no longer queried or presented as an update for our own media build. Its
+cached records are discarded on load. The app endpoint returned 404 at that
+historical check; do not treat this as current release availability.
+
+## Media provenance and release policy
+
+FFmpeg/FFprobe now follow the application release channel, not a third-party
+prebuilt-binary feed. Their latest-known field reports the validated app release
+tag and explicitly says its media versions are not yet confirmed. It does not
+infer that a new app release contains newer FFmpeg, nor offer a downgrade from
+the bundled source build to an unrelated distribution. Check time and release
+errors are shared with the app record; individual media activation is not offered.
+
+The executable version probe remains separate from `media-build.json` provenance.
+A bounded, schema-checked bundled record can display the recorded FFmpeg version
+and macOS deployment target only when the inspected executable resolves inside
+the bundle. An external executable is not attributed to that record. The card
+distinguishes matching, differing and unconfirmed observed versions. A build
+record/version match is not proof of binary integrity, current codec behavior,
+supported older macOS versions or release/licensing qualification. Missing or
+invalid records remain explicitly unavailable, never synthesized from a version
+response. Pre-relocation build hashes are not used as installed-binary hashes.
 
 ## Installation policy and remaining work
 
@@ -50,6 +71,9 @@ application staging/stop/replacement/recovery and rollback must be connected
 before those update actions can be offered. No application release is published
 by Check or a development commit. Hosted native-host bundle integration has
 passed its narrow protocol checks. Node/provider offline integration now has a
-separate hosted gate; full media-tool/UI/release qualification remains outstanding.
-See [Companion](PACKAGED_COMPANION.md) and [provider](PACKAGED_PROVIDER.md) scope.
+separate hosted gate. Synthetic codec/remux and frozen Cocoa startup gates have
+also passed on commit `c8a17c32da90092184ad107d728905b001c1d75e`, run
+`39775428272`; these do not establish live downloads or full release qualification.
+See [Companion](PACKAGED_COMPANION.md), [provider](PACKAGED_PROVIDER.md),
+[media](PACKAGED_MEDIA.md), [GUI](PACKAGED_APP.md) and [replacement](APP_REPLACEMENT.md) scope.
 Local licence-gated packaging is not run.

@@ -26,6 +26,9 @@ def test_components_page_checks_in_worker_without_applying_unsaved_settings(tmp_
         assert "v1.3.1" in dialog.component_labels["app"].text()
         assert "Last successful update: Not managed yet" in dialog.component_labels["app"].text()
         assert "unconfirmed" in dialog.component_labels["companion"].text()
+        assert "Build provenance:" in dialog.component_labels["ffmpeg"].text()
+        assert "App release v1.3.1; media versions not confirmed" in dialog.component_labels["ffmpeg"].text()
+        assert "Distribution release" not in dialog.component_labels["ffmpeg"].text()
         assert dialog.component_labels["app"].textFormat() == Qt.TextFormat.PlainText
         assert dialog.components_check.isEnabled() and not saved
         assert settings.download_dir != "/tmp/unsaved-component-fixture"
@@ -48,7 +51,7 @@ def test_background_update_tick_checks_component_catalog_without_rechecking_with
     monkeypatch.setattr(window.task_manager, "start", start)
     try:
         window._start_yt_dlp_update_check(); window._start_yt_dlp_update_check()
-        assert len(urls) == 3
+        assert len(urls) == 2
         assert "v1.3.1" in window.settings_panel.component_labels["app"].text()
     finally: window.close(); _APP.processEvents()
 
