@@ -301,7 +301,7 @@ def download_job(job: DownloadJob, proxy: str | None, provider_url: str, provide
             emit("YT-DLP", f"Extractor: {job.extractor_key or 'Unknown'}")
             emit("YT-DLP", f"{job.formats_playable} playable format(s) found")
             job.failure_stage = "Format resolution"
-            selected_streams = {key: getattr(job.options, key) for key in ("video_format_id", "audio_format_id")
+            selected_streams = {key: getattr(job.options, key) for key in ("video_format_id", "audio_format_id", "audio_language")
                                 if getattr(job.options, key, "")}
             try:
                 selector, format_warnings = resolve_available_format(

@@ -8,6 +8,49 @@ from test_media_details import metadata
 APP = QApplication.instance() or QApplication([])
 
 
+def test_batch_audio_languages_are_lazy_metadata_backed_and_persist_per_job(tmp_path, monkeypatch):
+    from morgan_media_downloader.media_details import details_from_info
+    window = _window(tmp_path, monkeypatch)
+    try:
+        _populate(window, [MediaItem("https://example.test/one", "First"), MediaItem("https://example.test/two", "Second")])
+        assert not window.audio_language.isEnabled()
+        assert window._current_options().audio_language == ""
+        item = window.items[0]; runtime = window.runtime_manager.snapshot()
+        window._inspection_ready((window._inspection_generation, item, runtime.version, runtime.source,
+                                  details_from_info(metadata()), "None", ""))
+        assert window.audio_language.isEnabled()
+        assert {window.audio_language.itemData(i) for i in range(window.audio_language.count())} == {"", "@original", "en", "ja"}
+        window.audio_language.setCurrentIndex(window.audio_language.findData("en"))
+        window._item_overrides[id(window.items[1])] = {"audio_format_id": "a-ja"}
+        window.enqueue_selected()
+        jobs = window.database.load_jobs()
+        assert len(jobs) == 2 and all(job.options.audio_language == "en" for job in jobs)
+        assert next(job for job in jobs if job.item.title == "Second").options.audio_format_id == "a-ja"
+        _populate(window, [MediaItem("https://example.test/new", "New")])
+        assert not window.audio_language.isEnabled() and window._current_options().audio_language == ""
+    finally: window.close(); APP.processEvents()
+
+
+def test_reinspection_cannot_silently_clear_a_required_batch_language(tmp_path, monkeypatch):
+    from morgan_media_downloader.media_details import details_from_info
+    window = _window(tmp_path, monkeypatch)
+    try:
+        _populate(window, [MediaItem("https://example.test/one", "First")])
+        item = window.items[0]; runtime = window.runtime_manager.snapshot()
+        def inspected(info):
+            window._inspection_ready((window._inspection_generation, item, runtime.version, runtime.source,
+                                      details_from_info(info), "None", ""))
+        inspected(metadata())
+        window.audio_language.setCurrentIndex(window.audio_language.findData("ja"))
+        info = metadata(); info["formats"] = [value for value in info["formats"] if value.get("language") != "ja"]
+        inspected(info)
+        assert window._current_options().audio_language == "ja"
+        assert "unavailable" in window.audio_language.currentText().lower()
+        window.enqueue_selected()
+        assert window.database.load_jobs()[0].options.audio_language == "ja"
+    finally: window.close(); APP.processEvents()
+
+
 def test_explicit_inspection_is_one_authenticated_request_and_choices_reach_only_that_job(tmp_path, monkeypatch):
     from morgan_media_downloader.media_details import details_from_info
     window = _window(tmp_path, monkeypatch); tasks = []; calls = []

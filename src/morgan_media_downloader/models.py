@@ -67,6 +67,7 @@ class DownloadOptions:
     cookies_file: str = ""
     video_format_id: str = ""
     audio_format_id: str = ""
+    audio_language: str = ""
 
 
 @dataclass

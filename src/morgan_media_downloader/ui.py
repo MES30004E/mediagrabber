@@ -39,6 +39,7 @@ from .local_converter import (
 )
 from .managed_tor import ManagedTor
 from .models import DownloadJob, DownloadOptions, JobStatus, MediaItem
+from .media_details import language_code
 from .network import ProxyConfig, classify_tor_target, detect_tor, managed_tor_health, test_tor_connection, tor_exit_ip
 from .network import test_media_connection
 from .organisation import organised_folder
@@ -369,6 +370,8 @@ class MainWindow(QMainWindow):
         self.container = QComboBox(); self.container.addItems(["Auto", "MP4", "MKV", "WebM"]); self.container.setCurrentText(self.settings.container)
         self.audio_format = QComboBox(); self.audio_format.addItems(["Original/best audio", "MP3", "M4A", "OPUS", "FLAC", "WAV"]); self.audio_format.setCurrentText(self.settings.audio_format)
         self.audio_bitrate = QComboBox(); self.audio_bitrate.addItems(["Auto", "128 kbps", "192 kbps", "256 kbps", "320 kbps"]); self.audio_bitrate.setCurrentText(self.settings.audio_bitrate)
+        self.audio_language = QComboBox(); self.audio_language.addItem("Automatic / best available", ""); self.audio_language.setEnabled(False)
+        self.audio_language.setToolTip("Only languages reported by inspected items appear. Required per video; unavailable languages fail that item. An explicit per-item audio stream overrides this batch requirement.")
         self.embed_thumb = QCheckBox("Embed thumbnail"); self.embed_thumb.setChecked(self.settings.embed_thumbnail)
         self.embed_meta = QCheckBox("Embed metadata"); self.embed_meta.setChecked(self.settings.embed_metadata)
         self.embed_chapters = QCheckBox("Embed chapters"); self.embed_chapters.setChecked(self.settings.embed_chapters)
@@ -391,6 +394,7 @@ class MainWindow(QMainWindow):
         more_grid.addWidget(QLabel("Container"), 7, 0); more_grid.addWidget(self.container, 7, 1)
         more_grid.addWidget(QLabel("Audio"), 8, 0); more_grid.addWidget(self.audio_format, 8, 1)
         more_grid.addWidget(QLabel("Bitrate"), 9, 0); more_grid.addWidget(self.audio_bitrate, 9, 1)
+        more_grid.addWidget(QLabel("Required audio language"), 10, 0); more_grid.addWidget(self.audio_language, 10, 1)
         self.more_options.hide(); self.more_button = QToolButton(); self.more_button.setText("More Options ▾"); self.more_button.clicked.connect(self._toggle_more_options)
         grid.addWidget(QLabel("Folder"), 1, 0); grid.addWidget(self.folder, 1, 1, 1, 2); grid.addWidget(choose, 1, 3)
         grid.addWidget(self.more_button, 2, 0); grid.addWidget(self.more_options, 3, 0, 1, 4)
@@ -878,6 +882,7 @@ class MainWindow(QMainWindow):
         self._inspection_generation += 1; self._item_overrides.clear()
         self.torrent_context = payload.get("torrent")
         self.items = items
+        self._refresh_audio_languages(preserve_missing=False)
         self.item_table.blockSignals(True)
         self.item_table.clearContents(); self.item_table.setRowCount(len(items))
         if self.torrent_context:
@@ -994,6 +999,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Inspection failed — {error}. Check authentication, runtime and provider, then retry.", 15000); return
         from .media_details_dialog import MediaDetailsDialog
         item.inspection = details
+        self._refresh_audio_languages()
         if self.media_details_dialog is not None: self.media_details_dialog.close()
         def apply(values):
             active_runtime = self.runtime_manager.snapshot()
@@ -1136,10 +1142,26 @@ class MainWindow(QMainWindow):
         self.item_table.blockSignals(False)
         self._update_selection_count()
 
+    def _refresh_audio_languages(self, *, preserve_missing=True):
+        selected = self.audio_language.currentData()
+        formats = [value for item in self.items for value in item.inspection.get("formats", []) if value.get("audio")]
+        languages = sorted({language_code(value.get("language")) for value in formats} - {""})
+        self.audio_language.clear(); self.audio_language.addItem("Automatic / best available", "")
+        if any(value.get("original") for value in formats): self.audio_language.addItem("Original (where explicitly reported)", "@original")
+        for code in languages: self.audio_language.addItem(f"{friendly_language(code)} ({code})", code)
+        index = self.audio_language.findData(selected)
+        if selected and index < 0 and preserve_missing:
+            label = "Original" if selected == "@original" else selected
+            self.audio_language.addItem(f"Unavailable in inspected metadata — still required: {label}", selected)
+            index = self.audio_language.count() - 1
+        self.audio_language.setCurrentIndex(max(0, index))
+        self.audio_language.setEnabled(self.audio_language.count() > 1)
+
     def _current_options(self) -> DownloadOptions:
         return DownloadOptions(
             compatibility=self.compatibility.currentText(), quality=self.quality.currentText(), container=self.container.currentText(),
             audio_format=self.audio_format.currentText(), audio_bitrate=self.audio_bitrate.currentText(),
+            audio_language=self.audio_language.currentData() or "",
             embed_thumbnail=self.embed_thumb.isChecked(), embed_metadata=self.embed_meta.isChecked(),
             embed_chapters=self.embed_chapters.isChecked(), embed_subtitles=self.embed_subtitles.isChecked(),
             write_subtitles=self.write_subtitles.isChecked(), keep_original=self.keep_original.isChecked(),

@@ -5,7 +5,7 @@ from typing import Any
 from .auth import authentication_options
 from .job_diagnostics import is_playable_format
 from .subtitle_mux import parse_subtitle_languages, subtitle_download_flags
-from .media_details import format_identifier
+from .media_details import format_identifier, language_code
 
 VIDEO_HEIGHTS = {"2160p": 2160, "1440p": 1440, "1080p": 1080, "720p": 720, "480p": 480, "360p": 360}
 
@@ -52,7 +52,7 @@ def _exact_id(entry: dict[str, Any]) -> str:
 def resolve_available_format(formats: list[dict[str, Any]], quality: str, container: str,
                              audio_format: str,
                              compatibility: str = "Original / Best Available", *,
-                             video_format_id: str = "", audio_format_id: str = "") -> tuple[str, list[str]]:
+                             video_format_id: str = "", audio_format_id: str = "", audio_language: str = "") -> tuple[str, list[str]]:
     """Resolve concrete format IDs from formats that extraction actually returned."""
     usable = [entry for entry in formats if entry.get("format_id") and is_playable_format(entry)]
     if not usable:
@@ -70,6 +70,17 @@ def resolve_available_format(formats: list[dict[str, Any]], quality: str, contai
         if video_format_id and any(str(entry["format_id"]) == video_format_id and entry.get("acodec") not in (None, "none") for entry in usable):
             raise ValueError("Choose a video-only stream when overriding its audio track.")
         usable = [entry for entry in usable if str(entry["format_id"]) == audio_format_id or (
+            entry.get("vcodec") not in (None, "none") and entry.get("acodec") in (None, "none"))]
+    elif audio_language:
+        if audio_language != "@original" and language_code(audio_language) != audio_language:
+            raise ValueError("Invalid required audio language. Inspect available tracks again.")
+        def matches_language(entry):
+            return ("(original)" in str(entry.get("format_note") or "").casefold() if audio_language == "@original"
+                    else str(entry.get("language") or "").casefold() == audio_language.casefold())
+        matched = {id(entry) for entry in usable if entry.get("acodec") not in (None, "none") and matches_language(entry)}
+        if not matched:
+            raise ValueError("The required audio language is not reported for this video. Inspect its tracks or clear the batch requirement.")
+        usable = [entry for entry in usable if id(entry) in matched or (
             entry.get("vcodec") not in (None, "none") and entry.get("acodec") in (None, "none"))]
     warnings: list[str] = []
     if audio_format != "Original/best audio":

@@ -66,6 +66,59 @@ def test_explicit_format_choices_are_revalidated_without_silent_fallback():
         resolve_available_format(formats, "Best", "Auto", "Original/best audio", video_format_id="disappeared")
 
 
+@pytest.mark.parametrize("language,identity", [("en", "a-en"), ("ja", "a-ja"), ("@original", "a-en")])
+def test_batch_audio_language_resolves_only_reported_audio_for_each_item(language, identity):
+    from morgan_media_downloader.formats import resolve_available_format
+    info = metadata()
+    selector, _ = resolve_available_format(info["formats"], "Best", "Auto", "Original/best audio", audio_language=language)
+    assert selector == f'best*[format_id="v1080"]+best*[format_id="{identity}"]'
+    for value in info["formats"]: value["format_id"] = "second-" + value["format_id"]
+    selector, _ = resolve_available_format(info["formats"], "Best", "Auto", "Original/best audio", audio_language=language)
+    assert selector == f'best*[format_id="second-v1080"]+best*[format_id="second-{identity}"]'
+
+
+def test_batch_audio_requirement_never_falls_back_and_explicit_item_choice_wins():
+    from morgan_media_downloader.formats import resolve_available_format
+    formats = metadata()["formats"]
+    with pytest.raises(ValueError, match="audio language"):
+        resolve_available_format(formats, "Best", "Auto", "Original/best audio", audio_language="fr")
+    selector, _ = resolve_available_format(formats, "Best", "Auto", "Original/best audio", audio_language="en", audio_format_id="a-ja")
+    assert selector.endswith('best*[format_id="a-ja"]')
+
+
+@pytest.mark.parametrize("language_disappears", [False, True])
+def test_batch_audio_language_is_revalidated_after_403_without_losing_auth(tmp_path, monkeypatch, language_disappears):
+    from test_downloader_policy import _run, FakeYDL
+    from morgan_media_downloader.models import JobStatus
+    job, run = _run(tmp_path, monkeypatch, mode="Browser Cookies", profile="synthetic")
+    job.options.audio_language = "en"
+    extractions, transfers = [], []
+    transfer_original = FakeYDL.process_ie_result
+    def extract(self, _url, download=False):
+        extractions.append(self.params["cookiesfrombrowser"])
+        info = metadata()
+        for value in info["formats"]:
+            if value["format_id"] == "a-en": value["format_id"] += "-old" if len(extractions) == 1 else "-new"
+        if language_disappears and len(extractions) > 1:
+            info["formats"] = [value for value in info["formats"] if value.get("language") != "en"]
+        return info
+    def transfer(self, info, download=True):
+        transfers.append(self.params["format"])
+        if len(transfers) == 1: raise RuntimeError("HTTP Error 403")
+        return transfer_original(self, info, download)
+    monkeypatch.setattr(FakeYDL, "extract_info", extract)
+    monkeypatch.setattr(FakeYDL, "process_ie_result", transfer)
+    result = run()
+    assert extractions == [("chrome", "synthetic", None, None)] * 2
+    expected = ['best*[format_id="v1080"]+best*[format_id="a-en-old"]']
+    if language_disappears:
+        assert result.status == JobStatus.FAILED and "audio language" in result.error
+    else:
+        expected.append('best*[format_id="v1080"]+best*[format_id="a-en-new"]')
+        assert result.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS}
+    assert transfers == expected and result.retry_count == 1
+
+
 def test_download_and_403_refresh_retain_selected_streams_and_authentication(tmp_path, monkeypatch):
     from test_downloader_policy import _run, FakeYDL
     from morgan_media_downloader.models import JobStatus

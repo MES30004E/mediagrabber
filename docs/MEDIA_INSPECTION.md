@@ -38,9 +38,26 @@ content permission.
   the count of overridden items. New analysis clears old row bindings. Once
   queued, options are copied to that job and survive queue serialization.
 
-This provides per-item audio-track/language choice alongside existing batch
-quality, codec and subtitle defaults. A global cross-video preferred audio-language
-selector is not part of this checkpoint; audio IDs are deliberately item-specific.
+The batch **Required audio language** control under More Options starts disabled
+when flat playlist metadata contains no inspected tracks. Inspecting an item adds
+only its reported audio languages; an Original choice appears only when an
+extractor explicitly labels an original track. No new per-video requests are
+triggered by populating this control. The list describes inspected items, not a
+promise that every playlist item offers those languages.
+
+A selected language (or explicitly reported original audio) is resolved separately
+against each video's fresh playable formats. It never copies one video's audio
+ID across the playlist. A concrete per-item audio stream takes precedence over
+the batch language. If the required language is absent, that job fails in format
+resolution with guidance to inspect or clear the requirement; it does not silently
+use another language. Automatic / best available preserves the previous behavior.
+This also applies to audio-only conversion and the one bounded HTTP 403 refresh.
+The queued semantic requirement survives database serialization. A new preview
+analysis clears a choice unsupported by its inspected metadata; the preference is
+not saved as an account/global setting. Qualified Swift wire DTOs remain unchanged.
+Re-inspecting within the same workspace never silently clears an existing
+requirement: a missing language remains selected with an Unavailable label until
+the user changes it, and fresh format resolution still enforces it.
 
 ## Revalidation and privacy
 
