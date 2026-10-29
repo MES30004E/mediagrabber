@@ -10,8 +10,8 @@ export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-$HOME/.local/share/uv/pyt
 export UV_LINK_MODE="copy"
 export PYINSTALLER_CONFIG_DIR="/private/tmp/morgan-media-downloader-pyinstaller-$UID"
 export PIP_CACHE_DIR="$ROOT_DIR/.tools/pip-cache"
-BUILD_WORK_DIR="/private/tmp/morgan-media-downloader-work-$UID-$$"
-BUILD_DIST_DIR="/private/tmp/morgan-media-downloader-dist-$UID-$$"
+BUILD_WORK_DIR="$(mktemp -d /private/tmp/morgan-media-downloader-work.XXXXXX)"
+BUILD_DIST_DIR="$(mktemp -d /private/tmp/morgan-media-downloader-dist.XXXXXX)"
 FINAL_APP="$ROOT_DIR/dist/Morgan Media Downloader.app"
 trap 'rm -rf "$BUILD_WORK_DIR" "$BUILD_DIST_DIR"' EXIT
 
@@ -38,6 +38,11 @@ if [[ ! -x "$ROOT_DIR/.venv/bin/python" ]] || ! "$ROOT_DIR/.venv/bin/python" -c 
   "$BUILD_PYTHON" -m venv --copies "$ROOT_DIR/.venv"
 fi
 
+# Refuse unsupported destinations before dependency installation or compilation.
+# This does not choose a different destination or touch the existing app.
+mkdir -p "$ROOT_DIR/dist"
+PYTHONPATH="$ROOT_DIR/src" "$ROOT_DIR/.venv/bin/python" -m morgan_media_downloader.app_installation --check-destination "$FINAL_APP"
+
 # AppleDouble sidecars on non-APFS external volumes can confuse uv's wheel copier.
 # pip ignores them, while still installing exclusively into the project venv.
 find "$ROOT_DIR/.venv" -name '._*' -delete
@@ -49,14 +54,7 @@ find "$ROOT_DIR/.venv" -name '._*' -delete
 
 codesign --force --deep --sign - "$BUILD_DIST_DIR/Morgan Media Downloader.app"
 codesign --verify --deep --strict "$BUILD_DIST_DIR/Morgan Media Downloader.app"
-mkdir -p "$ROOT_DIR/dist"
-if [[ -d "$FINAL_APP" ]]; then
-  rm -rf "$FINAL_APP"
-fi
-COPYFILE_DISABLE=1 ditto "$BUILD_DIST_DIR/Morgan Media Downloader.app" "$FINAL_APP"
-find "$FINAL_APP" -name '._*' -delete
-codesign --force --deep --sign - "$FINAL_APP"
-codesign --verify --deep --strict "$FINAL_APP"
+PYTHONPATH="$ROOT_DIR/src" "$ROOT_DIR/.venv/bin/python" -m morgan_media_downloader.app_installation "$BUILD_DIST_DIR/Morgan Media Downloader.app" "$FINAL_APP"
 
 print "Built: $ROOT_DIR/dist/Morgan Media Downloader.app"
 print "Launch with: open '$ROOT_DIR/dist/Morgan Media Downloader.app'"
