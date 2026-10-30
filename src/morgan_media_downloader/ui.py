@@ -1381,26 +1381,37 @@ class MainWindow(QMainWindow):
         self.database.save_job(job)
 
     def remove_selected(self):
-        for job in self._selected_jobs():
-            choice = self._confirm_remove(job)
-            if choice == "cancel": continue
-            delete_files = choice == "delete"
+        selected = self._selected_jobs()
+        if not selected: return
+        selected_ids = [job.id for job in selected]
+        choice = self._confirm_remove(selected)
+        if choice == "cancel": return
+        delete_files = choice == "delete"
+        removed = pending = 0
+        for job_id in selected_ids:
+            # The modal dialog processes worker results; use the current
+            # inventory, not a job object replaced while confirmation was open.
+            job = self.jobs.get(job_id)
+            if job is None: continue
             if job.id in self.active:
                 self.pending_removals[job.id] = delete_files; self.task_manager.cancel(self.active[job.id])
-            else: self._remove_job(job, delete_files)
+                pending += 1
+            else:
+                self._remove_job(job, delete_files); removed += 1
         self._refresh_queue(); self._refresh_history()
+        self.statusBar().showMessage(f"Removed {removed} queue entries; {pending} waiting for active tasks to stop. "
+            + ("Verified job-owned files selected for removal." if delete_files else "Downloaded files kept."), 10000)
 
-    def _confirm_remove(self, job: DownloadJob) -> str:
-        has_files = any(path.exists() for path in owned_paths(job))
-        if not has_files:
-            answer = QMessageBox.question(self, "Remove job", "Remove this job from the queue?",
-                                          QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok,
-                                          QMessageBox.StandardButton.Cancel)
-            return "list" if answer == QMessageBox.StandardButton.Ok else "cancel"
-        box = QMessageBox(QMessageBox.Icon.Question, "Remove job", "Remove this job?", parent=self)
-        keep = box.addButton("Remove from List", QMessageBox.ButtonRole.AcceptRole)
-        delete = box.addButton("Remove and Delete Files", QMessageBox.ButtonRole.DestructiveRole)
-        box.addButton(QMessageBox.StandardButton.Cancel); box.exec()
+    def _confirm_remove(self, jobs: list[DownloadJob]) -> str:
+        active = sum(job.id in self.active for job in jobs)
+        completed = sum(job.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS} for job in jobs)
+        box = QMessageBox(QMessageBox.Icon.Question, "Remove selected jobs",
+            f"Remove {len(jobs)} selected jobs?\n\n{active} active; {completed} completed.\n"
+            "Active tasks must stop before their entries or files are removed.", parent=self)
+        keep = box.addButton("Remove queue entries only, keep files", QMessageBox.ButtonRole.AcceptRole)
+        delete = box.addButton("Remove entries and verified job-owned files", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(keep); box.setEscapeButton(QMessageBox.StandardButton.Cancel); box.exec()
         return "list" if box.clickedButton() is keep else "delete" if box.clickedButton() is delete else "cancel"
 
     def _remove_job(self, job: DownloadJob, delete_files: bool):
@@ -1786,7 +1797,9 @@ class MainWindow(QMainWindow):
         if structural:
             self.queue_table.clear(); self.queue_table.setColumnCount(len(columns)); self.queue_table.setHorizontalHeaderLabels(columns)
             self.queue_table.setRowCount(len(jobs)); header = self.queue_table.horizontalHeader()
-            for index in range(len(columns)): header.setSectionResizeMode(index, QHeaderView.ResizeMode.ResizeToContents)
+            # Continuous ResizeToContents re-measures every row for each changed
+            # status cell, producing quadratic synchronous work on large queues.
+            for index in range(len(columns)): header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
             if "Destination" in columns: header.setSectionResizeMode(columns.index("Destination"), QHeaderView.ResizeMode.Stretch)
         for row, job in enumerate(jobs):
@@ -1840,6 +1853,9 @@ class MainWindow(QMainWindow):
                     f"Quality: {job.options.quality}\nContainer: {job.options.container}"
                     f"\nAuthentication: {effective}\nConnection: {self.settings.connection_mode}"
                     f"\nThumbnail: {thumbnail}\nSubtitles: {subtitle}{verification}")
+        if structural:
+            for column, name in enumerate(columns):
+                if name not in {"Title", "Destination"}: self.queue_table.resizeColumnToContents(column)
         if self.selected_job_id:
             selected_row = next((row for row, job in enumerate(jobs) if job.id == self.selected_job_id), -1)
             if selected_row >= 0 and not self.queue_table.selectionModel().isRowSelected(
