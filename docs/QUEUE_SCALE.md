@@ -150,3 +150,30 @@ have per-item writes. The API consumes rows lazily but does not impose a maximum
 call size or yield the GUI thread. A bounded asynchronous service must choose its
 chunk sizes, handle errors and coordinate dispatch/shutdown; this remains next P0
 work, alongside model/view and bounded widget/progress memory.
+
+## Bounded status actions
+
+Large (>32) pause/resume/cancel now use one GUI-owned timer controller,32 stable
+IDs per event turn. It copies current jobs and commits a slice before publishing
+state or cancelling active workers. One action is admitted at a time; dispatch
+waits. Stop batch action leaves unprocessed jobs unchanged; shutdown stops future
+slices. Completed/failed/unchanged/pending counts and bounded redacted errors are
+reported. Small actions remain immediate. This creates no per-job worker threads.
+
+The benchmark now waits for asynchronous completion while processing Qt events.
+800-item pause/resume/cancel total times were0.193/0.109/0.213s, with maximum
+heartbeat gaps0.091/0.047/0.097s and25transactions each. At5,000: total times
+1.554/0.949/0.838s, heartbeat gaps0.345/0.432/0.331s and157transactions each.
+These are single local offscreen measurements. Total time increased relative to
+the synchronous narrow fix; the measured improvement is event-loop yielding and
+transaction count. Full table/history refresh and row widgets still impose costs.
+Enqueue, removal, restart and file IO are not made asynchronous by this controller;
+native crash/real-transfer/memory/visual qualification remains incomplete.
+
+Conflicting restart/remove/clear/seeding actions are refused while a status batch
+is pending; they cannot destructively reset a job that a later slice will mutate.
+Progress-signal cancellation is idempotent, including a listener starting a new
+batch. Regressions reproduced both conflict and duplicate-completion defects
+before their fixes. The independent review stopped at an account usage limit
+after identifying the conflict, so the bounded-controller review is **incomplete**;
+local green tests do not substitute for finishing that review or hosted validation.

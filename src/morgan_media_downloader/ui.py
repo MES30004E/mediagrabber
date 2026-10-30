@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from .database import Database
+from .queue_batch import QueueBatch
 from .console import ConsoleEvent, ConsoleStore
 from .diagnostics import run_checks
 from .downloader import analyse_with_authentication, download_job
@@ -246,6 +247,9 @@ class MainWindow(QMainWindow):
         self.torrent_context: TorrentMetadata | None = None
         self.jobs = {job.id: job for job in self.database.load_jobs()}
         self.task_manager = TaskManager(self)
+        self.queue_batch = QueueBatch(self)
+        self.queue_batch.changed.connect(self._queue_batch_progress)
+        self.queue_batch.finished.connect(self._queue_batch_finished)
         self.console_store = ConsoleStore(parent=self)
         self.console_job_filter = ""
         self.selected_job_id = ""
@@ -478,6 +482,8 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         for text, callback in [("Pause", self.pause_selected), ("Resume", self.resume_selected), ("Cancel", self.cancel_selected), ("Retry", self.retry_selected), ("Clear Completed", self.clear_completed)]:
             button = QPushButton(text); button.clicked.connect(callback); actions.addWidget(button)
+        self.stop_queue_batch = QPushButton("Stop batch action"); self.stop_queue_batch.setEnabled(False)
+        self.stop_queue_batch.clicked.connect(self.queue_batch.cancel); actions.addWidget(self.stop_queue_batch)
         actions.addStretch(); layout.addLayout(actions); return widget
 
     def _queue_context_menu(self, position):
@@ -702,6 +708,7 @@ class MainWindow(QMainWindow):
                                 on_result=self._tor_circuit_ready, on_error=self._tor_circuit_error)
 
     def retry_with_new_tor_circuit(self):
+        if self._queue_action_blocked(): return
         job = self._selected_or_banner_job()
         if not job: return
         self._pending_circuit_retry_job = job.id
@@ -1218,6 +1225,7 @@ class MainWindow(QMainWindow):
         self._persist_settings(); self._refresh_queue(); self._refresh_history(); self.tabs.setCurrentIndex(1)
 
     def _dispatch(self):
+        if self.queue_batch.busy: return
         active_media = sum(1 for job_id in self.active if self.jobs.get(job_id) and self.jobs[job_id].kind == "media")
         active_torrents = sum(1 for job_id in self.active if self.jobs.get(job_id) and self.jobs[job_id].kind == "torrent")
         media_slots = max(0, self.settings.concurrent_downloads - active_media)
@@ -1323,6 +1331,7 @@ class MainWindow(QMainWindow):
     def pause_selected(self): self._pause(self._selected_jobs())
     def pause_all(self): self._pause(list(self.jobs.values()))
     def _pause(self, jobs):
+        if self._start_large_queue_action(jobs, "Pause"): return
         for job in jobs:
             if job.id in self.active:
                 job.status = JobStatus.PAUSED; self.task_manager.cancel(self.active[job.id])
@@ -1332,6 +1341,7 @@ class MainWindow(QMainWindow):
     def resume_selected(self): self._resume(self._selected_jobs())
     def resume_all(self): self._resume(list(self.jobs.values()))
     def _resume(self, jobs):
+        if self._start_large_queue_action(jobs, "Resume"): return
         for job in jobs:
             if job.status in {JobStatus.PAUSED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.INTERRUPTED}:
                 if job.kind == "media" and job.status == JobStatus.FAILED and (
@@ -1343,13 +1353,64 @@ class MainWindow(QMainWindow):
                 prepare_resumable_job(job); self.database.save_job(job)
         self._refresh_queue()
     def cancel_selected(self):
-        for job in self._selected_jobs():
+        selected = self._selected_jobs()
+        if self._start_large_queue_action(selected, "Cancel"): return
+        for job in selected:
             job.status = JobStatus.CANCELLED
             if job.id in self.active: self.task_manager.cancel(self.active[job.id])
             self.database.save_job(job)
         self._refresh_queue()
     def retry_selected(self): self._resume(self._selected_jobs())
+
+    def _start_large_queue_action(self, jobs, action):
+        if self._queue_action_blocked(): return True
+        if len(jobs) <= 32: return False
+        settings = copy.deepcopy(self.settings)
+        self.queue_batch.start((job.id for job in jobs),
+            lambda ids: self._apply_queue_slice(ids, action, settings), action)
+        return True
+
+    def _queue_action_blocked(self):
+        if self.queue_batch.busy:
+            self.statusBar().showMessage("A queue batch is running; stop it or wait before another action.", 5000)
+            return True
+        return False
+
+    def _apply_queue_slice(self, ids, action, settings):
+        changed = []; cancel_tasks = []
+        for job_id in ids:
+            current = self.jobs.get(job_id)
+            if current is None: continue
+            job = copy.deepcopy(current)
+            if action == "Pause":
+                if job.id not in self.active and job.status != JobStatus.WAITING: continue
+                job.status = JobStatus.PAUSED
+            elif action == "Resume":
+                if job.status not in {JobStatus.PAUSED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.INTERRUPTED}: continue
+                if job.kind == "media" and job.status == JobStatus.FAILED and (
+                        requires_authentication(job.error) or job.failure_code.startswith("auth.")):
+                    for name in ("authentication_mode", "cookies_browser", "browser_profile", "cookies_file"):
+                        setattr(job.options, name, getattr(settings, name))
+                prepare_resumable_job(job)
+            elif action == "Cancel": job.status = JobStatus.CANCELLED
+            else: raise ValueError("Unsupported queue batch action")
+            changed.append(job)
+            if action != "Resume" and job.id in self.active: cancel_tasks.append(self.active[job.id])
+        self.database.save_jobs(changed)
+        self.jobs.update((job.id, job) for job in changed)
+        for task in cancel_tasks: self.task_manager.cancel(task)
+        return len(ids) - len(changed)
+
+    def _queue_batch_progress(self, info):
+        self.stop_queue_batch.setEnabled(self.queue_batch.busy)
+        self.statusBar().showMessage(("Stopped — " if info['cancelled'] else "") + f"{info['label']}: {info['completed']} completed; {info['failed']} failed; "
+            f"{info.get('skipped', 0)} unchanged; {info['pending']} pending. " + info['error'])
+
+    def _queue_batch_finished(self, info):
+        self._queue_batch_progress(info)
+        self._refresh_queue(); self._refresh_history()
     def restart_selected(self):
+        if self._queue_action_blocked(): return
         for job in self._selected_jobs():
             choice = self._confirm_restart(job)
             if choice == "cancel": continue
@@ -1387,6 +1448,7 @@ class MainWindow(QMainWindow):
         self.database.save_job(job)
 
     def remove_selected(self):
+        if self._queue_action_blocked(): return
         selected = self._selected_jobs()
         if not selected: return
         selected_ids = [job.id for job in selected]
@@ -1551,6 +1613,7 @@ class MainWindow(QMainWindow):
         magnets = [job.torrent_source for job in self._selected_jobs() if job.torrent_source.startswith("magnet:?")]
         if magnets: QApplication.clipboard().setText("\n".join(magnets))
     def stop_seeding(self):
+        if self._queue_action_blocked(): return
         for job in self._selected_jobs():
             if job.kind == "torrent" and job.status == JobStatus.SEEDING:
                 job.status = JobStatus.COMPLETED
@@ -1558,6 +1621,7 @@ class MainWindow(QMainWindow):
                 self.database.save_job(job)
         self._refresh_queue()
     def clear_completed(self):
+        if self._queue_action_blocked(): return
         self.database.clear_completed(); self.jobs = {key: job for key, job in self.jobs.items() if job.status not in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS}}; self._refresh_queue(); self._refresh_history()
 
     def convert_selected_for_macos(self):
@@ -2015,6 +2079,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if not self._closing:
             self._closing = True
+            self.queue_batch.cancel()
             self._persist_settings()
             for timer in self.findChildren(QTimer):
                 timer.stop()

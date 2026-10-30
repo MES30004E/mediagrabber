@@ -42,6 +42,8 @@ def test_queue_status_updates_do_not_autosize_columns_for_every_changed_cell(tmp
         window.queue_table.model().dataChanged.connect(lambda *_: eager_resizes.append(
             any(header.sectionResizeMode(i) == QHeaderView.ResizeMode.ResizeToContents for i in range(header.count()))))
         window.pause_all()
+        from test_queue_batch import drain
+        drain(window.queue_batch)
         assert eager_resizes, "Real status cells must be changed"
         assert not any(eager_resizes), "Auto-content resizing per cell creates quadratic synchronous refresh work"
         assert all(job.status == JobStatus.PAUSED for job in window.jobs.values())
@@ -127,4 +129,72 @@ def test_enqueue_database_failure_never_publishes_partial_jobs(tmp_path, monkeyp
             window._enqueue_payload([MediaItem("https://example.test/1", "Synthetic")], None,
                 DownloadOptions(authentication_mode="None", download_dir=str(tmp_path)))
         assert not window.jobs and window.database.load_jobs() == []
+    finally: window.close(); _APP.processEvents()
+
+
+def test_large_cancel_yields_and_persists_bounded_batches(tmp_path, monkeypatch):
+    import time
+    window = _window(tmp_path, monkeypatch); commits = []
+    try:
+        jobs(window, 800)
+        window.database._connection.set_trace_callback(lambda sql: commits.append(sql) if sql == "COMMIT" else None)
+        window.cancel_selected()
+        assert all(job.status == JobStatus.WAITING for job in window.jobs.values()), "Large action must not run synchronously"
+        deadline = time.monotonic() + 5
+        while window.queue_batch.busy and time.monotonic() < deadline: _APP.processEvents()
+        assert not window.queue_batch.busy
+        assert all(job.status == JobStatus.CANCELLED for job in window.jobs.values())
+        assert len(commits) == 25 and len(window.database.load_jobs()) == 800
+    finally: window.close(); _APP.processEvents()
+
+
+def test_stop_large_action_before_first_slice_leaves_jobs_and_workers_unchanged(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch); cancellations = []
+    monkeypatch.setattr(window.task_manager, "cancel", lambda key: cancellations.append(key))
+    try:
+        jobs(window, 800)
+        window.cancel_selected()
+        window._dispatch()  # Dispatch must not start waiting jobs during a batch.
+        assert not window.active
+        window.stop_queue_batch.click()
+        assert not window.queue_batch.busy and window.queue_batch.describe()["pending"] == 800
+        assert all(job.status == JobStatus.WAITING for job in window.jobs.values()) and not cancellations
+    finally: window.close(); _APP.processEvents()
+
+
+def test_failed_slice_preserves_live_state_and_does_not_cancel_workers(tmp_path, monkeypatch):
+    from test_queue_batch import drain
+    window = _window(tmp_path, monkeypatch); cancellations = []
+    try:
+        jobs(window, 800); ids = list(window.jobs)
+        window.database.save_jobs(window.jobs.values())
+        window.active[ids[0]] = "synthetic-active"
+        original = window.database.save_jobs; calls = []
+        def reject_first(values):
+            calls.append(True)
+            if len(calls) == 1: raise OSError("synthetic persistence failure")
+            return original(values)
+        monkeypatch.setattr(window.database, "save_jobs", reject_first)
+        monkeypatch.setattr(window.task_manager, "cancel", lambda key: cancellations.append(key))
+        window.cancel_selected(); drain(window.queue_batch)
+        assert window.queue_batch.describe()["failed"] == 32
+        assert window.queue_batch.describe()["completed"] == 768
+        assert not cancellations
+        assert all(window.jobs[key].status == JobStatus.WAITING for key in ids[:32])
+        persisted = {job.id: job.status for job in window.database.load_jobs()}
+        assert all(persisted[key] == window.jobs[key].status for key in ids)
+    finally:
+        window.active.clear(); window.close(); _APP.processEvents()
+
+
+def test_destructive_queue_actions_cannot_interleave_with_pending_batch(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch); effects = []
+    monkeypatch.setattr(window, "_confirm_restart", lambda _: effects.append("restart") or "restart")
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: effects.append("remove") or "list")
+    monkeypatch.setattr(window.database, "clear_completed", lambda: effects.append("clear"))
+    try:
+        jobs(window, 800); before = set(window.jobs)
+        window.cancel_selected()
+        window.restart_selected(); window.remove_selected(); window.clear_completed()
+        assert not effects and set(window.jobs) == before
     finally: window.close(); _APP.processEvents()

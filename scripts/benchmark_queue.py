@@ -71,7 +71,11 @@ def run_case(count, *, profile=False):
             cpu = time.process_time(); start = time.monotonic()
             profiler = cProfile.Profile() if profile and name == "pause-all" else None
             if profiler: profiler.enable()
-            operation(); elapsed = time.monotonic() - start
+            operation()
+            deadline = time.monotonic() + 30
+            while window.queue_batch.busy and time.monotonic() < deadline: app.processEvents()
+            if window.queue_batch.busy: raise RuntimeError("Queue batch did not finish")
+            elapsed = time.monotonic() - start
             if profiler: profiler.disable()
             app.processEvents(); tick()
             rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss

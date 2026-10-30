@@ -39,6 +39,17 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   JS10/protocol9 matched. Real800/5,000 admission uses one SQLite commit instead
   of800/5,000, and publishes runnable entries only after persistence succeeds.
   This remains a persistence prerequisite, not completed asynchronous batches.
+- Large pause/resume/cancel now have connected32-ID GUI timer slices, one active
+  batch, atomic state publication, dispatch coordination and Stopbatch. The
+  remaining asynchronous removal/restart/fileIO/collection actions and model/view
+  memory work are not supplied by this controller; see QUEUE_SCALE.md for measured
+  responsiveness and remaining limits.
+- Hosted run40993057336 passed alljobs on publisheddec2915: Linux608, macOS
+  backend60/Swift25/drift9, native media/provider/Cocoa/replacement and strict
+  archive round-trip. Local atomic-admission223737b and newer bounded controller
+  are not covered by that exact hosted artifact. Controller review is incomplete
+  following the reviewer's account limit; conflict/reentrant-cancel regressions
+  are fixed locally, but no publication/qualification claim follows.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
