@@ -174,6 +174,10 @@ Conflicting restart/remove/clear/seeding actions are refused while a status batc
 is pending; they cannot destructively reset a job that a later slice will mutate.
 Progress-signal cancellation is idempotent, including a listener starting a new
 batch. Regressions reproduced both conflict and duplicate-completion defects
-before their fixes. The independent review stopped at an account usage limit
-after identifying the conflict, so the bounded-controller review is **incomplete**;
-local green tests do not substitute for finishing that review or hosted validation.
+before their fixes. The independent review initially stopped at an account usage
+limit, then resumed after reset and cleared the narrow checkpoint with no
+outstanding Critical/Important finding. It independently verified closing after
+a committed32-job slice prevents further writes while768 remain pending. Retaining
+that shutdown scenario as a persistent regression is a deferred coverage minor.
+Native/hosted validation for this controller remains separate; the older green
+archive run is not a substitute.

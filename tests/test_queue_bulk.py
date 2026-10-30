@@ -198,3 +198,28 @@ def test_destructive_queue_actions_cannot_interleave_with_pending_batch(tmp_path
         window.restart_selected(); window.remove_selected(); window.clear_completed()
         assert not effects and set(window.jobs) == before
     finally: window.close(); _APP.processEvents()
+
+
+def test_large_retry_captures_applied_authentication_without_replacing_quality(tmp_path, monkeypatch):
+    from test_queue_batch import drain
+    window = _window(tmp_path, monkeypatch)
+    try:
+        jobs(window, 800)
+        for job in window.jobs.values():
+            job.status = JobStatus.FAILED; job.failure_code = "auth.required"
+            job.options.quality = "720p"
+        window.settings.authentication_mode = "Browser Cookies"
+        window.settings.cookies_browser = "Firefox"
+        window.settings.browser_profile = "synthetic-applied-profile"
+        window.resume_selected()
+        # Later unrelated settings edits must not change an admitted batch.
+        window.settings.authentication_mode = "None"
+        window.settings.browser_profile = "synthetic-later-profile"
+        drain(window.queue_batch)
+        for job in window.jobs.values():
+            assert job.status == JobStatus.WAITING
+            assert job.options.authentication_mode == "Browser Cookies"
+            assert job.options.browser_profile == "synthetic-applied-profile"
+            assert job.options.quality == "720p"
+        assert len(window.database.load_jobs()) == 800
+    finally: window.close(); _APP.processEvents()
