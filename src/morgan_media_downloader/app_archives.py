@@ -1,4 +1,4 @@
-"""Development-only app archive preparation and integrity-checked staging."""
+"""Development archive preparation and channel-specific integrity-checked staging."""
 from __future__ import annotations
 
 import hashlib
@@ -123,11 +123,12 @@ def build_development_archive(app, destination, version, commit, *, validator=va
     return manifest
 
 
-def _validate_manifest(manifest):
+def _validate_manifest(manifest, *, channel="development"):
     if not isinstance(manifest, dict): raise ValueError("Invalid development manifest")
-    if (type(manifest.get("schema")) is not int or manifest["schema"] != 1 or manifest.get("channel") != "development" or
-            manifest.get("publication_approved") is not False or manifest.get("platform") != "macos" or manifest.get("architecture") != "arm64"):
-        raise ValueError("Not a supported development candidate")
+    if (channel not in {"development", "stable"} or type(manifest.get("schema")) is not int or manifest["schema"] != 1 or
+            manifest.get("channel") != channel or manifest.get("publication_approved") is not (channel == "stable") or
+            manifest.get("platform") != "macos" or manifest.get("architecture") != "arm64"):
+        raise ValueError("Not a supported candidate for the selected channel")
     name = _asset_name(manifest.get("version"))
     if not isinstance(manifest.get("source_commit"), str) or not re.fullmatch(r"[0-9a-f]{40}", manifest["source_commit"]):
         raise ValueError("Invalid source commit")
@@ -139,8 +140,8 @@ def _validate_manifest(manifest):
     return asset
 
 
-def extract_development_archive(archive, manifest, destination, *, validator=validate_signature):
-    asset = _validate_manifest(manifest)
+def _extract_archive(archive, manifest, destination, *, validator, channel):
+    asset = _validate_manifest(manifest, channel=channel)
     archive = Path(archive)
     with archive.open("rb") as source, tempfile.TemporaryFile(mode="w+b") as snapshot:
         if archive.name != asset["name"] or os.fstat(source.fileno()).st_size != asset["size"]:
@@ -170,3 +171,12 @@ def extract_development_archive(archive, manifest, destination, *, validator=val
                 if destination.exists() or destination.is_symlink(): raise FileExistsError(destination)
                 output.rename(destination)
     return destination / APP_NAME
+
+
+def extract_development_archive(archive, manifest, destination, *, validator=validate_signature):
+    return _extract_archive(archive, manifest, destination, validator=validator, channel="development")
+
+
+def extract_release_archive(archive, manifest, destination, *, validator=validate_signature):
+    """Stage a stable contract; this never approves publication or installs it."""
+    return _extract_archive(archive, manifest, destination, validator=validator, channel="stable")

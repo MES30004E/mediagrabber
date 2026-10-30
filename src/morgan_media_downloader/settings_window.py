@@ -28,6 +28,8 @@ from .torrent import format_aria2_diagnostic, inspect_aria2c
 from .yt_runtime import YtDlpRuntimeManager, get_runtime_manager
 from .ui_components import settings_page, DisclosureSection
 from .components import ComponentCatalog, runtime_inventory
+from .app_updates import AppUpdateManager
+from . import __version__
 
 
 def _combo(values: list[str], current: str) -> QComboBox:
@@ -38,7 +40,7 @@ class SettingsWindow(QDialog):
     def __init__(self, settings: AppSettings, tor: ManagedTor, apply_callback: Callable[[AppSettings, object], None],
                  parent=None, runtime_manager: YtDlpRuntimeManager | None = None,
                  task_manager: TaskManager | None = None, embedded: bool = False, companion_controller=None,
-                 account_callback: Callable[[str], AppSettings] | None = None, component_catalog=None):
+                 account_callback: Callable[[str], AppSettings] | None = None, component_catalog=None, app_update_manager=None):
         super().__init__(parent)
         self.original = settings; self.working = copy.deepcopy(settings); self.tor = tor; self.apply_callback = apply_callback
         self.runtime_manager = runtime_manager or get_runtime_manager()
@@ -53,6 +55,8 @@ class SettingsWindow(QDialog):
         if not self.runtime_manager.initialized: self.runtime_manager.initialize()
         self.components = component_catalog or ComponentCatalog(self.runtime_manager, root=self.runtime_manager.root.parent / "components")
         self._components_busy = False
+        self.app_updates = app_update_manager or AppUpdateManager(self.runtime_manager.root.parent / "app-updates", __version__)
+        self._app_stage_busy = False; self._app_stage_error_message = ""
         if embedded:
             self.setWindowFlags(Qt.WindowType.Widget)
         self.setWindowTitle("Settings"); self.resize(790, 610)
@@ -78,6 +82,7 @@ class SettingsWindow(QDialog):
         self.timer = QTimer(self); self.timer.timeout.connect(self._refresh_tor_state); self.timer.start(250)
         self.timer.timeout.connect(self._poll_companion)
         self.finished.connect(self._cancel_companion)
+        self.finished.connect(self._cancel_app_stage)
 
     @staticmethod
     def _page() -> tuple[QWidget, QFormLayout]:
@@ -476,6 +481,15 @@ class SettingsWindow(QDialog):
         self.components_refresh.clicked.connect(lambda: self._refresh_components())
         controls = QVBoxLayout(); controls.addWidget(self.components_check); controls.addWidget(self.components_refresh)
         form.addRow(controls); form.addRow(self.components_status)
+        self.app_stage_button = QPushButton("Stage verified stable app update…")
+        self.app_stage_cancel = QPushButton("Cancel app staging"); self.app_stage_cancel.setEnabled(False)
+        self.app_stage_status = QLabel(); self.app_stage_status.setWordWrap(True)
+        self.app_stage_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.app_stage_status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.app_stage_button.clicked.connect(self._start_app_stage)
+        self.app_stage_cancel.clicked.connect(self._cancel_app_stage)
+        form.addRow(self.app_stage_button); form.addRow(self.app_stage_cancel); form.addRow(self.app_stage_status)
+        self._render_app_stage()
         self.component_labels = {}
         for key, name in (("app", "Morgan Media Downloader"), ("yt_dlp", "yt-dlp"), ("provider", "PO-token provider"),
                           ("ffmpeg", "FFmpeg"), ("ffprobe", "FFprobe"), ("companion", "Cookie Companion")):
@@ -520,6 +534,52 @@ class SettingsWindow(QDialog):
         self.task_manager.start("components", operation, on_result=self._components_ready,
                                 on_error=self._components_error, on_finished=self._components_finished)
 
+    def _render_app_stage(self, info=None):
+        info = info or self.app_updates.describe()
+        self.app_stage_status.setText(
+            f"{info['status']}\nStaged version: {info['staged_version'] or 'None'}\n"
+            f"Last successful stage: {info['last_stage'] or 'Never'}\nLast staging error: {info['last_error'] or 'None'}\n"
+            "Installation: not performed. Destination, post-exit replacement and recovery remain unresolved."
+            + ("\n" + self._app_stage_error_message if self._app_stage_error_message else ""))
+
+    def _start_app_stage(self):
+        if self._app_stage_busy: return
+        self._app_stage_busy = True; self._app_stage_error_message = ""
+        self.app_stage_button.setEnabled(False); self.app_stage_cancel.setEnabled(True)
+        self.app_stage_status.setText("Checking and staging a stable app release… Nothing will be installed.")
+        manager = self.app_updates
+        try:
+            self.task_manager.start("app-update", lambda cancel, progress: manager.stage_latest(cancel, progress),
+                on_progress=self._app_stage_progress, on_result=self._app_stage_ready,
+                on_error=self._app_stage_error, on_finished=self._app_stage_finished)
+        except RuntimeError:
+            self._app_stage_error("", ""); self._app_stage_finished()
+
+    def _app_stage_progress(self, payload):
+        if not isinstance(payload, dict): return
+        stage = str(payload.get("stage", "Staging"))[:100]
+        downloaded, total = payload.get("downloaded"), payload.get("total")
+        suffix = f" — {downloaded}/{total} bytes" if type(downloaded) is int and type(total) is int and total > 0 else ""
+        self.app_stage_status.setText(stage + suffix + "\nCurrent app unchanged; staging is not installation.")
+
+    def _app_stage_ready(self, info):
+        self._app_stage_error_message = ""; self._render_app_stage(info)
+
+    def _app_stage_error(self, *_):
+        self._app_stage_error_message = "Staging did not complete. Review the staging error and retry; no app was installed."
+        self._render_app_stage()
+
+    def _app_stage_finished(self, *_):
+        self._app_stage_busy = False
+        self.app_stage_button.setEnabled(True); self.app_stage_cancel.setEnabled(False)
+        self._render_app_stage()
+
+    def _cancel_app_stage(self, *_):
+        if not self._app_stage_busy: return
+        self.task_manager.cancel_kind("app-update")
+        self.app_stage_cancel.setEnabled(False)
+        self.app_stage_status.setText("Cancelling app staging; waiting for the current network/verification operation. Nothing installed.")
+
     def _components_ready(self, rows):
         for row in rows:
             if row["id"] == "yt_dlp": row = runtime_inventory(self.runtime_manager.describe())
@@ -529,6 +589,7 @@ class SettingsWindow(QDialog):
     def _render_component(self, row):
         label = self.component_labels.get(row["id"])
         if label is None: return
+        if row["id"] == "app": row = dict(row, action="Stage a verified stable app update above; installation/recovery not managed yet")
         label.setText(f"Installed: {row['installed']}\nLatest known: {row['latest']}\nCompatibility: {row['compatibility']}\n"
                           + (f"Build provenance: {row['provenance']}\n" if row.get("provenance") else "") +
                           f"Last successful check: {row['last_checked']}\nLast successful update: {row['last_update']}\n"

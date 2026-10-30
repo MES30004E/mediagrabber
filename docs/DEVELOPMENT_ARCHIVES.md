@@ -33,6 +33,8 @@ Extraction occurs in a fresh private stage, verifies the reconstructed bundle an
 only then exposes a new destination. Existing destinations are refused. Building
 inside the source bundle is refused without creating directories inside it. This
 format is not a general-purpose untrusted-file unpacker or a stable update feed.
+The separate `extract_release_archive` consumer enforces stable/approved metadata;
+it cannot accept this development builder's output. See [app update staging](APP_UPDATES.md).
 
 Hosted integration must launch the actual extracted app using the isolated Cocoa
 startup diagnostic and compare its source fingerprint. Source fixture tests inject
@@ -49,7 +51,7 @@ exact built archive round-trip, not approval to distribute it.
 
 Remaining work includes approved version/channel promotion, protected publication
 workflow, corresponding source/third-party notices and the application's licence,
-tokenless release download and compatibility selection, post-exit installation,
+native qualification of tokenless release staging/compatibility selection, post-exit installation,
 durable crash recovery and rollback UI. Checksums delivered with an archive prove
 consistency, not independent publisher authentication. No stable release is created
 by a development commit or this check.

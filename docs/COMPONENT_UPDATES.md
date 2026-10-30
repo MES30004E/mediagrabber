@@ -64,10 +64,15 @@ rollback. Manual channel selection does not authorize unattended nightly updates
 Already-dispatched downloads retain their existing runtime snapshot. See
 [runtime history/cadence](RUNTIME_UPDATES.md).
 
+Application **stable staging** is now connected separately; see
+[app update staging](APP_UPDATES.md). It does not install or replace the app, and
+development archives are not accepted as stable updates. Staging success and
+time are explicitly distinct from installation/update success.
+
 App/provider/media-tool/Companion replacement is explicitly **Not managed yet**.
 This is not a second installer and does not blindly pull the provider submodule.
 Qualified release assets, installed-component provenance, package compatibility,
-application staging/stop/replacement/recovery and rollback must be connected
+application stop/replacement/recovery and rollback must be connected
 before those update actions can be offered. No application release is published
 by Check or a development commit. Hosted native-host bundle integration has
 passed its narrow protocol checks. Node/provider offline integration now has a

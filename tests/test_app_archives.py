@@ -158,3 +158,12 @@ def test_archive_member_budget_is_enforced_before_extraction(tmp_path, monkeypat
     with pytest.raises(ValueError, match="limit"):
         extract_development_archive(output / manifest["asset"]["name"], manifest, tmp_path / "extracted", validator=validate)
     assert not (tmp_path / "extracted").exists()
+
+
+def test_stable_staging_has_a_separate_policy_and_rejects_development_candidates(tmp_path):
+    from morgan_media_downloader.app_archives import extract_release_archive
+    _, output, manifest = candidate(tmp_path); archive = output / manifest["asset"]["name"]
+    with pytest.raises(ValueError): extract_release_archive(archive, manifest, tmp_path / "rejected", validator=validate)
+    assert not (tmp_path / "rejected").exists()
+    manifest.update(channel="stable", publication_approved=True)
+    validate(extract_release_archive(archive, manifest, tmp_path / "stable", validator=validate))
