@@ -35,6 +35,10 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   JS10 and protocol9fixtures matched. Before/after synthetic matrix and measured
   limitations are in `docs/QUEUE_SCALE.md`. The latest queue edits are local,
   not part of the currently running hosted Canvas-fix commit.
+- Subsequent atomic admission worktree: **614 Python tests passed in19.17s**,
+  JS10/protocol9 matched. Real800/5,000 admission uses one SQLite commit instead
+  of800/5,000, and publishes runnable entries only after persistence succeeds.
+  This remains a persistence prerequisite, not completed asynchronous batches.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -132,7 +136,7 @@ whole-app rewrite.
 | UI concentration | `ui.py` 2,021 lines; `settings_window.py` 762 in current worktree | Extract bounded queue/batch model/service responsibilities; unchanged behavior/DB tests and reduced coupling evidence |
 | Per-row queue objects | `_refresh_queue` uses QTableWidget, per-row QProgressBar and formatted cells; structural clear/rebuild when IDs/columns differ | Benchmark allocation/RSS/native ownership/selection across 100–5,000; use model/delegate/incremental updates where measured |
 | Full queue/history work | `_refresh_queue` traverses all jobs; `_refresh_history` allocates every table item | Profile event frequency/CPU/GUI stalls before coalescing dirty IDs and paging/model decisions |
-| Per-job persistence | `Database.save_job` serializes payload and commits one job; `remove_job` commits each delete | Trace transaction counts/serialized bytes; bulk repository transaction APIs and migration/restart/fault tests |
+| Per-job persistence: admission batched | `save_jobs`/`remove_jobs` now provide atomic iterable transactions; media admission commits once before UI publication. Other bulk actions still write per job | Mid-SQL/serialization rollback and phantom-entry regressions pass; bounded async service must consume these APIs in slices, with restart/error/cancel coordination |
 | Modal batch loop: narrow fix verified | Previously one prompt per selected job; now one ID snapshot/one native keep-default dialog,800-job tests pass | Retain broader bounded asynchronous cancellation, per-item failure aggregation, collection controls and realistic worker/file-race qualification |
 | Task admission | `TaskManager.start` creates a QThread per admitted task; callers own bounds | Measure actual concurrency/admission/callback queues; scheduler/backpressure tests, no per-queued-job thread explosion |
 | Unknown native crash | Real QA reports crash; baseline now measures 15s UI stalls at800 and24s at1,000;5,000 times out.100-item profile assigns0.235/0.252s to cell setText | Native crash still not reproduced/classified. Fix the measured refresh bottleneck with causal tests/after benchmarks; continue isolated native/race reproduction, not a guessed crash explanation |

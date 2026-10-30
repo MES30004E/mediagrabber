@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Iterable
+from itertools import chain
 from pathlib import Path
 
 from .models import DownloadJob, JobStatus
@@ -39,16 +41,25 @@ class Database:
             )
 
     def save_job(self, job: DownloadJob) -> None:
-        payload = json.dumps(job.to_dict(), ensure_ascii=False)
+        self.save_jobs((job,))
+
+    def save_jobs(self, jobs: Iterable[DownloadJob]) -> None:
+        """Atomically persist one caller-bounded batch; roll back on any failure."""
+        iterator = iter(jobs)
+        try: first = next(iterator)
+        except StopIteration: return
+        def rows():
+            for job in chain((first,), iterator):
+                yield (job.id, job.status.value, job.item.title, job.item.source_url, job.output_file,
+                       job.created_at, job.updated_at, json.dumps(job.to_dict(), ensure_ascii=False))
         with self._lock, self._connection:
-            self._connection.execute(
+            self._connection.executemany(
                 """INSERT INTO jobs(id,status,title,source_url,output_file,created_at,updated_at,payload)
                    VALUES(?,?,?,?,?,?,?,?)
                    ON CONFLICT(id) DO UPDATE SET status=excluded.status,title=excluded.title,
                    source_url=excluded.source_url,output_file=excluded.output_file,
                    updated_at=excluded.updated_at,payload=excluded.payload""",
-                (job.id, job.status.value, job.item.title, job.item.source_url, job.output_file,
-                 job.created_at, job.updated_at, payload),
+                rows(),
             )
 
     def load_jobs(self) -> list[DownloadJob]:
@@ -72,8 +83,15 @@ class Database:
                                      (JobStatus.COMPLETED.value, JobStatus.COMPLETED_WARNINGS.value))
 
     def remove_job(self, job_id: str) -> None:
+        self.remove_jobs((job_id,))
+
+    def remove_jobs(self, job_ids: Iterable[str]) -> None:
+        """Atomically remove queue records only; never touches downloaded files."""
+        iterator = iter(job_ids)
+        try: first = next(iterator)
+        except StopIteration: return
         with self._lock, self._connection:
-            self._connection.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+            self._connection.executemany("DELETE FROM jobs WHERE id = ?", ((job_id,) for job_id in chain((first,), iterator)))
 
     def search_history(self, query: str = "", status: str = "All") -> list[DownloadJob]:
         clauses, values = [], []

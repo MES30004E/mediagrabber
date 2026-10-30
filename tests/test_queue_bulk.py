@@ -104,3 +104,27 @@ def test_confirmation_snapshot_resolves_latest_job_inventory_after_modal_event_d
         window.remove_selected()
         assert removed == [latest] and removed[0] is latest
     finally: window.close(); _APP.processEvents()
+
+
+def test_enqueue_eight_hundred_jobs_commits_once_before_publishing_queue(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch); statements = []
+    try:
+        window.database._connection.set_trace_callback(statements.append)
+        items = [MediaItem(f"https://example.test/{i}", str(i)) for i in range(800)]
+        window._enqueue_payload(items, None, DownloadOptions(authentication_mode="None", download_dir=str(tmp_path)))
+        assert len(window.jobs) == len(window.database.load_jobs()) == 800
+        assert statements.count("COMMIT") == 1
+    finally: window.close(); _APP.processEvents()
+
+
+def test_enqueue_database_failure_never_publishes_partial_jobs(tmp_path, monkeypatch):
+    import pytest
+    window = _window(tmp_path, monkeypatch)
+    def reject(_): raise OSError("Synthetic persistence failure")
+    monkeypatch.setattr(window.database, "save_jobs", reject)
+    try:
+        with pytest.raises(OSError):
+            window._enqueue_payload([MediaItem("https://example.test/1", "Synthetic")], None,
+                DownloadOptions(authentication_mode="None", download_dir=str(tmp_path)))
+        assert not window.jobs and window.database.load_jobs() == []
+    finally: window.close(); _APP.processEvents()

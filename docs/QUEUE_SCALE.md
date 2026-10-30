@@ -132,3 +132,21 @@ There are **no new-design screenshots yet**. The new
 `test_queue_scale_probe.py` verifies the diagnostic really drives real queue and
 persisted operations, but deliberately does not bless the baseline confirmation
 count, widget-based implementation or latency as correct behavior.
+
+## Atomic admission prerequisite
+
+The subsequent persistence checkpoint adds iterable `save_jobs`/`remove_jobs`
+transaction APIs without a schema change. Media admission saves its complete
+batch before publishing runnable entries; torrent admission also saves first.
+Serialization or SQL failure rolls back the batch and cannot publish phantom jobs.
+Single-job callers retain their existing APIs. Empty batches do no SQL.
+
+A new real synthetic probe measured800-item enqueue at0.149s/one commit (previous
+0.227s/800commits) and5,000-item enqueue at1.098s/one commit (previous1.247s/
+5,000commits). Both sizes completed the probe with one removal confirmation.
+These are single-run timings, not a memory improvement or broad responsiveness
+qualification; the5,000 enqueue heartbeat gap was still1.165s. Other actions still
+have per-item writes. The API consumes rows lazily but does not impose a maximum
+call size or yield the GUI thread. A bounded asynchronous service must choose its
+chunk sizes, handle errors and coordinate dispatch/shutdown; this remains next P0
+work, alongside model/view and bounded widget/progress memory.

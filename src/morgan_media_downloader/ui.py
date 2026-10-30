@@ -1197,10 +1197,11 @@ class MainWindow(QMainWindow):
                               torrent_file_paths=[str(Path(media.uploader) / media.title) if media.uploader else media.title for media in selected],
                               torrent_trackers=list(torrent_context.trackers))
             job.options = torrent_options
-            self.jobs[job.id] = job; self.database.save_job(job)
+            self.database.save_job(job); self.jobs[job.id] = job
             self._refresh_queue(); self._refresh_history(); self.tabs.setCurrentIndex(1); return
         organised = organised_folder(options.download_dir, selected, self.settings.create_subfolders)
         created_directory = organised if Path(organised) != Path(options.download_dir) and not Path(organised).exists() else ""
+        queued = []
         for item in selected:
             item_options = copy.deepcopy(options)
             for key, value in self._item_overrides.get(id(item), {}).items(): setattr(item_options, key, value)
@@ -1208,7 +1209,12 @@ class MainWindow(QMainWindow):
             if len(selected) > 1 and "playlist_index" not in item_options.filename_template and item.playlist_index:
                 item_options.filename_template = "%(playlist_index)03d - " + item_options.filename_template
             job = DownloadJob(item=item, options=item_options, created_job_directory=created_directory,
-                              effective_connection=self.settings.connection_mode); self.jobs[job.id] = job; self.database.save_job(job)
+                              effective_connection=self.settings.connection_mode)
+            queued.append(job)
+        # The visible queue is published only after the entire admission commits.
+        # A failed SQL write/serialization cannot leave phantom runnable entries.
+        self.database.save_jobs(queued)
+        self.jobs.update((job.id, job) for job in queued)
         self._persist_settings(); self._refresh_queue(); self._refresh_history(); self.tabs.setCurrentIndex(1)
 
     def _dispatch(self):
