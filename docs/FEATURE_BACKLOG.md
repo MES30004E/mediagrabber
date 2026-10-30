@@ -12,12 +12,15 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   checkpoint `f2adc914e5b2c9f22c9b42ed9d58a4174c5c3e5e`.
 - Staging safe checkpoint `049c44d1b7d7c02cd62582aa3adcdf3507f43ad9` and Canvas
   runtime-only fix `9a060447473d7d2a6d3c180e14229d9e843a416c` are now pushed.
-  New hosted run `40991415616` is active on the exact Canvas-fix SHA; do not
-  cancel it with another push. Native recovery remains unqualified until logs pass.
+  Hosted run `40991415616` passed all jobs on the exact Canvas-fix SHA: Linux601,
+  macOS backend60, Swift25, protocol9fixtures, actual provider/media/Cocoa/
+  replacement and strict extracted-archive signature/launch checks. No release
+  asset was uploaded or installed. Queue checkpoint `a97742fc2ad3fda1c987f05782f9a9b1636ac11a`
+  is locally committed/tested; its new hosted qualification remains separate.
 - Hosted diagnostic run `40989481899` is terminal: Linux and Swift passed; native
   packaging failed strict signature validation on an extracted Canvas compiler
   object `ImageData.o`. Byte/symlink contents and modes matched the source. A
-  runtime-only Canvas stage fix is in progress; it needs a new hosted round-trip.
+  runtime-only Canvas stage fix is now qualified by the successful new run above.
 - Run `40864520636` failed strict deep signature validation of the extracted
   archive. Other native component, media, Cocoa and replacement probes passed
   before that failure. The retained native compiler object is now identified;
@@ -112,7 +115,7 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | R01 Partial | Installed/latest/compatibility/check/update/error/rollback separately shown for app, stable/nightly yt-dlp, provider, FFmpeg/probe and Companion | `components.py`, `settings_window.py`, `yt_runtime.py`; component/UI/runtime tests; `docs/COMPONENT_UPDATES.md` | Actual installed Chrome/protocol vs shipped version, provider runtime vs import and media provenance remain distinct; no fake compatibility claims |
 | R02 Partial | Automatic reasonable checks/backoff + manual check; compatible integrity-checked activation; active-download snapshots | Component catalog and yt runtime timers; `test_components.py`, `test_yt_runtime.py` | App/provider/media/Companion activation not completed by catalog checks; no blind upstream HEAD pulls; test rate-limit/restart/offline/error states |
 | R03 Hosted-tested narrow gates | Apple Silicon app contains native host, Node/provider/Canvas, FFmpeg/probe/aria2; native protocol/media/Mach-O/Cocoa launch tests | `build_macos.sh`, specs, workflow, `scripts/check_packaged_*.py`, package tests; `docs/PACKAGED_*.md` | Preserve current successful narrow native gates; packaging qualification depends on exact run/commit; local licence-gated build prohibited |
-| R04 Release blocker; fix pushed | Versioned archive preserves bundle/signature and launches after extraction, with manifest/checksums/notes; dev separate from stable | `app_archives.py`, `check_packaged_archive.py`; archive/probe tests; `docs/DEVELOPMENT_ARCHIVES.md` | Diagnostic0242 identifies Canvas compiler object; pre-signing runtime-only fix9a06044 is in hosted run40991415616. Native recovery not yet proven; no bypass/re-sign of extracted candidate |
+| R04 Hosted-tested development archive | Versioned archive preserves bundle/signature and launches after extraction, with manifest/checksums/notes; dev separate from stable | `app_archives.py`, `check_packaged_archive.py`; archive/probe tests; `docs/DEVELOPMENT_ARCHIVES.md` | Diagnostic0242 identifies Canvas compiler object; pre-signing runtime-only fix9a06044 passed strict native round-trip/launch in40991415616. No bypass/re-sign. Stable publication/trust, supported volumes and updater recovery still open |
 | R05 Partial; safe checkpoint pushed | Public tokenless newer stable metadata/asset integrity/platform/OS checks; private cancellable staging; previous candidate preserved | `app_updates.py`, `settings_window.py`, stable archive policy; update transport/manager/UI tests; `docs/APP_UPDATES.md`; commit049c44d | Retry/ledger/concurrency/redirect/duplicate-JSON regressions fixed and reviewed; no live qualified stable feed. Stage is not install; full native updater/recovery/publication remain open |
 | R06 Partial primitive, updater open | Stop-coordinated replacement, durable crash recovery, previous working installation and rollback; no active-download replacement | `app_installation.py`; installation/replacement tests; `docs/APP_REPLACEMENT.md` | Post-exit orchestration/helper/journal/recovery UI and active-job coordination not connected. User approval/destination unresolved; no install now |
 | R07 Open approval gate | Controlled hosted release builds only approved exact qualified commit/version; checksums/notes/source/notices; protected explicit approval before publish | Existing validation workflow is **not** release publication | Application licence, dependency/source-offer compliance, Developer ID/notarisation credentials or truthful unsigned status, stable promotion/release workflow and explicit approval. No tag/release/upload now |

@@ -60,9 +60,11 @@ not kill threads. Existing TaskManager shutdown ownership stays in effect.
 
 ## Unfinished acceptance and priority
 
-The hosted development archive signature failure is a separate release blocker;
-do not bypass it or re-sign an extracted app to make staging appear compatible.
-Native archive/launch qualification must pass on an exact hosted commit.
+The hosted development archive signature failure was corrected by removing Canvas
+compiler intermediates before normal signing. Exact commit `9a06044`, run
+`40991415616`, passed strict extracted signature and real Cocoa launch checks;
+there was no verification bypass or extracted-app re-signing. That validates the
+development transport, not a live stable feed or independent publisher identity.
 
 Post-exit coordination, durable crash journal, recovery/rollback UI, active-job
 coordination, protected stable promotion, licence/source-offer/notices and actual

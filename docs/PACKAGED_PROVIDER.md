@@ -46,6 +46,13 @@ claiming the release blocker resolved. Portable staging tests reproduce retentio
 of the offending compiler object before the fix and verify its removal while
 retaining the loadable add-on afterward.
 
+That narrow recovery is now verified: run `40991415616` on exact commit
+`9a060447473d7d2a6d3c180e14229d9e843a416c` passed post-prune native Canvas PNG,
+provider1.3.1/Node24.22.0, Mach-O containment, strict extracted archive signature
+and real extracted Cocoa app launch. Original bundle bytes/symlinks/modes remained
+unchanged. This validates removing intermediates from the runtime payload; it is
+not independent publisher signing, a public release or live PO-token generation.
+
 ## Bundle and checks
 
 `MORGAN_PROVIDER_STAGE` opts the PyInstaller spec into staged Node/provider files.

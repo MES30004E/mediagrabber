@@ -49,6 +49,18 @@ only a bounded candidate summary, then removes those disposable CI copies. No
 upload action or release API is involved. Passing this probe is evidence for that
 exact built archive round-trip, not approval to distribute it.
 
+## Hosted evidence
+
+Run `40991415616`, exact commit `9a060447473d7d2a6d3c180e14229d9e843a416c`,
+passed the actual arm64 archive/signature/Cocoa round-trip and earlier bundled
+native-host/provider/media/replacement gates. Canvas compiler intermediates were
+removed before ordinary bundle signing after diagnostics identified an extracted
+`ImageData.o` as unsigned. Extracted app contents, symlinks and permission modes
+matched; strict verification was not relaxed and the extracted app was not re-signed.
+The development archive was141,448,477bytes, SHA-256
+`a9c7a5bbf628c0cac640ab777aced00a2d69e08b56e8554dfe0573b80a9a3efe`.
+It was a disposable CI candidate, not an uploaded/downloadable stable release.
+
 Remaining work includes approved version/channel promotion, protected publication
 workflow, corresponding source/third-party notices and the application's licence,
 native qualification of tokenless release staging/compatibility selection, post-exit installation,
