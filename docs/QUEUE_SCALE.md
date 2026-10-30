@@ -190,8 +190,8 @@ visible/pending until the owned completion callback deletes the queue record.
 BatchOutcome tracks applied, failed, unchanged and correlated waiting IDs. Unknown
 or repeated completion IDs cannot change totals. Stop prevents future slices but
 admitted removals still finish; close retains unresolved entries rather than
-resuming removal after a restart. Small/explicit file-deletion actions retain
-existing behavior; optional filesystem deletion is **not yet asynchronous**.
+resuming removal after a restart. At checkpoint90e3d3b, explicit file deletion
+still retained synchronous behavior; the next section records its replacement.
 
 The actual800/5000 synthetic keep-removal probe passed with one confirmation,
 25/157 transactions, wall0.017/0.111s and maximum heartbeat0.015/0.081s. A separate
@@ -206,7 +206,68 @@ failed before fixes and pass now. Removal supersedes pending restart, failed
 stopped entries recover as Interrupted, and exception-type fallback keeps failure
 counts truthful. Full Python suite631passed20.12s, JS10/protocol9 matched.
 
-Deferred minor: while admitted workers remain pending, Stop changes internal
-cancel state without immediately emitting another progress notification. Counts
-remain pending, not successful; final worker settlement updates the UI. Immediate
-stopped/waiting feedback should be refined with the remaining batch UX.
+That checkpoint's deferred immediate Stop-notification minor is resolved below.
+
+## Asynchronous optional owned-file removal
+
+Explicit delete choices now use `FileRemovalService` even for one job. It admits
+one TaskManager-owned worker with at most32 copied job inventories, waits for
+all transfer owners in the admitted slice to stop, and calls only the existing
+ownership/Trash helper. Results are published after thread exit. GUI-side atomic
+DB deletion follows successful cleanup; per-job cleanup or DB failures retain
+entries and report that files may already have moved. There is no wildcard
+destination deletion. Keep-files remains the safe confirmation default.
+
+Stop immediately reports stopped/pending counts, completes the already admitted
+slice, and prevents future slices. Shutdown requests cancellation between jobs,
+retains unresolved entries and persists uncertainty evidence before DB close.
+Failure saving that evidence cannot skip worker shutdown; the running marker is
+retained for next-start recovery. A blocked filesystem operation cannot be
+forcibly interrupted; the existing owned-task shutdown wait/retry remains.
+
+Review reproduced an older pending restart executing its filesystem helper on
+the GUI before a later removal slice. Confirmation now supersedes restarts for
+the entire selected-ID snapshot, not only admitted jobs. Review also reproduced
+uncaught marker-persistence failure aborting shutdown. Both defects, plus new
+queue action admission during a pending close, have observed RED→GREEN tests.
+Focused service/controller/bulk tests39passed5.54s, probe tests2passed1.30s;
+full Python646passed22.62s, JS10 and drift9 fixtures matched. One admission-error
+catch was added by inspection before its regression; no test-first claim for it.
+
+Reproduce the synthetic cleanup diagnostic (never deletes files):
+
+```sh
+PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B \
+  scripts/benchmark_queue.py --items 100 800 1000 5000 --synthetic-cleanup
+```
+
+This drives actual QueueBatch/TaskManager orchestration with a fake1ms/job
+IO-like delay, not actual Trash or storage throughput. Repeated final matrix
+without concurrent full-suite load, same local Python/Qt versions:
+
+| Items | Cleanup wall | Cleanup CPU | Max GUI heartbeat gap | DB commits | Peak process RSS |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 0.136s | 0.034s | 0.005s | 4 | 138.23MiB |
+| 800 | 1.032s | 0.261s | 0.011s | 25 | 178.83MiB |
+| 1,000 | 1.259s | 0.316s | 0.012s | 32 | 190.58MiB |
+| 5,000 | 6.423s | 1.622s | 0.050s | 157 | 413.81MiB |
+
+All cases: one confirmation, at mostone cleanup worker, at most32 jobs/slice,
+zero helper calls on GUI, and no active tasks after completion. The heartbeat
+timer fired26/203/246/1252times during worker cleanup. Thread counts sampled
+after the removal were8/8/8/7; those samples are not peak native-thread counts.
+The earlier baseline did not time this IO-like fixture; do not infer a measured
+filesystem speedup. The prior15s→0.065s status-action improvement above concerns
+header refresh, not this worker. Peak RSS still~414MiB at5,000: no memory fix.
+
+Tests exercise injected deleters, actual temporary owned-file deletion and an
+unrelated temporary file surviving, active-owner stop, admission failure,
+post-cleanup DB failure, Stop and close. Real user files/Trash, actual downloads,
+external actors, symlinks across volumes and native Cocoa scale remain separate
+QA. The reported native crash is still not reproduced/classified. No screenshots
+for the proposed redesign or actual Media Viewer playback qualification exist.
+
+Preceding source90e3d3b passed hosted run41031238079: Linux631, macOS backend60,
+Swift25, drift9, provider/media/Cocoa/replacement and strict extracted-archive
+signature/launch checks. It does not cover this new source; its hosted results
+must be inspected separately. No release asset published or app installed.

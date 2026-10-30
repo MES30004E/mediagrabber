@@ -18,6 +18,7 @@ import pstats
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from unittest.mock import patch
 
@@ -29,7 +30,7 @@ def native_threads():
     return None
 
 
-def run_case(count, *, profile=False):
+def run_case(count, *, profile=False, synthetic_cleanup=False):
     with tempfile.TemporaryDirectory(prefix="morgan-queue-scale-") as temporary:
         root = Path(temporary)
         os.environ.update(QT_QPA_PLATFORM="offscreen", MORGAN_DATA_DIR=str(root / "data"),
@@ -60,9 +61,26 @@ def run_case(count, *, profile=False):
             if verb in {"INSERT", "UPDATE", "DELETE"}: sql["writes"] += 1
         window.database._connection.set_trace_callback(trace)
         heartbeat_gaps = []; last_tick = time.monotonic()
+        cleanup_fixture = dict(jobs=0, max_active_workers=0, max_slice=0, gui_thread_calls=0, heartbeat_ticks=0)
+        gui_thread = threading.get_ident()
+        def cleanup(_job):
+            # Controlled IO-like delay only: no filesystem deletion or user media.
+            cleanup_fixture["gui_thread_calls"] += threading.get_ident() == gui_thread
+            time.sleep(.001); cleanup_fixture["jobs"] += 1
+            return []
+        def task_started(_task_id, kind):
+            if kind == "queue-file-removal":
+                cleanup_fixture["max_active_workers"] = max(cleanup_fixture["max_active_workers"],
+                    len(window.task_manager.active_ids(kind)))
+        start_cleanup = window.file_removal.start
+        def admit_cleanup(jobs):
+            cleanup_fixture["max_slice"] = max(cleanup_fixture["max_slice"], len(jobs))
+            return start_cleanup(jobs)
+        window.task_manager.task_started.connect(task_started)
         def tick():
             nonlocal last_tick
             now = time.monotonic(); heartbeat_gaps.append(now - last_tick); last_tick = now
+            if window.file_removal.busy: cleanup_fixture["heartbeat_ticks"] += 1
         heartbeat = QTimer(); heartbeat.setInterval(5); heartbeat.timeout.connect(tick); heartbeat.start()
 
         def measure(name, operation):
@@ -132,14 +150,17 @@ def run_case(count, *, profile=False):
                 if len(restored) != count or any(job.status != JobStatus.CANCELLED for job in restored):
                     raise AssertionError("Cancelled state was not restored")
                 window.queue_table.selectAll()
-                def confirm(job): modal_calls.append(True); return "list"
-                with patch.object(window, "_confirm_remove", confirm):
-                    measure("remove-selected-keep-files", window.remove_selected)
+                def confirm(job): modal_calls.append(True); return "delete" if synthetic_cleanup else "list"
+                with patch.object(window, "_confirm_remove", confirm), \
+                     patch.object(window.file_removal, "deleter", cleanup), \
+                     patch.object(window.file_removal, "start", admit_cleanup):
+                    measure("remove-selected-synthetic-cleanup" if synthetic_cleanup else "remove-selected-keep-files", window.remove_selected)
                 if window.jobs or window.database.load_jobs(): raise AssertionError("Removal did not complete")
                 if window.task_manager.active_count: raise AssertionError("Probe leaked background tasks")
         finally:
             heartbeat.stop(); window.close(); app.processEvents()
         return {"items": count, "result": "passed", "platform": sys.platform, "measurements": results,
+                "cleanup_fixture": cleanup_fixture if synthetic_cleanup else None,
                 "confirmation_requests": len(modal_calls), "scope": "Offscreen synthetic baseline, not live/network/native Cocoa qualification"}
 
 
@@ -148,14 +169,16 @@ def main():
     parser.add_argument("--items", type=int, nargs="+", choices=[100, 800, 1000, 5000], default=[100, 800, 1000, 5000])
     parser.add_argument("--child", type=int, choices=[100, 800, 1000, 5000], help=argparse.SUPPRESS)
     parser.add_argument("--profile", action="store_true", help="Include pause-all's top20 cumulative profile; timings include profiler cost")
+    parser.add_argument("--synthetic-cleanup", action="store_true", help="Exercise owned cleanup workers with a 1ms/job fake deleter; never deletes files")
     args = parser.parse_args()
     if args.child:
-        print(json.dumps(run_case(args.child, profile=args.profile), sort_keys=True), flush=True); return
+        print(json.dumps(run_case(args.child, profile=args.profile, synthetic_cleanup=args.synthetic_cleanup), sort_keys=True), flush=True); return
     failed = False
     for count in args.items:
         try:
             command = [sys.executable, "-B", str(Path(__file__).resolve()), "--child", str(count)]
             if args.profile: command.append("--profile")
+            if args.synthetic_cleanup: command.append("--synthetic-cleanup")
             result = subprocess.run(command,
                 capture_output=True, text=True, timeout=120, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONFAULTHANDLER="1"))
             if result.returncode:

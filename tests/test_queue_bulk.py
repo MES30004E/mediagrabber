@@ -160,16 +160,21 @@ def test_bulk_removal_waits_for_active_worker_before_optional_owned_file_deletio
     window = _window(tmp_path, monkeypatch); deleted = []; cancelled = []
     monkeypatch.setattr(window, "_confirm_remove", lambda *_: "delete")
     monkeypatch.setattr(window.task_manager, "cancel", lambda task_id: cancelled.append(task_id) or True)
-    monkeypatch.setattr("morgan_media_downloader.ui.delete_owned_files", lambda job: deleted.append(job.id))
+    window.file_removal.deleter = lambda job: deleted.append(job.id) or []
     try:
         jobs(window, 800)
         active = list(window.jobs.values())[:2]
         for job in active: window.active[job.id] = "job-" + job.id
         window.remove_selected()
-        assert len(window.jobs) == 2 and len(deleted) == 798 and len(cancelled) == 2
+        assert len(window.jobs) == 800 and not deleted
+        from test_queue_batch import drain
+        # First cleanup slice must wait for both actual download owners.
+        _APP.processEvents()
+        assert len(cancelled) == 2 and not deleted
         assert all(job.id not in deleted for job in active)
         assert set(window.pending_removals) == {job.id for job in active}
         for job in active: window._job_finished("job-" + job.id)
+        drain(window.queue_batch)
         assert len(deleted) == 800 and not window.jobs and not window.pending_removals
     finally:
         window.active.clear(); window.close(); _APP.processEvents()
@@ -188,9 +193,12 @@ def test_confirmation_snapshot_resolves_latest_job_inventory_after_modal_event_d
             window.jobs[original.id] = latest
             return "delete"
         monkeypatch.setattr(window, "_confirm_remove", confirm)
-        monkeypatch.setattr("morgan_media_downloader.ui.delete_owned_files", lambda job: removed.append(job))
+        window.file_removal.deleter = lambda job: removed.append(job) or []
         window.remove_selected()
-        assert removed == [latest] and removed[0] is latest
+        from test_queue_batch import drain
+        drain(window.queue_batch)
+        assert len(removed) == 1 and removed[0].id == latest.id
+        assert removed[0].final_files == latest.final_files
     finally: window.close(); _APP.processEvents()
 
 
@@ -309,3 +317,177 @@ def test_large_retry_captures_applied_authentication_without_replacing_quality(t
             assert job.options.quality == "720p"
         assert len(window.database.load_jobs()) == 800
     finally: window.close(); _APP.processEvents()
+
+
+def test_explicit_cleanup_deletes_only_temporary_owned_fixture_on_worker(tmp_path, monkeypatch):
+    import threading
+    from morgan_media_downloader.file_ownership import delete_owned_files
+    from test_queue_batch import drain
+    window = _window(tmp_path, monkeypatch); threads = []; main = threading.get_ident()
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "delete")
+    try:
+        jobs(window, 1); job = next(iter(window.jobs.values()))
+        owned = tmp_path / "owned.fixture"; owned.write_bytes(b"synthetic")
+        foreign = tmp_path / "unrelated.fixture"; foreign.write_bytes(b"must remain")
+        job.options.download_dir = str(tmp_path); job.final_files = [str(owned)]
+        def cleanup(snapshot):
+            threads.append(threading.get_ident())
+            return delete_owned_files(snapshot, use_trash=False)
+        window.file_removal.deleter = cleanup
+        window.remove_selected(); drain(window.queue_batch)
+        assert not owned.exists() and foreign.read_bytes() == b"must remain"
+        assert threads and all(value != main for value in threads)
+        assert not window.jobs and not window.file_removal.busy
+    finally: window.close(); _APP.processEvents()
+
+
+def test_stop_during_cleanup_finishes_one_slice_and_preserves_unprocessed_entries(tmp_path, monkeypatch):
+    import threading
+    import time
+    from test_queue_batch import drain
+    window = _window(tmp_path, monkeypatch); entered = threading.Event(); release = threading.Event(); seen = []
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "delete")
+    def cleanup(snapshot):
+        entered.set(); assert release.wait(5)
+        seen.append(snapshot.id); return []
+    window.file_removal.deleter = cleanup
+    try:
+        jobs(window, 800); window.database.save_jobs(window.jobs.values())
+        window.remove_selected()
+        deadline = time.monotonic() + 5
+        while not entered.is_set() and time.monotonic() < deadline: _APP.processEvents()
+        assert entered.is_set() and len(window.task_manager.active_ids("queue-file-removal")) == 1
+        window.stop_queue_batch.click()
+        assert "Stopped" in window.statusBar().currentMessage()
+        release.set(); drain(window.queue_batch)
+        assert len(seen) == 32 and len(window.jobs) == 768
+        assert window.queue_batch.describe()["pending"] == 768 and window.queue_batch.describe()["cancelled"]
+    finally:
+        release.set(); window.close(); _APP.processEvents()
+
+
+def test_database_failure_after_cleanup_retains_entry_and_reports_partial_side_effects(tmp_path, monkeypatch):
+    from test_queue_batch import drain
+    window = _window(tmp_path, monkeypatch)
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "delete")
+    try:
+        jobs(window, 1); window.database.save_jobs(window.jobs.values())
+        window.file_removal.deleter = lambda _: ["synthetic moved path"]
+        def reject(_): raise OSError()
+        monkeypatch.setattr(window.database, "remove_jobs", reject)
+        window.remove_selected(); drain(window.queue_batch)
+        assert len(window.jobs) == len(window.database.load_jobs()) == 1
+        assert window.queue_batch.describe()["failed"] == 1 and window.queue_batch.describe()["completed"] == 0
+        assert "files may already have moved" in window.queue_batch.describe()["error"]
+    finally: window.close(); _APP.processEvents()
+
+
+def test_cleanup_worker_admission_failure_after_download_stop_is_settled(tmp_path, monkeypatch):
+    from test_queue_batch import drain
+    window = _window(tmp_path, monkeypatch)
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "delete")
+    monkeypatch.setattr(window.task_manager, "cancel", lambda _: True)
+    def reject(_): raise RuntimeError("synthetic worker admission failure")
+    monkeypatch.setattr(window.file_removal, "start", reject)
+    try:
+        jobs(window, 800); active = next(iter(window.jobs)); window.active[active] = "job-" + active
+        window.remove_selected(); _APP.processEvents()
+        window._job_finished("job-" + active)
+        drain(window.queue_batch)
+        assert window.queue_batch.describe()["failed"] == 800 and len(window.jobs) == 800
+        assert not window.pending_removals and not window._delete_slice_ids
+    finally:
+        window.active.clear(); window.close(); _APP.processEvents()
+
+
+def test_close_during_cleanup_retains_interruption_evidence_without_late_queue_deletion(tmp_path, monkeypatch):
+    import threading
+    import time
+    from morgan_media_downloader.database import Database
+    window = _window(tmp_path, monkeypatch); entered = threading.Event(); release = threading.Event()
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "delete")
+    def cleanup(_): entered.set(); assert release.wait(5); return []
+    window.file_removal.deleter = cleanup
+    try:
+        jobs(window, 1); window.database.save_jobs(window.jobs.values())
+        path = window.database.path
+        window.remove_selected()
+        deadline = time.monotonic() + 5
+        while not entered.is_set() and time.monotonic() < deadline: _APP.processEvents()
+        assert entered.is_set()
+        timer = threading.Timer(.03, release.set); timer.start()
+        assert window.close(); timer.join(); _APP.processEvents()
+        assert window.task_manager.active_count == 0 and not window.file_removal.busy
+        restarted = Database(path)
+        try:
+            restored = restarted.load_jobs()
+            assert len(restored) == 1
+            assert "Cleanup interrupted" in restored[0].technical_details
+            assert "files may already have moved" in restored[0].technical_details
+        finally: restarted.close()
+    finally:
+        release.set(); window.close(); _APP.processEvents()
+
+
+def test_shutdown_wait_cannot_admit_another_destructive_queue_action(tmp_path, monkeypatch):
+    window = _window(tmp_path, monkeypatch); prompts = []
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: prompts.append(True) or "delete")
+    try:
+        jobs(window, 1)
+        window._closing = True  # Close may remain pending while a blocked disk operation finishes.
+        window.remove_selected()
+        assert not prompts and not window.queue_batch.busy and not window.file_removal.busy
+    finally:
+        window._closing = False; window.close(); _APP.processEvents()
+
+
+@pytest.mark.parametrize("choice", ["list", "delete"])
+def test_confirmed_removal_supersedes_restart_before_later_slice_is_admitted(tmp_path, monkeypatch, choice):
+    from test_queue_batch import drain
+    window = _window(tmp_path, monkeypatch); restart_deletions = []
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: choice)
+    monkeypatch.setattr("morgan_media_downloader.ui.delete_restart_state",
+        lambda *_, **__: restart_deletions.append(True))
+    window.file_removal.deleter = lambda _: []
+    try:
+        jobs(window, 800)
+        late = list(window.jobs)[100]
+        window.active[late] = "job-" + late
+        window.pending_restarts[late] = "restart"
+        window.remove_selected()
+        # The owner finishes before even the first QTimer slice is admitted.
+        window._job_finished("job-" + late)
+        assert not restart_deletions and late not in window.pending_restarts
+        drain(window.queue_batch)
+        assert not window.jobs and window.queue_batch.describe()["completed"] == 800
+    finally:
+        window.active.clear(); window.close(); _APP.processEvents()
+
+
+def test_shutdown_marker_persistence_failure_still_drains_worker_and_keeps_unclean_marker(tmp_path, monkeypatch):
+    import threading
+    import time
+    from PySide6.QtGui import QCloseEvent
+    window = _window(tmp_path, monkeypatch); entered = threading.Event(); release = threading.Event()
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "delete")
+    def cleanup(_): entered.set(); assert release.wait(5); return []
+    window.file_removal.deleter = cleanup
+    try:
+        jobs(window, 1); window.database.save_jobs(window.jobs.values())
+        window.remove_selected()
+        deadline = time.monotonic() + 5
+        while not entered.is_set() and time.monotonic() < deadline: _APP.processEvents()
+        assert entered.is_set()
+        def reject(_): raise OSError("synthetic marker persistence failure")
+        monkeypatch.setattr(window.database, "save_jobs", reject)
+        timer = threading.Timer(.03, release.set); timer.start()
+        error = None; event = QCloseEvent()
+        try: window.closeEvent(event)
+        except OSError as caught: error = caught
+        finally: timer.join()
+        _APP.processEvents()  # Deliver queued thread-finished ownership notifications.
+        assert error is None, "Marker failure must not escape before owned worker shutdown"
+        assert event.isAccepted() and window.task_manager.active_count == 0 and not window.file_removal.busy
+        assert window.clean_marker.exists(), "Failed persistence must remain visible at next startup"
+    finally:
+        release.set(); window.close(); _APP.processEvents()

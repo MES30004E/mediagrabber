@@ -7,54 +7,30 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 
 ## Current checkpoint and restrictions
 
-- Development branch: `improvement/download-reliability`. Published diagnostic
-  checkpoint: `0242acbbc89e83f0fd2116f9a186deedfe215781`, following archive source
-  checkpoint `f2adc914e5b2c9f22c9b42ed9d58a4174c5c3e5e`.
-- Staging safe checkpoint `049c44d1b7d7c02cd62582aa3adcdf3507f43ad9` and Canvas
-  runtime-only fix `9a060447473d7d2a6d3c180e14229d9e843a416c` are now pushed.
-  Hosted run `40991415616` passed all jobs on the exact Canvas-fix SHA: Linux601,
-  macOS backend60, Swift25, protocol9fixtures, actual provider/media/Cocoa/
-  replacement and strict extracted-archive signature/launch checks. No release
-  asset was uploaded or installed. Queue checkpoint `a97742fc2ad3fda1c987f05782f9a9b1636ac11a`
-  is locally committed/tested; its new hosted qualification remains separate.
-- Hosted diagnostic run `40989481899` is terminal: Linux and Swift passed; native
-  packaging failed strict signature validation on an extracted Canvas compiler
-  object `ImageData.o`. Byte/symlink contents and modes matched the source. A
-  runtime-only Canvas stage fix is now qualified by the successful new run above.
-- Run `40864520636` failed strict deep signature validation of the extracted
-  archive. Other native component, media, Cocoa and replacement probes passed
-  before that failure. The retained native compiler object is now identified;
-  PyInstaller's xattr-signature behavior explains why an unchanged data/mode
-  fingerprint alone was insufficient. Signature verification stays strict.
-- Current full worktree verification after the addendum/stager review fixes:
-  **600 Python tests passed in 16.25s**, 10 extension tests and 9 protocol fixtures
-  passed; pip check found no broken requirements. Four invalid persisted deadline
-  regressions and six redirect/duplicate-JSON regressions were observed RED then
-  GREEN. This is portable source evidence, not hosted updater qualification.
-- Current P0 source checkpoint verification: **608 Python tests passed in17.50s**,
-  JS10 and protocol9fixtures matched. Before/after synthetic matrix and measured
-  limitations are in `docs/QUEUE_SCALE.md`. The latest queue edits are local,
-  not part of the currently running hosted Canvas-fix commit.
-- Subsequent atomic admission worktree: **614 Python tests passed in19.17s**,
-  JS10/protocol9 matched. Real800/5,000 admission uses one SQLite commit instead
-  of800/5,000, and publishes runnable entries only after persistence succeeds.
-  This remains a persistence prerequisite, not completed asynchronous batches.
-- Large pause/resume/cancel now have connected32-ID GUI timer slices, one active
-  batch, atomic state publication, dispatch coordination and Stopbatch. The
-  remaining asynchronous removal/restart/fileIO/collection actions and model/view
-  memory work are not supplied by this controller; see QUEUE_SCALE.md for measured
-  responsiveness and remaining limits.
-- Hosted run40993057336 passed alljobs on publisheddec2915: Linux608, macOS
-  backend60/Swift25/drift9, native media/provider/Cocoa/replacement and strict
-  archive round-trip. Local atomic-admission223737b and newer bounded controller
-  are not covered by that exact hosted artifact. Controller review resumed after
-  the account limit reset and cleared the narrow checkpoint; conflict/reentrant
-  cancellation regressions pass. New hosted qualification remains required.
-- Current published d5b3365 hosted run41029483173 has now passed alljobs; the
-  newer local keep-files removal checkpoint is separate. Default large removal
-  now has32-ID transactions and true in-flight completion accounting. Real2-thread
-  synthetic800 removal and631 full Python tests pass locally; async optional
-  filesystem deletion and full-scale/native crash acceptance remain unfinished.
+- Development branch: `improvement/download-reliability`. Latest hosted-tested
+  checkpoint: `90e3d3b0dd84da1ad47079c6c3474c4780a3ed27`, run `41031238079`,
+  all jobs passed. Actual logs: Linux631; macOS backend60, Swift25 and protocol9;
+  bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
+  strict extracted-archive verification/launch passed. Archive141681058bytes,
+  SHA256 `633363e747365d6299121329aa896471db8c36e3526005910a53227f5a5f7adf`.
+  No release asset was uploaded or installed.
+- Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
+  staging only the required `canvas.node` before normal signing (`9a06044`).
+  Strict signature verification was not bypassed. Later green runs include this
+  fix, atomic admission (`223737b`), bounded status actions (`d5b3365`) and
+  keep-files removal (`90e3d3b`). Detailed evidence remains in QUEUE_SCALE.md.
+- New asynchronous owned-file removal checkpoint: **646 Python tests passed
+  in22.62s**, JS10/protocol9 matched, pip check clean. FileRemovalService admits
+  one owned worker with at most32 copied jobs; GUI owns persistence and counts.
+  Stop immediately reports pending work, finishes the admitted slice and stops
+  future slices. Partial filesystem/DB failure retains entries; shutdown retains
+  uncertainty evidence and still drains workers after a marker-persistence error.
+  Entire confirmed removal snapshots supersede earlier pending restarts.
+- Synthetic cleanup100/800/1,000/5,000 probes pass with one confirmation, one
+  cleanup worker and zero GUI cleanup calls; no actual user files touched.
+  Latest source needs its own hosted qualification. Native crash classification,
+  real Trash/cross-volume QA, model/view memory, bulk restart and collections
+  remain unfinished; no broad crash/scale/release acceptance is implied.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -84,9 +60,9 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | --- | --- | --- | --- |
 | Q01 Release blocker; narrow stall fixed | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, `test_queue_scale_probe.py`, `docs/QUEUE_SCALE.md`; existing UI/task tests | Before800 stalls15s and5,000 times out120s; after allfourcomplete,800pause/resume/cancel0.065/0.071/0.067s. No native crash reproduced;5,000enqueue still1.3s gap/~407MiB. Model/service/backpressure and active/race/native QA remain |
 | Q02 Portable-tested fix | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains |
-| Q03 Partial safety primitives, bulk connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `ui.py:_remove_job`; `test_file_ownership.py`, `test_queue_bulk.py` | Single bulk decision now uses existing ownership helper after active-worker stop. Full real output/foreign/missing/symlink/Trash failure and realistic transfer-race QA remain |
+| Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
 | Q04 Open | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `ui.py` queue table/filter and `_selected_jobs` | Queue selection is not the analysed-playlist checkbox selection; implement and test each action and stable selection across refresh/filter |
-| Q05 Partial single-job loops | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `ui.py` job actions, pending removals/restarts; `tasks.py` | Coalesced bulk application service, one confirmation per destructive batch, 800 queued/active synthetic tests and cancellation/shutdown race tests |
+| Q05 Partial; bounded status/removal connected | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/service tests | Status/retry and entry/file removal now yield with correlated outcomes and800-job regressions. Bulk restart still per-item; collection controls, real transfers and broad shutdown/crash qualification remain |
 | Q06 Open | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `Database.clear_completed`, queue actions | Discoverable group-level actions, tested counts and no per-item modal loop |
 | Q07 Open | Collection grouping, group progress/status totals and bulk controls remain responsive | `models.py`, `ui.py`, `database.py` | Define persisted collection identity/migration; incremental aggregate/model updates; restart compatibility tests |
 | Q08 Open | Stable extractor/media identity deduplicates queue/download archive; completed outputs are not accidentally redownloaded or destroyed | `models.py`, `downloader.py`, `database.py`, `organisation.py` | Explicit duplicate/archive policy, cross-URL identities, missing outputs, retries and deliberate restart tests; no assumed guarantee from UUID job IDs |
@@ -149,20 +125,20 @@ whole-app rewrite.
 
 | Debt | Evidence on 2026-10-30 | Remediation / proof required |
 | --- | --- | --- |
-| UI concentration | `ui.py` 2,021 lines; `settings_window.py` 762 in current worktree | Extract bounded queue/batch model/service responsibilities; unchanged behavior/DB tests and reduced coupling evidence |
+| UI concentration | `ui.py` 2,219 lines; `settings_window.py` 762; queue admission and cleanup worker extracted, orchestration still concentrated | Extract presentation/model/queue service incrementally; preserve behavior/DB compatibility and measure coupling rather than only moving lines |
 | Per-row queue objects | `_refresh_queue` uses QTableWidget, per-row QProgressBar and formatted cells; structural clear/rebuild when IDs/columns differ | Benchmark allocation/RSS/native ownership/selection across 100–5,000; use model/delegate/incremental updates where measured |
 | Full queue/history work | `_refresh_queue` traverses all jobs; `_refresh_history` allocates every table item | Profile event frequency/CPU/GUI stalls before coalescing dirty IDs and paging/model decisions |
-| Per-job persistence: admission batched | `save_jobs`/`remove_jobs` now provide atomic iterable transactions; media admission commits once before UI publication. Other bulk actions still write per job | Mid-SQL/serialization rollback and phantom-entry regressions pass; bounded async service must consume these APIs in slices, with restart/error/cancel coordination |
+| Per-job persistence: admission/status/removal batched | Atomic iterable transactions; media admission saves before UI publication, large status/removal actions commit32-ID slices | Rollback/phantom/partial cleanup regressions pass. Small actions/restart still per-job; collection/relaunch, fault recovery and GUI enqueue latency remain |
 | Modal batch loop: narrow fix verified | Previously one prompt per selected job; now one ID snapshot/one native keep-default dialog,800-job tests pass | Retain broader bounded asynchronous cancellation, per-item failure aggregation, collection controls and realistic worker/file-race qualification |
 | Task admission | `TaskManager.start` creates a QThread per admitted task; callers own bounds | Measure actual concurrency/admission/callback queues; scheduler/backpressure tests, no per-queued-job thread explosion |
 | Unknown native crash | Real QA reports crash; baseline now measures 15s UI stalls at800 and24s at1,000;5,000 times out.100-item profile assigns0.235/0.252s to cell setText | Native crash still not reproduced/classified. Fix the measured refresh bottleneck with causal tests/after benchmarks; continue isolated native/race reproduction, not a guessed crash explanation |
 
 ## Next checkpoints and reporting contract
 
-1. Keep the current hosted archive run alive; safely finish/checkpoint the narrow
-   release-blocking diagnosis and existing updater edits without publication.
-2. One-dialog bulk removal plus reproducible 100/800/1,000/5,000 scale baseline;
-   then address confirmed crash root cause, queue architecture/performance.
+1. Independently verify/publish the asynchronous owned-file cleanup checkpoint;
+   inspect its exact hosted results without cancelling an in-progress run.
+2. Continue P0 queue model/view, bounded restart/selection/collection controls,
+   persistence recovery and native crash classification from measured evidence.
 3. Design system/research/mockups and **approved** professional native screens;
    real visual QA before claiming polish.
 4. Real downloaded-media viewer/playback (separate from Inspect Video/preview).

@@ -92,6 +92,23 @@ then deletes only recorded state and resets progress. `file_ownership.py` protec
 unrelated files/directories and uses Trash for completed outputs where practical.
 Queue selection is tied to job ID rather than changing row indices.
 
+Large status/retry and keep-files removal use `queue_batch.QueueBatch`:32-ID
+GUI timer slices, one active batch, atomic DB transactions, explicit waiting-ID
+settlement and dispatch coordination. Optional file removal uses
+`file_removal.FileRemovalService`: one TaskManager-owned thread, at most32 copied
+job inventories, existing safe ownership/Trash helper, and no worker-side Qt or
+database mutation. Each slice waits for its transfer owners and cleanup thread
+to stop before the next slice. Successful cleanup precedes atomic entry deletion;
+partial cleanup or DB failure retains entries with a warning. Stop finishes the
+admitted slice while preventing future slices. Shutdown suppresses late results,
+persists uncertainty where possible, and preserves the running marker if that
+persistence fails; a marker failure cannot skip owned-worker shutdown.
+
+These are incremental prerequisites, not completed scale/crash qualification.
+Queue/history still use item tables and per-row widgets, full refresh remains
+expensive, and bulk restart/collection/dedup work is incomplete. See
+`docs/QUEUE_SCALE.md` and `docs/FEATURE_BACKLOG.md` for measured limits and QA.
+
 `settings.SettingsStore` atomically writes schema-6 mode-0600 settings, migrates
 legacy preferences, and recovers corrupt JSON. `keychain.py` calls macOS security
 for proxy passwords; passwords are not serialized as preference fields.

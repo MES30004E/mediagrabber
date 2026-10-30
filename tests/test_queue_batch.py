@@ -85,3 +85,17 @@ def test_stop_preserves_inflight_removal_and_reports_failure_truthfully():
     for key in ("0", "32", "64"): batch.settle(key, "https://user:synthetic-secret@example.test")
     assert not batch.busy and batch.describe()["failed"] >= 1
     assert "synthetic-secret" not in batch.describe()["error"]
+
+
+def test_sequential_cleanup_waits_for_settlement_and_stop_notifies_immediately():
+    from morgan_media_downloader.queue_batch import BatchOutcome
+    batch = QueueBatch(); slices = []; changes = []
+    def apply(ids): slices.append(ids); return BatchOutcome(waiting=tuple(ids))
+    batch.changed.connect(changes.append)
+    batch.start([str(i) for i in range(65)], apply, "Cleanup", wait_each_slice=True)
+    APP.processEvents(); APP.processEvents()
+    assert len(slices) == 1
+    batch.cancel()
+    assert changes[-1]["cancelled"] and changes[-1]["pending"] == 65
+    for key in slices[0]: batch.settle(key)
+    assert not batch.busy and len(slices) == 1 and batch.describe()["pending"] == 33

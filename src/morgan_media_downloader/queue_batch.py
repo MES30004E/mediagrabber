@@ -33,9 +33,10 @@ class QueueBatch(QObject):
 
     def describe(self): return dict(self._info)
 
-    def start(self, ids: Iterable[str], apply: Callable[[list[str]], int | BatchOutcome | None], label: str) -> bool:
+    def start(self, ids: Iterable[str], apply: Callable[[list[str]], int | BatchOutcome | None], label: str, *, wait_each_slice=False) -> bool:
         if self.busy: return False
         self._generation += 1; generation = self._generation
+        self._wait_each_slice = wait_each_slice
         self._ids = deque(dict.fromkeys(ids)); self._apply = apply
         self._info = dict(label=label, completed=0, failed=0, skipped=0, pending=len(self._ids), cancelled=False, error="")
         self.busy = True
@@ -45,8 +46,11 @@ class QueueBatch(QObject):
 
     def cancel(self, *, abandon=False):
         if not self.busy: return
+        generation = self._generation; already_cancelled = self._info["cancelled"]
         self._info["cancelled"] = True; self._timer.stop()
         if abandon: self._waiting.clear()
+        if not already_cancelled: self.changed.emit(self.describe())
+        if not self.busy or generation != self._generation: return
         if not self._stepping and not self._waiting: self._finish()
 
     def is_waiting(self, job_id: str) -> bool: return job_id in self._waiting
@@ -61,6 +65,7 @@ class QueueBatch(QObject):
         self.changed.emit(self.describe())
         if not self.busy or generation != self._generation: return
         if not self._waiting and (self._info["cancelled"] or not self._ids): self._finish()
+        elif not self._waiting and self._ids: self._timer.start(0)
 
     def _finish(self):
         if not self.busy: return
@@ -94,4 +99,5 @@ class QueueBatch(QObject):
         if not self.busy or generation != self._generation: return
         if (self._info["cancelled"] or not self._ids) and not self._waiting: self._finish()
         elif self._info["cancelled"] or not self._ids: return
+        elif self._wait_each_slice and self._waiting: return
         else: self._timer.start(0)

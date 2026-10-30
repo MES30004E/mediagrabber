@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from .database import Database
 from .queue_batch import BatchOutcome, QueueBatch
+from .file_removal import FileRemovalResult, FileRemovalService
 from .console import ConsoleEvent, ConsoleStore
 from .diagnostics import run_checks
 from .downloader import analyse_with_authentication, download_job
@@ -250,6 +251,9 @@ class MainWindow(QMainWindow):
         self.queue_batch = QueueBatch(self)
         self.queue_batch.changed.connect(self._queue_batch_progress)
         self.queue_batch.finished.connect(self._queue_batch_finished)
+        self.file_removal = FileRemovalService(self.task_manager, self)
+        self.file_removal.completed.connect(self._file_cleanup_finished)
+        self._delete_slice_ids = ()
         self.console_store = ConsoleStore(parent=self)
         self.console_job_filter = ""
         self.selected_job_id = ""
@@ -1322,6 +1326,10 @@ class MainWindow(QMainWindow):
         if job_id in self.pending_removals:
             delete_files = self.pending_removals.pop(job_id)
             if self.queue_batch.is_waiting(job_id):
+                if job_id in self._delete_slice_ids:
+                    self._start_file_slice_if_ready()
+                    self._refresh_activity()
+                    return
                 try:
                     if job := self.jobs.get(job_id): self._remove_job(job, delete_files)
                 except Exception as error:
@@ -1388,6 +1396,9 @@ class MainWindow(QMainWindow):
         return True
 
     def _queue_action_blocked(self):
+        if self._closing:
+            self.statusBar().showMessage("The app is closing; queue actions are unavailable.", 5000)
+            return True
         if self.queue_batch.busy:
             self.statusBar().showMessage("A queue batch is running; stop it or wait before another action.", 5000)
             return True
@@ -1472,9 +1483,13 @@ class MainWindow(QMainWindow):
         selected_ids = [job.id for job in selected]
         choice = self._confirm_remove(selected)
         if choice == "cancel": return
+        # A confirmed removal supersedes earlier restarts for the entire ID
+        # snapshot, including owners that finish before their slice is admitted.
+        for job_id in selected_ids: self.pending_restarts.pop(job_id, None)
         delete_files = choice == "delete"
-        if not delete_files and len(selected_ids) > 32:
-            self.queue_batch.start(selected_ids, self._remove_queue_slice, "Remove entries (keep files)")
+        if delete_files or len(selected_ids) > 32:
+            self.queue_batch.start(selected_ids, lambda ids: self._remove_queue_slice(ids, delete_files),
+                "Remove entries and owned files" if delete_files else "Remove entries (keep files)", wait_each_slice=delete_files)
             return
         removed = pending = 0
         for job_id in selected_ids:
@@ -1507,10 +1522,19 @@ class MainWindow(QMainWindow):
         if delete_files: delete_owned_files(job)
         self.database.remove_job(job.id); self.jobs.pop(job.id, None)
 
-    def _remove_queue_slice(self, ids):
+    def _remove_queue_slice(self, ids, delete_files=False):
         current = [self.jobs[key] for key in ids if key in self.jobs]
         inactive = [job for job in current if job.id not in self.active]
         active = [job for job in current if job.id in self.active]
+        if delete_files:
+            failed = []
+            for job in active:
+                if self.task_manager.cancel(self.active[job.id]): self.pending_removals[job.id] = True
+                else: failed.append(job.id)
+            self._delete_slice_ids = tuple(job.id for job in current if job.id not in failed)
+            self._start_file_slice_if_ready()
+            return BatchOutcome(failed=len(failed), skipped=len(ids)-len(current), waiting=self._delete_slice_ids,
+                error="Could not request active task stop; files and entries retained" if failed else "")
         self.database.remove_jobs(job.id for job in inactive)
         for job in inactive: self.jobs.pop(job.id, None)
         waiting = []; failed = 0
@@ -1520,6 +1544,45 @@ class MainWindow(QMainWindow):
             else: failed += 1
         return BatchOutcome(completed=len(inactive), failed=failed, skipped=len(ids)-len(current),
             waiting=tuple(waiting), error="Could not request active task stop; entries retained" if failed else "")
+
+    def _start_file_slice_if_ready(self):
+        if self._closing or not self._delete_slice_ids or self.file_removal.busy: return
+        if any(key in self.active for key in self._delete_slice_ids): return
+        values = [self.jobs[key] for key in self._delete_slice_ids if key in self.jobs]
+        if values:
+            try: self.file_removal.start(values)
+            except Exception as error:
+                detail = str(error) or type(error).__name__
+                results = tuple(FileRemovalResult(key, error=detail) for key in self._delete_slice_ids)
+                # Admission can fail inside QueueBatch's apply callback. Settle
+                # on the next event turn, after its waiting IDs are registered.
+                QTimer.singleShot(0, lambda report=results: self._file_cleanup_finished(report))
+        else:
+            ids = self._delete_slice_ids; self._delete_slice_ids = ()
+            for key in ids: self.queue_batch.settle(key)
+
+    def _file_cleanup_finished(self, results):
+        if self._closing: return
+        ids = self._delete_slice_ids; self._delete_slice_ids = ()
+        errors = {result.job_id: result.error for result in results}
+        successful = [key for key in ids if not errors.get(key, "Cleanup result missing")]
+        try: self.database.remove_jobs(successful)
+        except Exception as error:
+            detail = (str(error) or type(error).__name__) + "; files may already have moved; queue entries retained"
+            errors.update((key, detail) for key in successful)
+        else:
+            for key in successful: self.jobs.pop(key, None)
+        for key in ids:
+            self.pending_removals.pop(key, None)
+            detail = errors.get(key, "Cleanup result missing")
+            if detail and (job := self.jobs.get(key)) and job.status in {
+                    JobStatus.ANALYSING, JobStatus.DOWNLOADING, JobStatus.CONVERTING, JobStatus.FETCHING_METADATA, JobStatus.SEEDING}:
+                job.status = JobStatus.INTERRUPTED
+                job.active_extractor_task = job.active_transfer_task = job.active_postprocess_task = False
+                job.technical_details = "Cleanup did not complete; queue entry retained. Some files may already have moved."
+                try: self.database.save_job(job)
+                except Exception: detail += "; stopped-state persistence also failed"
+            self.queue_batch.settle(key, detail)
 
     def _selected_or_banner_job(self) -> DownloadJob | None:
         selected = self._selected_jobs()
@@ -2114,7 +2177,19 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if not self._closing:
             self._closing = True
+            self._shutdown_persistence_failed = False
+            self.file_removal.close()
             self.queue_batch.cancel(abandon=True)
+            uncertain = [self.jobs[key] for key in self._delete_slice_ids if key in self.jobs]
+            for job in uncertain:
+                job.technical_details = "Cleanup interrupted during shutdown; queue entry retained; files may already have moved. Review owned files before retrying."
+            if uncertain:
+                try: self.database.save_jobs(uncertain)
+                except Exception:
+                    # Persistence cannot prevent owned workers from stopping.
+                    # Keep the existing running marker for next-start recovery.
+                    self._shutdown_persistence_failed = True
+                    self.console_store.append("ERROR", "Cleanup interruption could not be persisted; queue entries retained. Review owned files after restarting.", level="error")
             self._persist_settings()
             for timer in self.findChildren(QTimer):
                 timer.stop()
@@ -2133,8 +2208,9 @@ class MainWindow(QMainWindow):
             self.shutdown_retry_timer.start(250)
             return
         self.database.close()
-        try: self.clean_marker.unlink(missing_ok=True)
-        except OSError: pass
+        if not getattr(self, "_shutdown_persistence_failed", False):
+            try: self.clean_marker.unlink(missing_ok=True)
+            except OSError: pass
         event.accept()
 
     def changeEvent(self, event):
