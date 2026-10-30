@@ -10,12 +10,15 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 - Development branch: `improvement/download-reliability`. Published diagnostic
   checkpoint: `0242acbbc89e83f0fd2116f9a186deedfe215781`, following archive source
   checkpoint `f2adc914e5b2c9f22c9b42ed9d58a4174c5c3e5e`.
-- Hosted diagnostic run `40989481899` is active. Do not push conflicting work or
-  cancel/restart it merely because observation times out. Inspect terminal logs.
+- Hosted diagnostic run `40989481899` is terminal: Linux and Swift passed; native
+  packaging failed strict signature validation on an extracted Canvas compiler
+  object `ImageData.o`. Byte/symlink contents and modes matched the source. A
+  runtime-only Canvas stage fix is in progress; it needs a new hosted round-trip.
 - Run `40864520636` failed strict deep signature validation of the extracted
   archive. Other native component, media, Cocoa and replacement probes passed
-  before that failure. The cause is **not yet established**; signature verification
-  stays strict. Linux and Swift jobs passed on that earlier commit.
+  before that failure. The retained native compiler object is now identified;
+  PyInstaller's xattr-signature behavior explains why an unchanged data/mode
+  fingerprint alone was insufficient. Signature verification stays strict.
 - Current full worktree verification after the addendum/stager review fixes:
   **600 Python tests passed in 16.25s**, 10 extension tests and 9 protocol fixtures
   passed; pip check found no broken requirements. Four invalid persisted deadline

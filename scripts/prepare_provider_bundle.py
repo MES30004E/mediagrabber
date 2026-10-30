@@ -94,6 +94,19 @@ def prepare(destination: Path, project: Path, *, fetcher=download, runner=run):
         runner([*npm, "rebuild", "canvas", "--no-audit", "--no-fund"], cwd=server, env=environment)
         runner([str(node), str(server / "node_modules/typescript/bin/tsc")], cwd=server, env=environment)
         runner([*npm, "prune", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=server, env=environment)
+        # Canvas loads only build/Release/canvas.node. Do not ship compiler
+        # objects/Makefiles: MH_OBJECT signatures can live in xattrs, which our
+        # portable archive deliberately does not preserve. Prune BEFORE the
+        # normal bundle signing, not by modifying/re-signing an extracted app.
+        canvas_build = server / "node_modules/canvas/build"
+        addon = canvas_build / "Release/canvas.node"
+        if (any(path.is_symlink() for path in (server / "node_modules", server / "node_modules/canvas", canvas_build, addon.parent, addon))
+                or not canvas_build.resolve().is_relative_to(server.resolve()) or not addon.is_file()
+                or not addon.resolve().is_relative_to(server.resolve())):
+            raise ValueError("Canvas runtime addon missing or outside its owned build stage")
+        saved_addon = work / "canvas-runtime.node"; shutil.copy2(addon, saved_addon)
+        shutil.rmtree(canvas_build)
+        addon.parent.mkdir(parents=True); shutil.copy2(saved_addon, addon)
         runner([str(node), "-e", "const c=require('canvas').createCanvas(2,2);if(!c.toBuffer('image/png').length)process.exit(1)"], cwd=server, env=environment)
         version = runner([str(node), str(server / "build/generate_once.js"), "--version"], cwd=server, env=environment).stdout.strip()
         if version != PROVIDER_VERSION: raise ValueError("Provider version mismatch")

@@ -23,6 +23,29 @@ TypeScript compilation, native Canvas PNG generation and the provider's offline
 licenses, lock digest, exact version/pin and hosted formula metadata accompany it.
 This records inputs; it is not complete third-party release-license clearance.
 
+### Canvas runtime-only build payload
+
+Hosted diagnostic run `40989481899` on `0242acb` identified the extracted archive's
+strict-signature failure at
+`canvas/build/Release/obj__dot__target/canvas/src/ImageData.o`: "code object is not
+signed at all". File contents/symlinks and modes matched the signed source.
+Canvas's actual `lib/bindings.js` requires only `build/Release/canvas.node` from
+that build tree. Compiler objects and Makefiles are not runtime requirements.
+
+The owned temporary provider stage now retains only that required add-on in the
+Canvas build tree, before normal PyInstaller signing. Source/runtime JS, package
+licences, compiled provider JS and the upstream checkout are preserved. The
+existing PNG/version checks still run **after** pruning. No extracted app is
+modified or re-signed and strict archive signature validation is unchanged.
+
+PyInstaller's installed `building/osx.py` documents why signatures of non-runtime
+objects under Frameworks can be stored in extended attributes and lost by
+transports that do not preserve them. The hosted failure and byte/mode comparison
+fit that mechanism; a new actual hosted round-trip must qualify this fix before
+claiming the release blocker resolved. Portable staging tests reproduce retention
+of the offending compiler object before the fix and verify its removal while
+retaining the loadable add-on afterward.
+
 ## Bundle and checks
 
 `MORGAN_PROVIDER_STAGE` opts the PyInstaller spec into staged Node/provider files.

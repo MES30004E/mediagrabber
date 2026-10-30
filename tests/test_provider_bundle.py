@@ -19,7 +19,8 @@ def archive(name="node-v24.22.0-darwin-arm64/bin/node"):
     return output.getvalue()
 
 
-def test_stage_is_atomic_and_keeps_original_checkout_unmodified(tmp_path, monkeypatch):
+@pytest.mark.parametrize("escaped_build", [False, True])
+def test_stage_is_atomic_and_keeps_original_checkout_unmodified(tmp_path, monkeypatch, escaped_build):
     project = tmp_path / "project"; provider = project / "bgutil-ytdlp-pot-provider"
     server = provider / "server"; server.mkdir(parents=True)
     for name in ("package.json", "package-lock.json", "tsconfig.json"): (server / name).write_text("{}")
@@ -31,13 +32,40 @@ def test_stage_is_atomic_and_keeps_original_checkout_unmodified(tmp_path, monkey
         if command[-2:] == ["rev-parse", "HEAD"]: return SimpleNamespace(stdout=packaging.PROVIDER_COMMIT + "\n")
         if "ls-files" in command: return SimpleNamespace(stdout="server/src/fixture.ts\0server/types/fixture.ts\0")
         if command[-1] == "--version": return SimpleNamespace(stdout="v24.22.0\n" if len(command) == 2 else "1.3.1\n")
+        if "rebuild" in command:
+            if escaped_build:
+                # A malformed ancestor escapes the owned stage while the final
+                # addon resolves back inside; checking the addon alone is unsafe.
+                external = tmp_path / "unowned-compiler"; (external / "build").mkdir(parents=True)
+                (external / "build/keep").write_text("must remain untouched")
+                inside = Path(cwd) / "safe-addon"; inside.mkdir()
+                (inside / "canvas.node").write_bytes(b"synthetic loadable addon")
+                (external / "build/Release").symlink_to(inside, target_is_directory=True)
+                (Path(cwd) / "node_modules").mkdir()
+                (Path(cwd) / "node_modules/canvas").symlink_to(external, target_is_directory=True)
+                return SimpleNamespace(stdout="")
+            release = Path(cwd) / "node_modules/canvas/build/Release"
+            (release / "obj.target/canvas/src").mkdir(parents=True)
+            (release / "obj.target/canvas/src/ImageData.o").write_bytes(b"synthetic MH_OBJECT")
+            (release / "canvas.node").write_bytes(b"synthetic loadable addon")
+            (release.parent / "Makefile").write_text("synthetic build metadata")
         if str(command[-1]).endswith("typescript/bin/tsc"):
             (Path(cwd) / "build").mkdir(); (Path(cwd) / "build/generate_once.js").write_text("compiled fixture")
         return SimpleNamespace(stdout="")
     destination = tmp_path / "stage"
+    if escaped_build:
+        with pytest.raises(ValueError, match="owned build stage"):
+            packaging.prepare(destination, project, fetcher=lambda *_: data, runner=run)
+        assert (tmp_path / "unowned-compiler/build/keep").read_text() == "must remain untouched"
+        assert not destination.exists()
+        return
     result = packaging.prepare(destination, project, fetcher=lambda *_: data, runner=run)
     assert (destination / "bin/node").read_bytes() == b"fixture-node"
     assert (destination / "provider_server/build/generate_once.js").is_file()
+    canvas = destination / "provider_server/node_modules/canvas"
+    assert (canvas / "build/Release/canvas.node").read_bytes() == b"synthetic loadable addon"
+    assert not (canvas / "build/Release/obj.target").exists(), "Native build objects must not require transferable xattr signatures"
+    assert not (canvas / "build/Makefile").exists()
     assert not (server / "build").exists() and not (server / "node_modules").exists()
     assert not (destination / "provider_server/src/private-untracked.txt").exists()
     manifest = json.loads((destination / "provider-build.json").read_text())
