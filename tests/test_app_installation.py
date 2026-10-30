@@ -193,3 +193,19 @@ def test_post_activation_failure_preserves_foreign_replacement_and_previous_back
     assert (old / "Contents/version").read_text() == "another actor's app"
     assert (raised.value.backup / "Contents/version").read_text() == "old"
     assert (displaced / "Contents/version").read_text() == "new"
+
+
+def test_native_signature_failure_reports_bounded_redacted_stderr(tmp_path, monkeypatch):
+    import plistlib
+    import subprocess
+    from morgan_media_downloader import app_installation as module
+    candidate = app(tmp_path / "Candidate.app", "synthetic")
+    (candidate / "Contents/Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleIdentifier": "com.morgan.media-downloader", "CFBundleExecutable": "Morgan Media Downloader"}))
+    def reject(command, **kwargs):
+        raise subprocess.CalledProcessError(1, command, stderr="sealed resource is missing\nhttps://user:synthetic-password@example.test\n" + "x" * 5000)
+    monkeypatch.setattr(module.subprocess, "run", reject)
+    with pytest.raises(InstallationError) as raised: module.validate_signature(candidate)
+    assert "sealed resource is missing" in str(raised.value)
+    assert "synthetic-password" not in str(raised.value)
+    assert len(str(raised.value)) <= 1600

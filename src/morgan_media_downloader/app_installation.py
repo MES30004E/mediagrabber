@@ -14,6 +14,8 @@ import sys
 import tempfile
 import unicodedata
 
+from .logging_setup import redact_secrets
+
 
 class InstallationError(RuntimeError):
     pass
@@ -79,8 +81,12 @@ def validate_signature(candidate):
     with (candidate / "Contents/Info.plist").open("rb") as stream: info = plistlib.load(stream)
     if info.get("CFBundleIdentifier") != "com.morgan.media-downloader" or info.get("CFBundleExecutable") != "Morgan Media Downloader":
         raise InstallationError("Unexpected application bundle identity")
-    subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(candidate)],
-                   capture_output=True, text=True, timeout=60, check=True)
+    try:
+        subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(candidate)],
+                       capture_output=True, text=True, timeout=60, check=True)
+    except subprocess.CalledProcessError as error:
+        detail = redact_secrets(str(error.stderr or "No signature diagnostic available"))[:1500]
+        raise InstallationError("Signature verification failed: " + detail) from None
 
 
 def copy_bundle(source, target):
