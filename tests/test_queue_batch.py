@@ -61,3 +61,27 @@ def test_progress_cancellation_emits_one_completion_and_can_start_a_new_batch(re
     drain(batch)
     assert [info["label"] for info in finishes] == (["Old", "New"] if restart else ["Old"])
     assert applied == (["new"] if restart else []) and finishes[0]["pending"] == 33
+
+
+def test_pending_worker_removal_is_not_counted_complete_until_settled():
+    from morgan_media_downloader.queue_batch import BatchOutcome
+    batch = QueueBatch()
+    batch.start(["active", "ready"], lambda _: BatchOutcome(completed=1, waiting=("active",)), "Remove")
+    APP.processEvents()
+    assert batch.busy and batch.describe()["completed"] == 1 and batch.describe()["pending"] == 1
+    batch.settle("foreign"); assert batch.describe()["completed"] == 1
+    batch.settle("active")
+    assert not batch.busy and batch.describe()["completed"] == 2
+
+
+def test_stop_preserves_inflight_removal_and_reports_failure_truthfully():
+    from morgan_media_downloader.queue_batch import BatchOutcome
+    batch = QueueBatch()
+    batch.start([str(i) for i in range(65)], lambda ids: BatchOutcome(completed=len(ids)-1, waiting=(ids[0],)), "Remove")
+    while not batch.describe()["completed"]: APP.processEvents()
+    batch.cancel()
+    assert batch.busy and batch.describe()["pending"] >= 1
+    # All already-admitted in-flight IDs must settle; unprocessed IDs stay pending.
+    for key in ("0", "32", "64"): batch.settle(key, "https://user:synthetic-secret@example.test")
+    assert not batch.busy and batch.describe()["failed"] >= 1
+    assert "synthetic-secret" not in batch.describe()["error"]

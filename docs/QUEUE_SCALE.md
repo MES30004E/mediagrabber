@@ -181,3 +181,32 @@ a committed32-job slice prevents further writes while768 remain pending. Retaini
 that shutdown scenario as a persistent regression is a deferred coverage minor.
 Native/hosted validation for this controller remains separate; the older green
 archive run is not a substitute.
+
+## Bounded keep-files removal
+
+Large keep-files removal now uses32-ID atomic delete slices, one confirmation,
+and no file-deletion helper. Active tasks are requested to stop; entries remain
+visible/pending until the owned completion callback deletes the queue record.
+BatchOutcome tracks applied, failed, unchanged and correlated waiting IDs. Unknown
+or repeated completion IDs cannot change totals. Stop prevents future slices but
+admitted removals still finish; close retains unresolved entries rather than
+resuming removal after a restart. Small/explicit file-deletion actions retain
+existing behavior; optional filesystem deletion is **not yet asynchronous**.
+
+The actual800/5000 synthetic keep-removal probe passed with one confirmation,
+25/157 transactions, wall0.017/0.111s and maximum heartbeat0.015/0.081s. A separate
+real TaskManager test drains two synthetic owned threads before reporting800
+completed. These are local offscreen measurements, not proof of native crash
+resolution or memory stability; process peak RSS in the5000 run remained~412MiB.
+
+Review found two Important lifecycle/counting defects: pending restart could run
+its deletion helper before a newer keep-files removal, and an OSError with no
+message could report success despite retaining an entry. Both reproductions
+failed before fixes and pass now. Removal supersedes pending restart, failed
+stopped entries recover as Interrupted, and exception-type fallback keeps failure
+counts truthful. Full Python suite631passed20.12s, JS10/protocol9 matched.
+
+Deferred minor: while admitted workers remain pending, Stop changes internal
+cancel state without immediately emitting another progress notification. Counts
+remain pending, not successful; final worker settlement updates the UI. Immediate
+stopped/waiting feedback should be refined with the remaining batch UX.

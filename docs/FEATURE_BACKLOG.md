@@ -50,6 +50,11 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   are not covered by that exact hosted artifact. Controller review resumed after
   the account limit reset and cleared the narrow checkpoint; conflict/reentrant
   cancellation regressions pass. New hosted qualification remains required.
+- Current published d5b3365 hosted run41029483173 has now passed alljobs; the
+  newer local keep-files removal checkpoint is separate. Default large removal
+  now has32-ID transactions and true in-flight completion accounting. Real2-thread
+  synthetic800 removal and631 full Python tests pass locally; async optional
+  filesystem deletion and full-scale/native crash acceptance remain unfinished.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.

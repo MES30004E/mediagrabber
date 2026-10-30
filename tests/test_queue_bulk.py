@@ -1,4 +1,5 @@
 """P0 native queue contracts with synthetic jobs and no network/authentication."""
+import pytest
 from PySide6.QtWidgets import QHeaderView, QMessageBox
 
 from morgan_media_downloader.models import DownloadJob, DownloadOptions, JobStatus, MediaItem
@@ -20,7 +21,92 @@ def test_removing_eight_hundred_jobs_asks_once_and_keeps_files_by_default(tmp_pa
         jobs(window, 800)
         window.remove_selected()
         assert len(prompts) == 1
+        assert len(window.jobs) == 800, "Large removal must yield before work"
+        from test_queue_batch import drain
+        drain(window.queue_batch)
         assert not window.jobs and not window.database.load_jobs()
+    finally: window.close(); _APP.processEvents()
+
+
+def test_large_keep_removal_waits_for_active_task_and_batches_inactive_deletes(tmp_path, monkeypatch):
+    import time
+    window = _window(tmp_path, monkeypatch); commits = []; stopped = []
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "list")
+    monkeypatch.setattr(window.task_manager, "cancel", lambda key: stopped.append(key) or True)
+    try:
+        jobs(window, 800); window.database.save_jobs(window.jobs.values())
+        active = next(iter(window.jobs)); window.active[active] = "job-" + active
+        window.database._connection.set_trace_callback(lambda sql: commits.append(sql) if sql == "COMMIT" else None)
+        window.remove_selected()
+        deadline = time.monotonic() + 5
+        while len(window.jobs) > 1 and time.monotonic() < deadline: _APP.processEvents()
+        assert set(window.jobs) == {active} and window.queue_batch.busy
+        assert window.queue_batch.describe()["completed"] == 799
+        assert window.queue_batch.describe()["pending"] == 1
+        assert len(commits) == 25 and stopped == ["job-" + active]
+        window._job_finished("job-" + active)
+        assert not window.queue_batch.busy and not window.jobs
+        assert window.queue_batch.describe()["completed"] == 800
+    finally:
+        window.active.clear(); window.close(); _APP.processEvents()
+
+
+@pytest.mark.parametrize("empty_message", [False, True])
+def test_deferred_removal_database_failure_retains_entry_and_recovers_stopped_state(tmp_path, monkeypatch, empty_message):
+    import time
+    window = _window(tmp_path, monkeypatch)
+    monkeypatch.setattr(window, "_confirm_remove", lambda _: "list")
+    monkeypatch.setattr(window.task_manager, "cancel", lambda _: True)
+    try:
+        jobs(window, 800); active = next(iter(window.jobs))
+        window.jobs[active].status = JobStatus.DOWNLOADING
+        window.database.save_jobs(window.jobs.values())
+        window.active[active] = "job-" + active
+        window.remove_selected()
+        deadline = time.monotonic() + 5
+        while len(window.jobs) > 1 and time.monotonic() < deadline: _APP.processEvents()
+        window.database._connection.execute("CREATE TRIGGER reject_removal BEFORE DELETE ON jobs BEGIN SELECT RAISE(ABORT,'synthetic delete failure'); END")
+        if empty_message:
+            def reject(_): raise OSError()
+            monkeypatch.setattr(window.database, "remove_job", reject)
+        window._job_finished("job-" + active)
+        assert set(window.jobs) == {active} and not window.active and not window.queue_batch.busy
+        assert window.queue_batch.describe()["failed"] == 1
+        assert window.queue_batch.describe()["completed"] == 799
+        assert window.jobs[active].status == JobStatus.INTERRUPTED
+        assert len(window.database.load_jobs()) == 1
+    finally:
+        window.active.clear(); window.close(); _APP.processEvents()
+
+
+@pytest.mark.parametrize("pending_restart", [False, True])
+def test_large_keep_removal_drains_real_owned_task_threads_before_reporting_complete(tmp_path, monkeypatch, pending_restart):
+    import time
+    from PySide6.QtCore import QTimer
+    window = _window(tmp_path, monkeypatch); prompts = []; deleted_restart_data = []
+    monkeypatch.setattr(window, "_confirm_remove", lambda selected: prompts.append(len(selected)) or "list")
+    def held(job, proxy, settings, runtime, cancel, progress, tor):
+        assert cancel.wait(5), "Synthetic worker must receive cancellation"
+        job.status = JobStatus.PAUSED
+        return job
+    monkeypatch.setattr("morgan_media_downloader.ui._media_download_operation", held)
+    monkeypatch.setattr("morgan_media_downloader.ui.delete_restart_state", lambda *_, **__: deleted_restart_data.append(True))
+    try:
+        for timer in window.findChildren(QTimer): timer.stop()
+        jobs(window, 800); window.database.save_jobs(window.jobs.values())
+        window.settings.concurrent_downloads = 2
+        window._dispatch(); assert len(window.active) == 2
+        if pending_restart: window.pending_restarts[next(iter(window.active))] = "restart"
+        window.remove_selected()
+        deadline = time.monotonic() + 8
+        while (window.queue_batch.busy or window.task_manager.active_count) and time.monotonic() < deadline:
+            _APP.processEvents(); time.sleep(.001)
+        assert prompts == [800] and not window.queue_batch.busy
+        assert not window.active and window.task_manager.active_count == 0
+        assert not window.jobs and not window.database.load_jobs()
+        assert window.queue_batch.describe()["completed"] == 800
+        assert window.queue_batch.describe()["pending"] == 0
+        assert not deleted_restart_data and not window.pending_restarts
     finally: window.close(); _APP.processEvents()
 
 

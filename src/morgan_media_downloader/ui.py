@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from .database import Database
-from .queue_batch import QueueBatch
+from .queue_batch import BatchOutcome, QueueBatch
 from .console import ConsoleEvent, ConsoleStore
 from .diagnostics import run_checks
 from .downloader import analyse_with_authentication, download_job
@@ -1313,12 +1313,29 @@ class MainWindow(QMainWindow):
     def _job_finished(self, task_id: str):
         job_id = task_id.removeprefix("job-")
         self.active.pop(job_id, None)
+        # The latest removal decision supersedes an older restart request;
+        # especially, keep-files removal must never delete restart data first.
+        if job_id in self.pending_removals: self.pending_restarts.pop(job_id, None)
         if job_id in self.pending_restarts:
             choice = self.pending_restarts.pop(job_id)
             if job := self.jobs.get(job_id): self._restart_job(job, choice)
         if job_id in self.pending_removals:
             delete_files = self.pending_removals.pop(job_id)
-            if job := self.jobs.get(job_id): self._remove_job(job, delete_files)
+            if self.queue_batch.is_waiting(job_id):
+                try:
+                    if job := self.jobs.get(job_id): self._remove_job(job, delete_files)
+                except Exception as error:
+                    detail = str(error) or type(error).__name__
+                    if job is not None and job.status in {JobStatus.DOWNLOADING, JobStatus.ANALYSING, JobStatus.CONVERTING,
+                            JobStatus.FETCHING_METADATA, JobStatus.SEEDING}:
+                        job.status = JobStatus.INTERRUPTED
+                        job.active_extractor_task = job.active_transfer_task = job.active_postprocess_task = False
+                        job.technical_details = "Worker stopped; queue removal failed and entry was retained."
+                        try: self.database.save_job(job)
+                        except Exception: detail += "; stopped-state persistence also failed"
+                    self.queue_batch.settle(job_id, detail)
+                else: self.queue_batch.settle(job_id)
+            elif job := self.jobs.get(job_id): self._remove_job(job, delete_files)
         self._refresh_queue(); self._refresh_history(); self._refresh_activity()
 
     def _selected_jobs(self) -> list[DownloadJob]:
@@ -1407,6 +1424,7 @@ class MainWindow(QMainWindow):
             f"{info.get('skipped', 0)} unchanged; {info['pending']} pending. " + info['error'])
 
     def _queue_batch_finished(self, info):
+        if self._closing: return
         self._queue_batch_progress(info)
         self._refresh_queue(); self._refresh_history()
     def restart_selected(self):
@@ -1455,6 +1473,9 @@ class MainWindow(QMainWindow):
         choice = self._confirm_remove(selected)
         if choice == "cancel": return
         delete_files = choice == "delete"
+        if not delete_files and len(selected_ids) > 32:
+            self.queue_batch.start(selected_ids, self._remove_queue_slice, "Remove entries (keep files)")
+            return
         removed = pending = 0
         for job_id in selected_ids:
             # The modal dialog processes worker results; use the current
@@ -1484,7 +1505,21 @@ class MainWindow(QMainWindow):
 
     def _remove_job(self, job: DownloadJob, delete_files: bool):
         if delete_files: delete_owned_files(job)
-        self.jobs.pop(job.id, None); self.database.remove_job(job.id)
+        self.database.remove_job(job.id); self.jobs.pop(job.id, None)
+
+    def _remove_queue_slice(self, ids):
+        current = [self.jobs[key] for key in ids if key in self.jobs]
+        inactive = [job for job in current if job.id not in self.active]
+        active = [job for job in current if job.id in self.active]
+        self.database.remove_jobs(job.id for job in inactive)
+        for job in inactive: self.jobs.pop(job.id, None)
+        waiting = []; failed = 0
+        for job in active:
+            if self.task_manager.cancel(self.active[job.id]):
+                self.pending_removals[job.id] = False; waiting.append(job.id)
+            else: failed += 1
+        return BatchOutcome(completed=len(inactive), failed=failed, skipped=len(ids)-len(current),
+            waiting=tuple(waiting), error="Could not request active task stop; entries retained" if failed else "")
 
     def _selected_or_banner_job(self) -> DownloadJob | None:
         selected = self._selected_jobs()
@@ -2079,7 +2114,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if not self._closing:
             self._closing = True
-            self.queue_batch.cancel()
+            self.queue_batch.cancel(abandon=True)
             self._persist_settings()
             for timer in self.findChildren(QTimer):
                 timer.stop()
