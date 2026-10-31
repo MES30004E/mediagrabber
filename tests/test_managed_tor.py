@@ -1,8 +1,10 @@
 import json
+import errno
 import os
 import socket
 import fcntl
 from pathlib import Path
+import pytest
 
 from morgan_media_downloader.managed_tor import (
     BOOTSTRAP, MANAGED_TOR_FORBIDDEN_PORTS, MAX_LAUNCH_ATTEMPTS, ManagedTor,
@@ -28,29 +30,39 @@ def test_dynamic_socks_port_is_local_and_available():
     assert port not in MANAGED_TOR_FORBIDDEN_PORTS
 
 
-def test_runtime_port_pair_is_distinct_reserved_and_leaves_browser_ports_alone():
+def test_runtime_port_pair_is_distinct_reserved_and_excludes_browser_ports():
     socks, control, reservations = reserve_runtime_ports()
-    browser_sockets = []
     try:
         assert socks != control
         assert {socks, control}.isdisjoint(MANAGED_TOR_FORBIDDEN_PORTS)
-        for port in (9150, 9151):
-            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            listener.bind(("127.0.0.1", port)); browser_sockets.append(listener)
+        assert {socks, control}.isdisjoint({9050, 9051, 9150, 9151})
+        for port, reservation in zip((socks, control), reservations):
+            assert reservation.getsockname() == ("127.0.0.1", port)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as duplicate:
+                with pytest.raises(OSError) as error: duplicate.bind(("127.0.0.1", port))
+                assert error.value.errno == errno.EADDRINUSE
     finally:
         for reservation in reservations: reservation.close()
-        for listener in browser_sockets: listener.close()
 
 
-def test_browser_ports_can_be_occupied_before_runtime_selection():
+def test_occupied_forbidden_ports_do_not_prevent_runtime_selection(monkeypatch):
     listeners = []
     try:
-        for port in (9150, 9151):
+        # Never assume the user's Tor Browser ports are free. Model two occupied
+        # browser endpoints with owned ephemeral sockets; keep real exclusions.
+        for _ in range(2):
             listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            listener.bind(("127.0.0.1", port)); listeners.append(listener)
+            listener.bind(("127.0.0.1", 0)); listener.listen(); listeners.append(listener)
+        occupied = {listener.getsockname()[1] for listener in listeners}
+        forbidden = MANAGED_TOR_FORBIDDEN_PORTS | occupied
+        monkeypatch.setattr("morgan_media_downloader.managed_tor.MANAGED_TOR_FORBIDDEN_PORTS", forbidden)
         socks, control, reservations = reserve_runtime_ports()
-        assert {socks, control}.isdisjoint({9050, 9051, 9150, 9151})
-        for reservation in reservations: reservation.close()
+        try:
+            assert {socks, control}.isdisjoint(forbidden)
+            assert {listener.getsockname()[1] for listener in listeners} == occupied
+            assert all(listener.fileno() >= 0 for listener in listeners)
+        finally:
+            for reservation in reservations: reservation.close()
     finally:
         for listener in listeners: listener.close()
 

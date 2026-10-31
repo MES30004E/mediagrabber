@@ -8,11 +8,11 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 ## Current checkpoint and restrictions
 
 - Development branch: `improvement/download-reliability`. Latest hosted-tested
-  checkpoint: `59a757c1a2c4f274178216a1e8d3368ce2af1a19`, run `41169869112`,
-  all jobs passed. Actual logs: Linux666 (one warning); macOS backend60, Swift25 and protocol9;
+  checkpoint: `053264c9711a4d3ffc16d7e51e755095b1c625c3`, run `41172016114`,
+  all jobs passed. Actual logs: Linux702 (one warning); macOS backend60, Swift25 and protocol9;
   bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
-  strict extracted-archive verification/launch passed. Archive141705157bytes,
-  SHA256 `02593adb71b39beafc8da55a3821111b7c191bc1fc0e916e20b2c4f87277a536`.
+  strict extracted-archive verification/launch passed. Archive141893743bytes,
+  SHA256 `f29b55ec5b4f35e2531659f88e967085926f801f2fddca8b23ab827abc2da063`.
   No release asset was uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
@@ -52,19 +52,36 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   have real Fusion pixel geometry tests, LTR/RTL both observed RED→GREEN.
   Full local **666passed22.30s**, JS10/protocol9/pipcheck clean. Updated Light
   render inspected; this narrow follow-up also passed hosted run41169869112.
-- In-progress native queue diagnostic: share the real synthetic GUI/SQLite/owned-
+- Hosted-tested native queue diagnostic: share the real synthetic GUI/SQLite/owned-
   worker exercise between source benchmark and opt-in frozen startup checker.
   Four sizes100/800/1000/5000, two cycles each; source CLI matrix passes. Reports
   require exact persisted counts, two workers, zero final owners, one keep-files
   confirmation/cycle, no per-row widgets and measured RSS/thread/heartbeat/SQL.
   No personal data/network/Keychain/real deletion; native crash traces are bounded
-  and redacted. Hosted frozen Cocoa matrix is not yet qualified; real transfers,
+  and redacted. Exactrun41172016114 passes the frozen Cocoa matrix; real transfers,
   restart of the process, leak and user crash classification remain open.
   Review fixes require actual cancellation acknowledgements/zero worker errors,
   independent read-only SQLite visibility plus positive write commits, and retain
   late teardown abort stacks. Full local702passed46.87s, extension10/protocol9
   and pip check clean; no skips. Breadcrumb retention/long-stderr trace scanning
   are deferred diagnostic improvements, not silent qualifications.
+- User clarification2026-10-31: the reported large-queue incident left its window
+  open but frozen, not an observed quit/crash dialog. Prioritize main-thread stall
+  investigation. This is not proof of one cause or absence of every native fault.
+- Portable-tested history hot-path correction; hosted qualification pending:
+  immutable seven-column/order snapshots
+  avoid SQL/history-cell rebuilding for progress/bytes/speed/ETA alone. Existing
+  SQL filters and explicit metadata/status refresh stay unchanged. History still
+  uses QTableWidget; full model migration/other bottlenecks remain. Initial tests
+  also exposed two invalid assumptions that Tor Browser's9150/9151 were free;
+  synthetic owned-port tests now retain real reservation/exclusion coverage without
+  stopping the user's Tor process. No test skips or production Tor changes.
+  Review's two Important stale-state findings are fixed with dirty-state/explicit-
+  writer invalidation and13RED→GREEN regressions. Full742passed62.14s; focused
+  history/bulk75passed8.85s; extension10/protocol9/pipcheck/shellsyntax clean.
+  Final paired5,000 steady callbacks0.505451→0.000969s;2history queries/70,000
+  cells→0/0, while2writes/2commits remain. Single paired observations, not full
+  freeze/live-media/memory acceptance. Next exact hosted run must qualify this code.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -92,7 +109,7 @@ Paths below are repository-relative; each row retains its own remaining QA.
 
 | ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
 | --- | --- | --- | --- |
-| Q01 Release blocker; measured stall/model improvements | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, model/scale/bulk tests, `docs/QUEUE_SCALE.md` | Header stall fixed; queue model removes N widgets, paired5,000 peak383→279MiB/enqueue0.885→0.589s. Native crash still not reproduced;~0.60s max gap/history/playlist memory, leak/race/native QA remain |
+| Q01 Release blocker; user describes freeze | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify UI stall/exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, `queue_check.py`, model/scale/bulk/history tests, `docs/QUEUE_SCALE.md` | Header/queue model fixes and native two-cycle matrix pass. User reports an open frozen window; no observed process crash. Remaining history/playlist stalls, memory growth, long-run/live QA; do not claim a unique cause or leak freedom |
 | Q02 Portable-tested fix | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains |
 | Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
 | Q04 Open | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `ui.py` queue table/filter and `_selected_jobs` | Queue selection is not the analysed-playlist checkbox selection; implement and test each action and stable selection across refresh/filter |
@@ -161,18 +178,18 @@ whole-app rewrite.
 | --- | --- | --- |
 | UI concentration | `ui.py` 2,169 lines; settings762; queue presentation/formatting/model plus batch/cleanup responsibilities extracted, orchestration still concentrated | Preserve behavior/DB compatibility; measure coupling, not only moved lines |
 | Per-row queue objects: removed | QTableView/model/native proxy and style-painted progress; no per-row Qt item/widget ownership; incremental append/remove, rare reset with UUID restoration | Paired100–5,000 RSS/widget/latency evidence in QUEUE_SCALE. History/analysed playlist still item-based; no global memory/leak guarantee |
-| Full queue/history work: partial | Targeted queue progress; full history consumes0.530/0.537s in a two-callback profile, decoding10000jobs and writing70000cells | Coalesce/paginate or separate history model with real behavior tests; retain current search/status and persistence semantics |
+| Full queue/history work: partial | Targeted queue progress; full history consumed0.530/0.537s in two callbacks/10000decoded jobs/70000cells. History projection guard in progress | Verify zero unchanged-history queries/cell replacements with immutable/filter/failure regressions and paired metrics. Metadata refresh/model migration still open |
 | Selection/details minor | Review: remove primaryA from selectedA+B; B stays correctly actionable but inline details become blank | Reconcile surviving details target in next selection/UX checkpoint; not an action-ID mix-up |
 | Existing theme switch rendering | Light→Dark leaves light/stale child/table palettes in both baseline423160a and model renders despite correct app palette | Rendered regression and Qt repolish/inheritance diagnosis; do not claim polish from app-palette assertions alone |
 | Per-job persistence: admission/status/removal batched | Atomic iterable transactions; media admission saves before UI publication, large status/removal actions commit32-ID slices | Rollback/phantom/partial cleanup regressions pass. Small actions/restart still per-job; collection/relaunch, fault recovery and GUI enqueue latency remain |
 | Modal batch loop: narrow fix verified | Previously one prompt per selected job; now one ID snapshot/one native keep-default dialog,800-job tests pass | Retain broader bounded asynchronous cancellation, per-item failure aggregation, collection controls and realistic worker/file-race qualification |
 | Task admission | `TaskManager.start` creates a QThread per admitted task; callers own bounds | Measure actual concurrency/admission/callback queues; scheduler/backpressure tests, no per-queued-job thread explosion |
-| Unknown native crash | Real QA reports crash; baseline now measures 15s UI stalls at800 and24s at1,000;5,000 times out.100-item profile assigns0.235/0.252s to cell setText | Native crash still not reproduced/classified. Fix the measured refresh bottleneck with causal tests/after benchmarks; continue isolated native/race reproduction, not a guessed crash explanation |
+| Reported UI freeze; other faults unproven | User clarifies window stayed open. Initial baseline measured15s stalls at800/24s at1000; header/model fixes now pass frozen two-cycle matrix | Further remove measured history/playlist GUI work, profile retention/long gaps and reproduce live conditions only with explicit user participation; no invented native-crash cause |
 
 ## Next checkpoints and reporting contract
 
-1. Independently verify/publish the queue model/view checkpoint;
-   inspect its exact hosted results without cancelling an in-progress run.
+1. Finish/qualify the history progress-refresh correction after the successful
+   queue-model/frozen-matrix checkpoint; preserve exact hosted evidence.
 2. Continue P0 history/progress coalescing, bounded restart/selection/collection controls,
    persistence recovery and native crash classification from measured evidence.
 3. Design system/research/mockups and **approved** professional native screens;

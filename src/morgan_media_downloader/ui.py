@@ -27,6 +27,7 @@ from .database import Database
 from .queue_batch import BatchOutcome, QueueBatch
 from .file_removal import FileRemovalResult, FileRemovalService
 from .display_format import human_bytes, human_duration
+from .history_presentation import HistoryRefreshState, history_row
 from .queue_model import JOB_ID_ROLE, KIND_ROLE, QueueProgressDelegate, QueueTableModel, contiguous_ranges
 from .console import ConsoleEvent, ConsoleStore
 from .diagnostics import run_checks
@@ -233,6 +234,7 @@ class MainWindow(QMainWindow):
         self.media_details_dialog = None
         self.torrent_context: TorrentMetadata | None = None
         self.jobs = {job.id: job for job in self.database.load_jobs()}
+        self._history_refresh_state = HistoryRefreshState()
         self.task_manager = TaskManager(self)
         self.queue_batch = QueueBatch(self)
         self.queue_batch.changed.connect(self._queue_batch_progress)
@@ -1205,7 +1207,7 @@ class MainWindow(QMainWindow):
                               torrent_file_paths=[str(Path(media.uploader) / media.title) if media.uploader else media.title for media in selected],
                               torrent_trackers=list(torrent_context.trackers))
             job.options = torrent_options
-            self.database.save_job(job); self.jobs[job.id] = job
+            self.database.save_job(job); self._history_refresh_state.invalidate(); self.jobs[job.id] = job
             self._refresh_queue(); self._refresh_history(); self.tabs.setCurrentIndex(1); return
         organised = organised_folder(options.download_dir, selected, self.settings.create_subfolders)
         created_directory = organised if Path(organised) != Path(options.download_dir) and not Path(organised).exists() else ""
@@ -1222,6 +1224,7 @@ class MainWindow(QMainWindow):
         # The visible queue is published only after the entire admission commits.
         # A failed SQL write/serialization cannot leave phantom runnable entries.
         self.database.save_jobs(queued)
+        if queued: self._history_refresh_state.invalidate()
         self.jobs.update((job.id, job) for job in queued)
         self._persist_settings(); self._refresh_queue(); self._refresh_history(); self.tabs.setCurrentIndex(1)
 
@@ -1260,7 +1263,7 @@ class MainWindow(QMainWindow):
                 operation = lambda cancel, progress, j=copy.deepcopy(job), p=proxy, s=settings, r=runtime, t=tor: _media_download_operation(j, p, s, r, cancel, progress, t)
                 media_slots -= 1
             task_id = f"job-{job.id}"
-            self.active[job.id] = task_id; self.database.save_job(job)
+            self.active[job.id] = task_id; self.database.save_job(job); self._history_refresh_state.invalidate()
             self.task_manager.start(f"download-{job.kind}", operation, task_id=task_id,
                                     on_result=self._job_changed, on_progress=self._job_progress,
                                     on_error=self._job_error, on_finished=self._job_finished)
@@ -1270,11 +1273,11 @@ class MainWindow(QMainWindow):
         changed = False
         for job in self.jobs.values():
             if reconcile_stuck_job(job):
-                changed = True; self.database.save_job(job)
+                changed = True; self.database.save_job(job); self._history_refresh_state.invalidate()
                 if job.status == JobStatus.FAILED and job.id in self.active:
                     self.task_manager.cancel(self.active[job.id])
                     self.console_store.append("ERROR", job.error, job.id, "error")
-        if changed: self._refresh_queue(); self._refresh_selected_job_details()
+        if changed: self._refresh_queue(); self._refresh_selected_job_details(); self._refresh_history()
 
     def _job_progress(self, payload: object):
         if isinstance(payload, DownloadJob): self._job_changed(payload)
@@ -1292,7 +1295,14 @@ class MainWindow(QMainWindow):
             state, message = classify_tor_target(self.tor_internet_state, job.error)
             if state == "target_rejected":
                 job.failure_code = "Target rejected Tor"; job.error = message
-        job.updated_at = datetime.now(timezone.utc).isoformat(); self.jobs[job.id] = job; self.database.save_job(job); self._refresh_queue(job_id=job.id); self._refresh_history()
+        job.updated_at = datetime.now(timezone.utc).isoformat(); self.jobs[job.id] = job; self.database.save_job(job)
+        row = history_row(job)
+        if self._history_refresh_state.needs_refresh(row): self._history_refresh_state.invalidate()
+        self._refresh_queue(job_id=job.id)
+        if self._history_refresh_state.needs_refresh(row): self._refresh_history()
+        # Only this successfully persisted callback row is acknowledged here;
+        # unrelated mutable jobs may not yet match what is in the database/UI.
+        self._history_refresh_state.remember(row)
         if job.kind == "torrent":
             marker = (job.status.value, int(job.progress))
             if marker != getattr(self, "_last_aria_console", {}).get(job.id):
@@ -1336,7 +1346,7 @@ class MainWindow(QMainWindow):
                         job.status = JobStatus.INTERRUPTED
                         job.active_extractor_task = job.active_transfer_task = job.active_postprocess_task = False
                         job.technical_details = "Worker stopped; queue removal failed and entry was retained."
-                        try: self.database.save_job(job)
+                        try: self.database.save_job(job); self._history_refresh_state.invalidate()
                         except Exception: detail += "; stopped-state persistence also failed"
                     self.queue_batch.settle(job_id, detail)
                 else: self.queue_batch.settle(job_id)
@@ -1354,16 +1364,19 @@ class MainWindow(QMainWindow):
     def pause_all(self): self._pause(list(self.jobs.values()))
     def _pause(self, jobs):
         if self._start_large_queue_action(jobs, "Pause"): return
+        saved = False
         for job in jobs:
             if job.id in self.active:
                 job.status = JobStatus.PAUSED; self.task_manager.cancel(self.active[job.id])
             elif job.status == JobStatus.WAITING: job.status = JobStatus.PAUSED
-            self.database.save_job(job)
+            self.database.save_job(job); self._history_refresh_state.invalidate(); saved = True
         self._refresh_queue()
+        if saved: self._refresh_history()
     def resume_selected(self): self._resume(self._selected_jobs())
     def resume_all(self): self._resume(list(self.jobs.values()))
     def _resume(self, jobs):
         if self._start_large_queue_action(jobs, "Resume"): return
+        saved = False
         for job in jobs:
             if job.status in {JobStatus.PAUSED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.INTERRUPTED}:
                 if job.kind == "media" and job.status == JobStatus.FAILED and (
@@ -1372,16 +1385,18 @@ class MainWindow(QMainWindow):
                     # choice, preserving all unrelated captured download options.
                     for name in ("authentication_mode", "cookies_browser", "browser_profile", "cookies_file"):
                         setattr(job.options, name, getattr(self.settings, name))
-                prepare_resumable_job(job); self.database.save_job(job)
+                prepare_resumable_job(job); self.database.save_job(job); self._history_refresh_state.invalidate(); saved = True
         self._refresh_queue()
+        if saved: self._refresh_history()
     def cancel_selected(self):
         selected = self._selected_jobs()
         if self._start_large_queue_action(selected, "Cancel"): return
         for job in selected:
             job.status = JobStatus.CANCELLED
             if job.id in self.active: self.task_manager.cancel(self.active[job.id])
-            self.database.save_job(job)
+            self.database.save_job(job); self._history_refresh_state.invalidate()
         self._refresh_queue()
+        if selected: self._refresh_history()
     def retry_selected(self): self._resume(self._selected_jobs())
 
     def _start_large_queue_action(self, jobs, action):
@@ -1422,6 +1437,7 @@ class MainWindow(QMainWindow):
             changed.append(job)
             if action != "Resume" and job.id in self.active: cancel_tasks.append(self.active[job.id])
         self.database.save_jobs(changed)
+        if changed: self._history_refresh_state.invalidate()
         self.jobs.update((job.id, job) for job in changed)
         for task in cancel_tasks: self.task_manager.cancel(task)
         return len(ids) - len(changed)
@@ -1437,7 +1453,8 @@ class MainWindow(QMainWindow):
         self._refresh_queue(); self._refresh_history()
     def restart_selected(self):
         if self._queue_action_blocked(): return
-        for job in self._selected_jobs():
+        selected = self._selected_jobs()
+        for job in selected:
             choice = self._confirm_restart(job)
             if choice == "cancel": continue
             job.technical_details = "Restarting from the beginning…"
@@ -1446,6 +1463,7 @@ class MainWindow(QMainWindow):
             else:
                 self._restart_job(job, choice)
         self._refresh_queue()
+        if selected: self._refresh_history()
 
     def _confirm_restart(self, job: DownloadJob) -> str:
         final_exists = any(Path(path).exists() for path in job.final_files)
@@ -1471,7 +1489,7 @@ class MainWindow(QMainWindow):
             job.options.filename_template = "%(title)s (new).%(ext)s"
             job.output_file = ""; job.final_files.clear()
         job.status = JobStatus.WAITING
-        self.database.save_job(job)
+        self.database.save_job(job); self._history_refresh_state.invalidate()
 
     def remove_selected(self):
         if self._queue_action_blocked(): return
@@ -1517,7 +1535,7 @@ class MainWindow(QMainWindow):
 
     def _remove_job(self, job: DownloadJob, delete_files: bool):
         if delete_files: delete_owned_files(job)
-        self.database.remove_job(job.id); self.jobs.pop(job.id, None)
+        self.database.remove_job(job.id); self._history_refresh_state.invalidate(); self.jobs.pop(job.id, None)
 
     def _remove_queue_slice(self, ids, delete_files=False):
         current = [self.jobs[key] for key in ids if key in self.jobs]
@@ -1533,6 +1551,7 @@ class MainWindow(QMainWindow):
             return BatchOutcome(failed=len(failed), skipped=len(ids)-len(current), waiting=self._delete_slice_ids,
                 error="Could not request active task stop; files and entries retained" if failed else "")
         self.database.remove_jobs(job.id for job in inactive)
+        if inactive: self._history_refresh_state.invalidate()
         for job in inactive: self.jobs.pop(job.id, None)
         waiting = []; failed = 0
         for job in active:
@@ -1568,6 +1587,7 @@ class MainWindow(QMainWindow):
             detail = (str(error) or type(error).__name__) + "; files may already have moved; queue entries retained"
             errors.update((key, detail) for key in successful)
         else:
+            if successful: self._history_refresh_state.invalidate()
             for key in successful: self.jobs.pop(key, None)
         for key in ids:
             self.pending_removals.pop(key, None)
@@ -1577,7 +1597,7 @@ class MainWindow(QMainWindow):
                 job.status = JobStatus.INTERRUPTED
                 job.active_extractor_task = job.active_transfer_task = job.active_postprocess_task = False
                 job.technical_details = "Cleanup did not complete; queue entry retained. Some files may already have moved."
-                try: self.database.save_job(job)
+                try: self.database.save_job(job); self._history_refresh_state.invalidate()
                 except Exception: detail += "; stopped-state persistence also failed"
             self.queue_batch.settle(key, detail)
 
@@ -1714,15 +1734,18 @@ class MainWindow(QMainWindow):
         if magnets: QApplication.clipboard().setText("\n".join(magnets))
     def stop_seeding(self):
         if self._queue_action_blocked(): return
+        saved = False
         for job in self._selected_jobs():
             if job.kind == "torrent" and job.status == JobStatus.SEEDING:
                 job.status = JobStatus.COMPLETED
                 if job.id in self.active: self.task_manager.cancel(self.active[job.id])
-                self.database.save_job(job)
+                self.database.save_job(job); self._history_refresh_state.invalidate(); saved = True
         self._refresh_queue()
+        if saved: self._refresh_history()
     def clear_completed(self):
         if self._queue_action_blocked(): return
-        self.database.clear_completed(); self.jobs = {key: job for key, job in self.jobs.items() if job.status not in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS}}; self._refresh_queue(); self._refresh_history()
+        self.database.clear_completed(); self._history_refresh_state.invalidate()
+        self.jobs = {key: job for key, job in self.jobs.items() if job.status not in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS}}; self._refresh_queue(); self._refresh_history()
 
     def convert_selected_for_macos(self):
         job = self._selected_or_banner_job()
@@ -1989,16 +2012,18 @@ class MainWindow(QMainWindow):
 
     def _refresh_history(self, *_):
         if not hasattr(self, "history_table"): return
+        self._history_refresh_state.invalidate()
         jobs = self.database.search_history(self.history_search.text(), self.history_filter.currentText())
         self.history_empty.setVisible(not jobs)
         self.history_empty.setText("No matching history. Try another search or status filter." if self.history_search.text() or self.history_filter.currentText() != "All" else "No history yet. Completed downloads will appear here.")
         self.history_table.setRowCount(len(jobs))
-        for row, job in enumerate(jobs):
-            values = [job.created_at[:19].replace("T", " "), job.item.title, job.item.original_url, job.item.source_url, job.output_file, job.options.audio_format if job.options.audio_format != "Original/best audio" else job.options.quality, job.status.value]
-            for column, value in enumerate(values):
+        rows = [history_row(job) for job in jobs]
+        for index, row in enumerate(rows):
+            for column, value in enumerate(row.cells):
                 item = QTableWidgetItem(value)
-                if column == 0: item.setData(Qt.ItemDataRole.UserRole, job.id)
-                self.history_table.setItem(row, column, item)
+                if column == 0: item.setData(Qt.ItemDataRole.UserRole, row.job_id)
+                self.history_table.setItem(index, column, item)
+        self._history_refresh_state.rendered(rows, self.jobs.keys())
 
     def choose_folder(self):
         chosen = QFileDialog.getExistingDirectory(self, "Choose download folder", self.folder.text())

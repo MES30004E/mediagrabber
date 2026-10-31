@@ -114,7 +114,7 @@ full refresh still synchronizes all snapshots. Model mutations require its GUI
 thread. `display_format.py` shares existing byte/duration presentation helpers.
 
 These are incremental prerequisites, not completed scale/crash qualification.
-History/analysed playlists still use item tables, history refresh per callback is
+History/analysed playlists still use item tables, full history refresh is
 expensive, and bulk restart/collection/dedup work is incomplete. See
 `docs/QUEUE_SCALE.md` and `docs/FEATURE_BACKLOG.md` for measured limits and QA.
 
@@ -130,6 +130,22 @@ read-only independent SQLite payload comparison verifies committed cancellation
 and removal, not merely the writer's own uncommitted view.
 This tests synthetic queue behavior, not accounts, real downloads, leaks or a
 whole-process restart. Normal startup and downloader/auth architecture are unchanged.
+
+`history_presentation.py` owns immutable seven-column/order snapshots, not widgets
+or I/O. Progress callbacks still save the full job and update queue/details, but
+only refresh history when its presentation/order/filter fields differ. Full
+history queries/rendering remember DB-derived snapshots after successful render;
+one explicitly persisted callback row is remembered even when filtered out.
+Unrelated mutable/unpersisted jobs are never acknowledged en masse. Existing SQL
+LIKE/status/order, explicit refresh and context-menu job-ID behavior are retained.
+There is no delayed timer, new worker, database schema or auth/network change.
+Every explicit full history refresh starts dirty and only successful rendering
+clears that flag. Successful non-callback writes invalidate history too; small
+status actions/watchdog/restart/stop-seeding refresh once, while existing batch/
+removal completion owns its full render. Dispatch invalidates for the next
+callback, rather than rebuilding per unchanged callback. Closing-only persistence
+does not render a disappearing window. Failed queue rendering after a committed
+change cannot hide the pending history refresh.
 
 `settings.SettingsStore` atomically writes schema-6 mode-0600 settings, migrates
 legacy preferences, and recovers corrupt JSON. `keychain.py` calls macOS security

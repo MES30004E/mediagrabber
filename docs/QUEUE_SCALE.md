@@ -449,3 +449,90 @@ bounded redacted late-abort stacks, and make standalone failure-path redaction
 work without ambient source PYTHONPATH. Final full suite702passed46.87s. Actual
 whole-process restart remains untested. Deferred diagnostic minors: breadcrumbs
 are not forwarded, and a fatal trace after the first65536stderr chars is lost.
+
+### Exact hosted frozen qualification
+
+Commit053264c9711a4d3ffc16d7e51e755095b1c625c3/run41172016114 passed alljobs;
+actual logs inspected. Linux702/one existing Qt deprecation warning, extension10,
+macOS backend60/Swift25/real-worker interoperability/drift9. Native job124452301419
+passed protocol5, provider1.3.1/Node24.22.0/Canvas, media9, Cocoa startup, four
+queue sizes/two cycles each, replacement/retained backup and strict archive.
+
+| Frozen items | Enqueue seconds cycle1/2 | Peak RSS MiB | Largest measured heartbeat gap seconds |
+| ---: | ---: | ---: | ---: |
+| 100 |0.054504/0.019692|190.81|0.413865|
+| 800 |0.314270/0.164172|226.09|0.383925|
+| 1000 |0.258589/0.223992|232.31|0.307782|
+| 5000 |1.071558/1.027403|369.00|1.229855|
+
+Every frozen case acknowledged2worker stops per cycle, zero worker errors/guarded
+I/O attempts/final owners/jobs, one keep-files confirmation per cycle and clean
+shutdown. Post-removal5,000currentRSS343.73→345.97MiB does not establish leak
+freedom. Long gaps remain measurable; this is synthetic behavior, not professional
+visual/fullscreen, live transfer or process-restart acceptance.
+
+Archive141893743bytes SHA256
+`f29b55ec5b4f35e2531659f88e967085926f801f2fddca8b23ab827abc2da063` passed
+strict signature-preserving round-trip and launch, source unchanged. Publication
+not approved; no release/upload/user installation. Local Apple tools not run.
+
+## User freeze clarification and history hot path (2026-10-31)
+
+The user reports that the window stayed open but froze, not an observed process
+quit/crash dialog. Prioritize main-thread stall evidence; do not claim a verified
+single cause or absence of native faults. Existing queue/header corrections are
+useful, but full history rebuilding still dominated progress callbacks.
+
+`history_presentation.HistoryRow` captures the existing seven cells plus raw
+creation time. `_job_changed` still persists every job update and refreshes its
+queue/details, but history queries/cells change only for actual presentation
+differences. Full SQL history renders remember DB-derived immutable snapshots,
+not unrelated unpersisted mutations; hidden/new jobs are handled conservatively.
+Failed saves/rendering do not acknowledge a change. No delayed timer, new worker,
+schema, SQL LIKE/status policy, downloader/auth/network changes. History remains
+QTableWidget; metadata/full-list operations and model migration remain open.
+
+Paired **source-only** steady-progress adapter exported053264c read-only to a
+temporary directory and ran the same driver against baseline/current, sequentially
+per size with the same interpreter/toolchain, after the suite finished. It presents
+dispatch's real status once before measuring two progress callbacks, because the
+ordinary first callback can legitimately deliver an unseen Analysing status.
+This warmup is identical on both variants; no frozen qualification is inferred.
+
+| Items | Two progress callbacks seconds before/after | History queries before/after | History cell replacements before/after |
+| ---: | ---: | ---: | ---: |
+| 100 |0.009685/0.000752|2/0|1400/0|
+| 800 |0.075137/0.001042|2/0|11200/0|
+| 1000 |0.099646/0.001095|2/0|14000/0|
+| 5000 |0.505451/0.000969|2/0|70000/0|
+
+Both variants still commit2writes in2transactions. SQL traced statements8→6
+remove only the two history SELECTs. Raw first-status-bearing callbacks are not
+promised zero reads: the un-warmed probe records2→1history queries because the
+first callback presents new status; second/steady unchanged callbacks skip them. Timings are one
+paired observation, not hard latency, end-to-end speed or long-run memory budgets.
+
+Tests cover immutable/in-place/hidden metadata, SQL wildcard/case behavior, stable
+history selection/IDs, persistence and failed-save/render retry. Existing DB
+save_job intentionally retains its indexed creation time on conflict; tests
+preserve that policy rather than inventing reordered rows from payload changes.
+Two old Tor tests assumed9150/9151 were unused; a running user Tor process made
+them fail EADDRINUSE. Owned ephemeral synthetic forbidden endpoints and stronger
+real duplicate-bind reservation assertions preserve coverage without stopping or
+contacting that process, skipping tests or changing production Tor behavior.
+
+Independent review additionally reproduced two stale-state paths: failed explicit
+filter/query/render transitions could suppress later retries, and non-callback
+pause/resume/cancel/other writes were no longer picked up by unrelated progress.
+An explicit dirty bit now survives until a full render succeeds. All successful
+visible-lifetime direct writes invalidate; user status actions/watchdog/restart/
+stop-seeding refresh once, dispatch/batch/cleanup cooperate with existing refresh
+boundaries. Closing-only persistence still avoids rendering. Thirteen RED→GREEN
+regressions cover query/render failures with unchanged callbacks, seven direct
+status paths, partial persistence and queue-render failure after committed save/
+clear-completed. Ordinary unchanged progress still issues zero history queries.
+
+Final local full suite742passed62.14s; history/bulk focused75passed8.85s,
+extension10/protocol9, pip check/shell syntax clean. No skipped tests. New source
+still requires its own exact hosted macOS/Linux/strict-archive run after audited
+publication; earlier053qualification does not cover this worktree.
