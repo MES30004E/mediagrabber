@@ -178,7 +178,8 @@ class QueueProgressDelegate(QStyledItemDelegate):
             return
         bar = QStyleOptionProgressBar()
         bar.rect = option.rect.adjusted(4, 8, -4, -8)
-        bar.state = option.state; bar.palette = option.palette
+        bar.state = option.state | QStyle.StateFlag.State_Horizontal
+        bar.direction = option.direction; bar.palette = option.palette
         bar.minimum = 0; bar.maximum = 1000; bar.progress = int(progress * 10)
         bar.text = index.data(Qt.ItemDataRole.DisplayRole); bar.textVisible = True
         bar.textAlignment = Qt.AlignmentFlag.AlignCenter

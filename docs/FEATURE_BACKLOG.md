@@ -8,11 +8,11 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 ## Current checkpoint and restrictions
 
 - Development branch: `improvement/download-reliability`. Latest hosted-tested
-  checkpoint: `423160a8e07a8fcd19c1c18950b2c5ebb44de337`, run `41034253375`,
-  all jobs passed. Actual logs: Linux646; macOS backend60, Swift25 and protocol9;
+  checkpoint: `ee097599bd0fc5584a14d5ff9a66aba483fee94a`, run `41168846246`,
+  all jobs passed. Actual logs: Linux664; macOS backend60, Swift25 and protocol9;
   bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
-  strict extracted-archive verification/launch passed. Archive141455132bytes,
-  SHA256 `c467bf109bc5382413e355d848324c3349aba6459b3865f0e6c16c04ab65d737`.
+  strict extracted-archive verification/launch passed. Archive141705810bytes,
+  SHA256 `99e98e623c96aba8adf47dcebb0f25c5afd0ad83e6c59ca741ed79429d4ad4be`.
   No release asset was uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
@@ -28,7 +28,7 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   Entire confirmed removal snapshots supersede earlier pending restarts.
 - Synthetic cleanup100/800/1,000/5,000 probes pass with one confirmation, one
   cleanup worker and zero GUI cleanup calls; no actual user files touched.
-  New model source below needs its own hosted qualification. Native crash classification,
+  The paint follow-up below needs its own hosted qualification. Native crash classification,
   real Trash/cross-volume QA, broader memory work, bulk restart and collections
   remain unfinished; no broad crash/scale/release acceptance is implied.
 - Queue-only QTableView/immutable presentation model/native proxy/painted progress
@@ -47,6 +47,11 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   Dark theme switching leaves stale light child/table palettes; reproduced also
   on the exported423160a baseline, not claimed introduced/fixed by this model.
   No professional redesign/mockup/native fullscreen acceptance is supplied.
+- Render acceptance caught horizontal cells painting vertical progress fill despite
+  correct percentage text. Missing Qt State_Horizontal and layout direction now
+  have real Fusion pixel geometry tests, LTR/RTL both observed RED→GREEN.
+  Full local **666passed22.30s**, JS10/protocol9/pipcheck clean. Updated Light
+  render inspected; this narrow follow-up is separate from ee09759's hosted run.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.

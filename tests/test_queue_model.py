@@ -118,3 +118,35 @@ def test_progress_delegate_really_paints_native_progress_without_allocating_row_
     assert image != before and not table.findChildren(QProgressBar)
     assert table.indexWidget(model.index(0, 3)) is None
     table.close()
+
+
+@pytest.mark.parametrize("direction,left_changes,right_changes", [
+    (Qt.LayoutDirection.LeftToRight, True, False),
+    (Qt.LayoutDirection.RightToLeft, False, True),
+])
+def test_progress_fill_is_horizontal_and_respects_layout_direction(direction, left_changes, right_changes):
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QImage, QPainter
+    from PySide6.QtWidgets import QStyle, QStyleFactory, QStyleOptionViewItem, QTableView
+    from morgan_media_downloader.queue_model import QueueProgressDelegate
+    model = QueueTableModel(); job = make_job(); job.progress = 25.0
+    model.sync([job], "Media", "Direct")
+    table = QTableView(); style = QStyleFactory.create("Fusion"); table.setStyle(style)
+    delegate = QueueProgressDelegate(table)
+    option = QStyleOptionViewItem(); option.widget = table
+    option.rect = QRect(0, 0, 240, 40); option.palette = table.palette()
+    option.state = QStyle.StateFlag.State_Enabled | QStyle.StateFlag.State_Active
+    option.direction = direction
+    def paint(progress):
+        job.progress = progress; model.update_job(job, "Direct")
+        image = QImage(240, 40, QImage.Format.Format_ARGB32); image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        try: delegate.paint(painter, option, model.index(0, 3))
+        finally: painter.end()
+        return image
+    empty, quarter = paint(0.0), paint(25.0)
+    # Compare real pixels away from text/borders with an empty bar. A vertical
+    # bar leaves both points empty; incorrect RTL fills the wrong end.
+    assert (quarter.pixelColor(20, 12) != empty.pixelColor(20, 12)) == left_changes
+    assert (quarter.pixelColor(200, 12) != empty.pixelColor(200, 12)) == right_changes
+    table.close()

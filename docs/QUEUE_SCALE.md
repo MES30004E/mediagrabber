@@ -357,3 +357,27 @@ Native crash classification, repeated-cycle leaks, real transfers/files/Trash,
 Cocoa-scale interaction, model/view for history/playlists and collection/restart/
 dedup acceptance remain in FEATURE_BACKLOG. No source/fixture test or bare model
 conversion proves those requirements. No app/release installed or published.
+
+### Paint acceptance follow-up
+
+Run41168846246 passed alljobs on ee097599bd0fc5584a14d5ff9a66aba483fee94a:
+Linux664, extension10, macOS backend60/Swift25/drift9; native host5/media9,
+provider/Canvas/Cocoa/replacement/strict extracted archive allpassed. Archive
+141705810bytes SHA25699e98e623c96aba8adf47dcebb0f25c5afd0ad83e6c59ca741ed79429d4ad4be.
+No release asset uploaded or app installed.
+
+Actual render inspection, not the prior pixel-nonblank smoke assertion, caught
+partial progress filling bottom-up within horizontal cells. Percentage text was
+correct but the visual fill was wrong. The style option inherited item-view
+state without Qt's horizontal orientation flag. It now explicitly includes
+State_Horizontal and propagates layout direction; the official
+[QStyle state reference](https://doc.qt.io/qt-6/qstyle.html#StateFlag-enum)
+documents that orientation flag. Real Fusion25%-versus0% pixel tests in both
+LTR/RTL were observed failing before the fix, then passing. Updated actual
+Light-window capture was inspected with correct left-to-right fill.
+
+Full local source666passed22.30s, focused model/UI20passed1.20s, JS10/drift9/pip
+check clean. This source follow-up requires a new exact hosted run; prior native
+success is not claimed to cover the fix. The paired performance matrix above
+measures the model/header source before this paint-only follow-up. Memory/cache
+architecture did not change; no new timing measurements are inferred.
