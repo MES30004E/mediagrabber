@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QPersistentModelIndex, Qt
 from PySide6.QtWidgets import QApplication
 
 from morgan_media_downloader.models import DownloadJob, DownloadOptions, JobStatus, MediaItem
@@ -10,6 +11,7 @@ from morgan_media_downloader.provider import ProviderStatus
 from morgan_media_downloader.settings import AppSettings, SettingsStore
 from morgan_media_downloader.ui import MainWindow
 from morgan_media_downloader.yt_runtime import RuntimeSnapshot, YtDlpRuntimeManager
+from morgan_media_downloader.queue_model import JOB_ID_ROLE, PROGRESS_ROLE
 
 
 _APP = QApplication.instance() or QApplication([])
@@ -31,10 +33,11 @@ def test_console_tab_adaptive_queue_job_details_and_warning_checklist(tmp_path, 
     media.verification = {"video": True, "audio": True, "subtitles": ["eng • mov_text"], "thumbnail": True, "metadata": True}
     torrent = DownloadJob(MediaItem("magnet:?x", "Torrent"), DownloadOptions(download_dir=str(tmp_path)), kind="torrent")
     window.jobs = {media.id: media, torrent.id: torrent}; window._refresh_queue()
-    assert window.queue_table.horizontalHeaderItem(0).text() == "Title"
-    assert "Connected peers" not in [window.queue_table.horizontalHeaderItem(i).text() for i in range(window.queue_table.columnCount())]
+    model = window.queue_table.model()
+    assert model.headerData(0, Qt.Orientation.Horizontal) == "Title"
+    assert "Connected peers" not in [model.headerData(i, Qt.Orientation.Horizontal) for i in range(model.columnCount())]
     window.queue_filter.setCurrentText("Torrents")
-    assert "Connected peers" in [window.queue_table.horizontalHeaderItem(i).text() for i in range(window.queue_table.columnCount())]
+    assert "Connected peers" in [model.headerData(i, Qt.Orientation.Horizontal) for i in range(model.columnCount())]
     details = window._job_details_text(media); warnings = window._warning_details_text(media)
     assert "Completed with warnings" in details and "✓ Subtitle embedded" in warnings and "⚠ Japanese" in warnings
     window.console_store.append("YT-DLP", "job event", media.id); window._banner_job_id = media.id; window.view_job_console()
@@ -106,7 +109,8 @@ def test_selected_job_and_details_survive_live_updates_reloads_and_transitions(t
     window.view_job_details(); _APP.processEvents()
     inline_widget = window.job_details
     dialog_widget = window.details_dialog_text
-    progress_widget = window.queue_table.cellWidget(15, 3)
+    progress_index = QPersistentModelIndex(window.queue_table.model().index(15, 3))
+    progress_delegate = window.queue_table.itemDelegate()
     window.queue_table.verticalScrollBar().setValue(10)
     scroll_position = window.queue_table.verticalScrollBar().value()
 
@@ -118,7 +122,9 @@ def test_selected_job_and_details_survive_live_updates_reloads_and_transitions(t
     assert window.job_details is inline_widget and window.details_dialog_text is dialog_widget
     assert "Progress: 100.0%" in window.job_details.toPlainText()
     assert "Media 15" in window.details_dialog_text.toPlainText()
-    assert window.queue_table.cellWidget(15, 3) is progress_widget
+    assert progress_index.isValid() and progress_index.data(JOB_ID_ROLE) == active.id
+    assert progress_index.data(PROGRESS_ROLE) == 100.0
+    assert window.queue_table.itemDelegate() is progress_delegate
     assert window.queue_table.verticalScrollBar().value() == scroll_position
 
     for status in (JobStatus.PAUSED, JobStatus.WAITING, JobStatus.COMPLETED, JobStatus.FAILED):

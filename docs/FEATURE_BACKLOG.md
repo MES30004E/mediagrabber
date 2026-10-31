@@ -1,6 +1,6 @@
 # MediaGrabber feature backlog and qualification ledger
 
-Updated 2026-10-30. This extends, rather than replaces, the Reliable Downloads,
+Updated 2026-10-31. This extends, rather than replaces, the Reliable Downloads,
 Better UX and Public Releases master goal. The Critical UX, Scalability and
 Architecture Addendum changes the implementation order below. An existing helper,
 passing unit test or metadata inspector is not evidence of a finished feature.
@@ -8,18 +8,18 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 ## Current checkpoint and restrictions
 
 - Development branch: `improvement/download-reliability`. Latest hosted-tested
-  checkpoint: `90e3d3b0dd84da1ad47079c6c3474c4780a3ed27`, run `41031238079`,
-  all jobs passed. Actual logs: Linux631; macOS backend60, Swift25 and protocol9;
+  checkpoint: `423160a8e07a8fcd19c1c18950b2c5ebb44de337`, run `41034253375`,
+  all jobs passed. Actual logs: Linux646; macOS backend60, Swift25 and protocol9;
   bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
-  strict extracted-archive verification/launch passed. Archive141681058bytes,
-  SHA256 `633363e747365d6299121329aa896471db8c36e3526005910a53227f5a5f7adf`.
+  strict extracted-archive verification/launch passed. Archive141455132bytes,
+  SHA256 `c467bf109bc5382413e355d848324c3349aba6459b3865f0e6c16c04ab65d737`.
   No release asset was uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
   Strict signature verification was not bypassed. Later green runs include this
   fix, atomic admission (`223737b`), bounded status actions (`d5b3365`) and
   keep-files removal (`90e3d3b`). Detailed evidence remains in QUEUE_SCALE.md.
-- New asynchronous owned-file removal checkpoint: **646 Python tests passed
+- Asynchronous owned-file removal checkpoint: **646 Python tests passed
   in22.62s**, JS10/protocol9 matched, pip check clean. FileRemovalService admits
   one owned worker with at most32 copied jobs; GUI owns persistence and counts.
   Stop immediately reports pending work, finishes the admitted slice and stops
@@ -28,9 +28,25 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   Entire confirmed removal snapshots supersede earlier pending restarts.
 - Synthetic cleanup100/800/1,000/5,000 probes pass with one confirmation, one
   cleanup worker and zero GUI cleanup calls; no actual user files touched.
-  Latest source needs its own hosted qualification. Native crash classification,
-  real Trash/cross-volume QA, model/view memory, bulk restart and collections
+  New model source below needs its own hosted qualification. Native crash classification,
+  real Trash/cross-volume QA, broader memory work, bulk restart and collections
   remain unfinished; no broad crash/scale/release acceptance is implied.
+- Queue-only QTableView/immutable presentation model/native proxy/painted progress
+  now replace per-row queue items/widgets. In-place changes and incremental row
+  operations preserve UUIDs; one progress callback presents/notifies one queue row.
+  Full local **664 tests passed24.08s**, JS10/protocol9/pip check clean. Independent
+  review ran10 model tests and500 randomized model/proxy transitions; one Important
+  first-population sizing defect was reproduced RED and fixed in all3views.
+- Paired isolated423160a/current synthetic probes:5,000 peak RSS383.06→278.77MiB,
+  enqueue0.885→0.589s;800 peak180.19→158.73MiB. Queue progress widgetsN→0.
+  This does not fix history/playlist allocations, leaks or native crashes. Two
+  real progress callbacks still take~0.45s at5,000 despite targeted queue updates;
+  profile attributes0.530/0.537s to full history refresh (10000decoded jobs,
+  70000cell writes). Detailed evidence in QUEUE_SCALE.
+- Offscreen synthetic1180x820 light/dark queue renders were captured and inspected.
+  Dark theme switching leaves stale light child/table palettes; reproduced also
+  on the exported423160a baseline, not claimed introduced/fixed by this model.
+  No professional redesign/mockup/native fullscreen acceptance is supplied.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -58,7 +74,7 @@ Paths below are repository-relative; each row retains its own remaining QA.
 
 | ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
 | --- | --- | --- | --- |
-| Q01 Release blocker; narrow stall fixed | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, `test_queue_scale_probe.py`, `docs/QUEUE_SCALE.md`; existing UI/task tests | Before800 stalls15s and5,000 times out120s; after allfourcomplete,800pause/resume/cancel0.065/0.071/0.067s. No native crash reproduced;5,000enqueue still1.3s gap/~407MiB. Model/service/backpressure and active/race/native QA remain |
+| Q01 Release blocker; measured stall/model improvements | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, model/scale/bulk tests, `docs/QUEUE_SCALE.md` | Header stall fixed; queue model removes N widgets, paired5,000 peak383→279MiB/enqueue0.885→0.589s. Native crash still not reproduced;~0.60s max gap/history/playlist memory, leak/race/native QA remain |
 | Q02 Portable-tested fix | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains |
 | Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
 | Q04 Open | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `ui.py` queue table/filter and `_selected_jobs` | Queue selection is not the analysed-playlist checkbox selection; implement and test each action and stable selection across refresh/filter |
@@ -75,13 +91,13 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
 | --- | --- | --- | --- |
 | U01 Open | `docs/UI_DESIGN_SYSTEM.md` defines navigation, type, spacing/density, light/dark tokens, contrast/focus, controls/tables/progress/menus, states, resizing/fullscreen and destructive patterns | `theme.py`, `ui_components.py`, `ui.py`, `settings_window.py` | Research Stacher 7/ClipGrab interactions and Apple/Qt authoritative guidance; create actual mockups/screenshots before large redesign; user design approval |
-| U02 Open | Real compact/standard/large/fullscreen screenshots in light/dark show readable, aligned unclipped UI; retain icon/native PySide6 | `test_playlist_workspace.py`, `test_settings_window.py`, `test_ui_refresh.py` | Offscreen pass is not visual acceptance. Capture/inspect real application; document exact image paths and manual native fullscreen QA; no casual web rewrite |
+| U02 Open; diagnostic renders only | Real compact/standard/large/fullscreen screenshots in light/dark show readable, aligned unclipped UI; retain icon/native PySide6 | workspace queue-model current/baseline light/dark PNGs; UI/model tests | Offscreen1180x820 diagnostic is not Cocoa/fullscreen/design acceptance. Existing dark switch stale-child palette reproduced against baseline; fix with rendered regression. Title/destination remain narrow; approved design/resize QA still required |
 | U03 Partial | Large analysed playlist has resizable remembered panels, collapsible options/preview, search, visible/all/none/invert, counts, keyboard/multi-selection | `ui.py`, `settings.py`; `test_playlist_workspace.py`; `docs/PLAYLIST_WORKSPACE.md` | 800–5,000 scale qualification and visual QA; current playlist table is still item-based |
 | U04 Partial | Lazy playlist thumbnails and real duration reflect current selected video, avoid N requests and route fallback | `thumbnail_cache.py`, `ui.py`; `test_thumbnail_cache.py`, `test_playlist_workspace.py` | Distinct from viewer: real rendered thumbnail/duration QA, scrolling/large-list responsiveness, missing/slow/cancelled responses |
 | U05 Partial | On-demand per-video format/audio/language and manual/automatic subtitle metadata; only available controls; safe overrides | `media_details.py`, `media_details_dialog.py`, `formats.py`, `subtitle_mux.py`; media-details/formats/subtitle tests | Real authorised media and batch language/subtitle outputs with explicit user participation; no invented Original/default identity or 800 automatic inspections |
 | V01 Open | Discoverable downloaded-media grid/list with thumbnails/metadata, search/filter/sort/browsing history and Finder open/reveal | History currently offers Open/Reveal; `ui.py:_history_context_menu` | Build actual library/viewer; Inspect Video is metadata, **not playback**; add index/model and missing-file tests |
 | V02 Open | Actual video/audio playback, play/pause/seek/volume/fullscreen, duration/timeline, available audio/subtitle choice | No qualified in-app playback implementation | Evaluate QMediaPlayer/QVideoWidget, packaged backend/codecs and safe external-player fallback; explicit user validation on real local media and packaged app; unsupported errors truthful |
-| A01 Open/incremental | Separate presentation/models, queue/batch service, execution/scheduling, auth/session, inspection/playback, persistence, updates and diagnostics with clear ownership | Existing separated downloader/auth/database/tasks/update helpers | Debt register below; refactor only measured/reproduced problems, preserve DB compatibility and existing behavior, use typed/testable boundaries; no whole-project rewrite or unproved deletions |
+| A01 Partial/incremental | Separate presentation/models, queue/batch service, execution/scheduling, auth/session, inspection/playback, persistence, updates and diagnostics with clear ownership | New `queue_model.py`, `display_format.py`, `queue_batch.py`, `file_removal.py`; existing backend helpers | GUI-owned model and bounded services separated, backend/DB unchanged. Continue debt register, typed/testable interfaces and measured remediation; no whole-project rewrite |
 
 ## Download reliability and authentication (original highest-priority goal retained)
 
@@ -125,9 +141,11 @@ whole-app rewrite.
 
 | Debt | Evidence on 2026-10-30 | Remediation / proof required |
 | --- | --- | --- |
-| UI concentration | `ui.py` 2,219 lines; `settings_window.py` 762; queue admission and cleanup worker extracted, orchestration still concentrated | Extract presentation/model/queue service incrementally; preserve behavior/DB compatibility and measure coupling rather than only moving lines |
-| Per-row queue objects | `_refresh_queue` uses QTableWidget, per-row QProgressBar and formatted cells; structural clear/rebuild when IDs/columns differ | Benchmark allocation/RSS/native ownership/selection across 100–5,000; use model/delegate/incremental updates where measured |
-| Full queue/history work | `_refresh_queue` traverses all jobs; `_refresh_history` allocates every table item | Profile event frequency/CPU/GUI stalls before coalescing dirty IDs and paging/model decisions |
+| UI concentration | `ui.py` 2,169 lines; settings762; queue presentation/formatting/model plus batch/cleanup responsibilities extracted, orchestration still concentrated | Preserve behavior/DB compatibility; measure coupling, not only moved lines |
+| Per-row queue objects: removed | QTableView/model/native proxy and style-painted progress; no per-row Qt item/widget ownership; incremental append/remove, rare reset with UUID restoration | Paired100–5,000 RSS/widget/latency evidence in QUEUE_SCALE. History/analysed playlist still item-based; no global memory/leak guarantee |
+| Full queue/history work: partial | Targeted queue progress; full history consumes0.530/0.537s in a two-callback profile, decoding10000jobs and writing70000cells | Coalesce/paginate or separate history model with real behavior tests; retain current search/status and persistence semantics |
+| Selection/details minor | Review: remove primaryA from selectedA+B; B stays correctly actionable but inline details become blank | Reconcile surviving details target in next selection/UX checkpoint; not an action-ID mix-up |
+| Existing theme switch rendering | Light→Dark leaves light/stale child/table palettes in both baseline423160a and model renders despite correct app palette | Rendered regression and Qt repolish/inheritance diagnosis; do not claim polish from app-palette assertions alone |
 | Per-job persistence: admission/status/removal batched | Atomic iterable transactions; media admission saves before UI publication, large status/removal actions commit32-ID slices | Rollback/phantom/partial cleanup regressions pass. Small actions/restart still per-job; collection/relaunch, fault recovery and GUI enqueue latency remain |
 | Modal batch loop: narrow fix verified | Previously one prompt per selected job; now one ID snapshot/one native keep-default dialog,800-job tests pass | Retain broader bounded asynchronous cancellation, per-item failure aggregation, collection controls and realistic worker/file-race qualification |
 | Task admission | `TaskManager.start` creates a QThread per admitted task; callers own bounds | Measure actual concurrency/admission/callback queues; scheduler/backpressure tests, no per-queued-job thread explosion |
@@ -135,9 +153,9 @@ whole-app rewrite.
 
 ## Next checkpoints and reporting contract
 
-1. Independently verify/publish the asynchronous owned-file cleanup checkpoint;
+1. Independently verify/publish the queue model/view checkpoint;
    inspect its exact hosted results without cancelling an in-progress run.
-2. Continue P0 queue model/view, bounded restart/selection/collection controls,
+2. Continue P0 history/progress coalescing, bounded restart/selection/collection controls,
    persistence recovery and native crash classification from measured evidence.
 3. Design system/research/mockups and **approved** professional native screens;
    real visual QA before claiming polish.

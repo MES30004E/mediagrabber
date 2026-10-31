@@ -271,3 +271,89 @@ Preceding source90e3d3b passed hosted run41031238079: Linux631, macOS backend60,
 Swift25, drift9, provider/media/Cocoa/replacement and strict extracted-archive
 signature/launch checks. It does not cover this new source; its hosted results
 must be inspected separately. No release asset published or app installed.
+
+## Queue-only model/view checkpoint —31 October2026
+
+The preceding423160a source is hosted-qualified by run41034253375: Linux646,
+macOS backend60/Swift25/drift9, native host5/media9/provider/Canvas/Cocoa,
+replacement recovery and strict extracted-archive signature/launch checks pass.
+Its new source qualification below must use a separate exact-commit run.
+
+`queue_model.py` now owns immutable presentation rows in QAbstractTableModel;
+the queue uses QTableView and QSortFilterProxyModel with UUID roles. Progress is
+painted by one style-aware delegate instead ofN QProgressBars. Incremental
+append/remove preserve persistent indexes; rare column/reorder resets restore
+multi-selection by IDs. Remembered hidden-view IDs do not enter actions unless
+visibly selected. A single worker callback formats/notifies only its queue row.
+Model mutation is GUI-thread-only; no database/transfer/auth behavior moved.
+Full bulk synchronization still builds presentation snapshots for all jobs.
+
+Tests were observed RED for per-row800/5,000 widgets, lost multi-selection and
+missing targeted presentation. Core model uses real Fatal-mode
+QAbstractItemModelTester; the independent reviewer additionally exercised500
+randomized source/proxy transitions. A header-sizing regression (empty startup
+kept Status60px while content needed173px locally) was reproduced RED in all3
+views and fixed by one bounded first-population sizing pass, not per-progress
+autosizing. Header content measurement samples at most100rows.
+
+Full local result after the one review fix pass: **664passed24.08s**,50focused
+passed6.86s, JS10/protocol9/pipcheck clean. Old widget-specific assertions were
+ported to model headerData, persistent UUID/progress indexes and delegate
+ownership; details/scroll100-update and every existing bulk lifecycle test remain.
+Deferred review minor: removing primaryA from selectedA+B leavesB correctly
+actionable but inline details blank. Reconcile the surviving details target in
+the next selection/UX checkpoint; do not mistake this for an action-ID mix-up.
+
+### Paired before/after evidence
+
+The before case uses a separate `git archive` export of423160a; the actual working
+checkout/HEAD were never reset or moved. Both run the same existing command,
+Python3.12.13/PySide6 6.11.2, isolated state, synthetic1ms/job cleanup and no real
+deletion. Measurements below are sequential single runs, not calibrated budgets:
+
+```sh
+PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B \
+  scripts/benchmark_queue.py --items 100 800 1000 5000 --synthetic-cleanup
+```
+
+| Items | Enqueue before→after | Peak RSS before→after | Queue progress widgets before→after | Max operation heartbeat before→after |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 0.020→0.022s | 138.20→136.44MiB | 100→0 | 0.025→0.030s |
+| 800 | 0.156→0.105s | 180.19→158.73MiB | 800→0 | 0.163→0.113s |
+| 1,000 | 0.186→0.125s | 191.12→163.67MiB | 1,000→0 | 0.193→0.132s |
+| 5,000 | 0.885→0.589s | 383.06→278.77MiB | 5,000→0 | 0.940→0.596s |
+
+The100-item case did not become faster. Peak RSS is still a high-water mark;
+this is not leak qualification or a global memory bound. The5000 reduction is
+about27%, while history/analysed-playlist objects remain. All cases completed
+analyse/enqueue/two synthetic owners/pause/resume/cancel/reload/remove, one
+confirmation, one cleanup worker/32snapshots maximum, zero GUI cleanup calls.
+After cleanup wall0.128/0.978/1.214/6.177s, heartbeat gaps0.006/0.013/0.017/0.080s;
+no storage-throughput speedup claim. The normal keep-files matrix also passed
+allfour sizes before the header fix; final paired cleanup matrix includes it.
+
+### Remaining measured callback bottleneck
+
+At5000, two progress callbacks still take~0.45s although the queue presents only
+two rows. A separate cProfile run measured two `_job_changed` calls0.537s,
+`_refresh_history`0.530s and `Database.search_history`0.441s. It reconstructed10000
+DownloadJobs/JSON payloads and called history-table setItem70000times. This is
+causal profile evidence for the next history/progress-coalescing checkpoint,
+not a guessed explanation of the user's unreproduced native crash.
+
+### Render evidence and explicit limits
+
+Actual offscreen synthetic1180x820 window captures were inspected locally at
+`.superpowers/sdd/2026-10-30-queue-model/queue-model-current-light.png` and
+`queue-model-current-dark.png`, alongside baseline light/dark captures. These
+are ignored diagnostic artifacts, not committed redesign mockups or native Cocoa
+fullscreen acceptance. The Light→Dark switch leaves stale light child/table
+palettes in **both** exported423160a and current source despite correct app
+palette. This existing rendered theme defect is tracked, not claimed fixed.
+Title/destination still become narrow with many columns; professional layout,
+contrast/resize/fullscreen visual QA and approved design work remain open.
+
+Native crash classification, repeated-cycle leaks, real transfers/files/Trash,
+Cocoa-scale interaction, model/view for history/playlists and collection/restart/
+dedup acceptance remain in FEATURE_BACKLOG. No source/fixture test or bare model
+conversion proves those requirements. No app/release installed or published.

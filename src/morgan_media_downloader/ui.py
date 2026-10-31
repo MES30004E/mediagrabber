@@ -13,19 +13,21 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from PySide6.QtCore import QTimer, Qt, QUrl, Slot, QEvent
+from PySide6.QtCore import QTimer, Qt, QUrl, Slot, QEvent, QItemSelection, QItemSelectionModel, QSignalBlocker, QSortFilterProxyModel
 from PySide6.QtGui import QAction, QDesktopServices, QFontDatabase, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QSpinBox, QSplitter, QTableWidget, QTableWidgetItem,
+    QSpinBox, QSplitter, QTableView, QTableWidget, QTableWidgetItem,
     QTextEdit, QToolButton, QVBoxLayout, QWidget, QScrollArea, QLayout,
 )
 
 from .database import Database
 from .queue_batch import BatchOutcome, QueueBatch
 from .file_removal import FileRemovalResult, FileRemovalService
+from .display_format import human_bytes, human_duration
+from .queue_model import JOB_ID_ROLE, KIND_ROLE, QueueProgressDelegate, QueueTableModel, contiguous_ranges
 from .console import ConsoleEvent, ConsoleStore
 from .diagnostics import run_checks
 from .downloader import analyse_with_authentication, download_job
@@ -59,22 +61,6 @@ from .yt_runtime import RuntimeSnapshot, YtDlpRuntimeManager, get_runtime_manage
 from .ui_components import NavigationShell, page_heading, polish_table, DisclosureSection, MediaSelectionTable
 from .theme import apply_theme
 from .auth import connection_failure, requires_authentication
-
-
-def human_bytes(value: float | int) -> str:
-    amount = float(value or 0)
-    for suffix in ("B", "KB", "MB", "GB", "TB"):
-        if abs(amount) < 1024 or suffix == "TB":
-            return f"{amount:.1f} {suffix}"
-        amount /= 1024
-    return "0 B"
-
-
-def human_duration(value: float | int | None) -> str:
-    if value is None:
-        return "—"
-    seconds = int(value)
-    return f"{seconds // 3600}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}" if seconds >= 3600 else f"{seconds // 60}:{seconds % 60:02d}"
 
 
 def reconcile_stuck_job(job: DownloadJob, *, now: float | None = None, timeout: float = 15.0) -> bool:
@@ -257,6 +243,7 @@ class MainWindow(QMainWindow):
         self.console_store = ConsoleStore(parent=self)
         self.console_job_filter = ""
         self.selected_job_id = ""
+        self._queue_selection_ids: set[str] = set()
         self.details_dialog: QDialog | None = None
         self.details_dialog_text: QPlainTextEdit | None = None
         self.active: dict[str, str] = {}
@@ -474,12 +461,22 @@ class MainWindow(QMainWindow):
         self.job_account_button.hide(); banner_actions.addWidget(self.job_account_button); banner_actions.addStretch()
         self.job_banner.setStyleSheet("background: palette(alternate-base); border-radius: 6px;")
         self.job_banner.hide(); layout.addWidget(self.job_banner)
-        self.queue_table = QTableWidget(0, 0)
+        self.queue_table = QTableView()
+        self.queue_model = QueueTableModel(self)
+        self.queue_proxy = QSortFilterProxyModel(self)
+        self.queue_proxy.setSourceModel(self.queue_model)
+        self.queue_proxy.setFilterRole(KIND_ROLE); self.queue_proxy.setFilterKeyColumn(0)
+        self.queue_proxy.setFilterFixedString("media")
+        self.queue_table.setModel(self.queue_proxy)
+        self.queue_table.setItemDelegate(QueueProgressDelegate(self.queue_table))
         polish_table(self.queue_table)
-        self.queue_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.queue_table.horizontalHeader().setResizeContentsPrecision(100)
+        self._queue_header_view = None
+        self._queue_header_populated = False
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.queue_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.queue_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu); self.queue_table.customContextMenuRequested.connect(self._queue_context_menu)
-        self.queue_table.itemSelectionChanged.connect(self._queue_selection_changed)
+        self.queue_table.selectionModel().selectionChanged.connect(self._queue_selection_changed)
         layout.addWidget(self.queue_table)
         self.job_details = QPlainTextEdit(); self.job_details.setReadOnly(True); self.job_details.setMaximumHeight(155)
         self.job_details.setPlaceholderText("Select a job to view details"); layout.addWidget(self.job_details)
@@ -1295,7 +1292,7 @@ class MainWindow(QMainWindow):
             state, message = classify_tor_target(self.tor_internet_state, job.error)
             if state == "target_rejected":
                 job.failure_code = "Target rejected Tor"; job.error = message
-        job.updated_at = datetime.now(timezone.utc).isoformat(); self.jobs[job.id] = job; self.database.save_job(job); self._refresh_queue(); self._refresh_history()
+        job.updated_at = datetime.now(timezone.utc).isoformat(); self.jobs[job.id] = job; self.database.save_job(job); self._refresh_queue(job_id=job.id); self._refresh_history()
         if job.kind == "torrent":
             marker = (job.status.value, int(job.progress))
             if marker != getattr(self, "_last_aria_console", {}).get(job.id):
@@ -1349,7 +1346,7 @@ class MainWindow(QMainWindow):
     def _selected_jobs(self) -> list[DownloadJob]:
         ids = []
         for index in self.queue_table.selectionModel().selectedRows():
-            value = self.queue_table.item(index.row(), 0).data(Qt.ItemDataRole.UserRole)
+            value = index.data(JOB_ID_ROLE)
             if value: ids.append(value)
         return [self.jobs[value] for value in ids if value in self.jobs]
 
@@ -1633,9 +1630,14 @@ class MainWindow(QMainWindow):
             f"{compatibility_text}{tor_text}"
             f"Warnings: {warning_text}\nError: {job.error or 'None'}\nTechnical details: {job.technical_details or 'None'}")
 
-    def _queue_selection_changed(self):
+    def _queue_selection_changed(self, *_):
         selected = self._selected_jobs()
+        hidden = {key for key in self._queue_selection_ids
+            if not self.queue_proxy.mapFromSource(self.queue_model.index_for_id(key)).isValid()}
+        self._queue_selection_ids = hidden | {job.id for job in selected}
         if selected: self.selected_job_id = selected[0].id
+        elif self.queue_proxy.mapFromSource(self.queue_model.index_for_id(self.selected_job_id)).isValid():
+            self.selected_job_id = ""
         self._refresh_selected_job_details()
 
     def _refresh_selected_job_details(self):
@@ -1943,98 +1945,46 @@ class MainWindow(QMainWindow):
         menu.addAction("Convert As…", lambda: self.open_video_converter(job.output_file))
         menu.exec(self.history_table.viewport().mapToGlobal(position))
 
-    def _refresh_queue(self, *_):
+    def _refresh_queue(self, *_, job_id=None):
         if not hasattr(self, "queue_table"): return
-        view = self.queue_filter.currentText() if hasattr(self, "queue_filter") else "Media"
-        columns = {
-            "Media": ["Title", "Source", "Status", "Progress", "Downloaded / Total", "Speed", "ETA", "Format", "Destination"],
-            "Torrents": ["Title", "Status", "Progress", "Downloaded / Total", "Down", "Up", "Connected peers", "Connected seeders", "ETA", "Destination"],
-            "All": ["Title", "Type", "Status", "Progress", "Speed", "ETA", "Destination"],
-        }[view]
-        jobs = [job for job in self.jobs.values() if view == "All" or (view == "Torrents") == (job.kind == "torrent")]
-        self.queue_empty.setVisible(not jobs)
-        old_ids = [self.queue_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-                   for row in range(self.queue_table.rowCount()) if self.queue_table.item(row, 0)]
-        old_columns = [self.queue_table.horizontalHeaderItem(i).text()
-                       for i in range(self.queue_table.columnCount()) if self.queue_table.horizontalHeaderItem(i)]
-        structural = old_columns != columns or old_ids != [job.id for job in jobs]
+        view = self.queue_filter.currentText()
+        if job_id is not None and view == self.queue_model.view and (job := self.jobs.get(job_id)):
+            if self.queue_model.update_job(job, self.settings.connection_mode):
+                self.queue_empty.setVisible(self.queue_proxy.rowCount() == 0)
+                self._refresh_selected_job_details()
+                return
         vertical = self.queue_table.verticalScrollBar().value()
         horizontal = self.queue_table.horizontalScrollBar().value()
         focus = QApplication.focusWidget()
-        self.queue_table.blockSignals(True)
-        if structural:
-            self.queue_table.clear(); self.queue_table.setColumnCount(len(columns)); self.queue_table.setHorizontalHeaderLabels(columns)
-            self.queue_table.setRowCount(len(jobs)); header = self.queue_table.horizontalHeader()
-            # Continuous ResizeToContents re-measures every row for each changed
-            # status cell, producing quadratic synchronous work on large queues.
-            for index in range(len(columns)): header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)
-            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            if "Destination" in columns: header.setSectionResizeMode(columns.index("Destination"), QHeaderView.ResizeMode.Stretch)
-        for row, job in enumerate(jobs):
-            size = f"{human_bytes(job.downloaded_bytes)} / {human_bytes(job.total_bytes)}" if job.total_bytes else human_bytes(job.downloaded_bytes)
-            format_name = "BitTorrent" if job.kind == "torrent" else (job.options.audio_format if job.options.audio_format != "Original/best audio" else f"{job.options.quality} / {job.options.container}")
-            if job.status == JobStatus.FAILED:
-                retained = f" • {job.progress:.1f}% • {human_bytes(job.downloaded_bytes)} retained" if job.downloaded_bytes else ""
-                status_text = status_summary(job) + retained
-            elif job.status == JobStatus.COMPLETED_WARNINGS: status_text = "Completed with warnings ⚠"
-            elif job.status in {JobStatus.DOWNLOADING, JobStatus.CONVERTING} and job.postprocessing_stage: status_text = job.postprocessing_stage
-            else: status_text = job.status.value
-            values = {
-                "Title": job.item.title, "Source": job.item.source, "Type": "Torrent" if job.kind == "torrent" else "Media",
-                "Status": status_text, "Downloaded / Total": size,
-                "Speed": f"{human_bytes(job.speed)}/s" if job.speed else "—",
-                "Down": f"{human_bytes(job.speed)}/s" if job.speed else "—",
-                "Up": f"{human_bytes(job.upload_speed)}/s" if job.upload_speed else "—",
-                "Connected peers": str(job.peers), "Connected seeders": str(job.seeds),
-                "ETA": human_duration(job.eta), "Format": format_name,
-                "Destination": job.output_file or job.options.download_dir,
-            }
-            for column, name in enumerate(columns):
-                if name == "Progress":
-                    bar = self.queue_table.cellWidget(row, column)
-                    if not isinstance(bar, QProgressBar):
-                        bar = QProgressBar(); bar.setRange(0, 1000); self.queue_table.setCellWidget(row, column, bar)
-                    bar.setValue(int(job.progress * 10)); bar.setFormat(f"{job.progress:.1f}%"); continue
-                item = self.queue_table.item(row, column)
-                if item is None:
-                    item = QTableWidgetItem(); self.queue_table.setItem(row, column, item)
-                item.setText(values[name])
-                if column == 0: item.setData(Qt.ItemDataRole.UserRole, job.id)
-            first = self.queue_table.item(row, 0)
-            if job.kind == "torrent":
-                discovery = (f"Peer Discovery\nTrackers: {job.original_tracker_count} original + "
-                             f"{job.additional_tracker_count} additional\n"
-                             f"DHT/PEX/Local Discovery: {'Disabled (private torrent)' if job.torrent_private else 'Configured in Settings'}")
-                first.setToolTip(discovery)
-            else:
-                subtitle = f"Embed {job.options.subtitle_language}" if job.options.embed_subtitles else "Off"
-                thumbnail = "Embed" if job.options.embed_thumbnail else "Off"
-                effective = job.effective_authentication or job.options.authentication_mode
-                verification = ""
-                if job.verification:
-                    verification = (f"\nVerified video: {job.verification.get('video')}"
-                                    f"\nVerified audio: {job.verification.get('audio')}"
-                                    f"\nEmbedded subtitles: {job.verification.get('subtitle_count')}"
-                                    f"\nEmbedded thumbnail: {job.verification.get('thumbnail')}"
-                                    f"\nMetadata: {job.verification.get('metadata')}")
-                first.setToolTip(
-                    f"Quality: {job.options.quality}\nContainer: {job.options.container}"
-                    f"\nAuthentication: {effective}\nConnection: {self.settings.connection_mode}"
-                    f"\nThumbnail: {thumbnail}\nSubtitles: {subtitle}{verification}")
-        if structural:
-            for column, name in enumerate(columns):
-                if name not in {"Title", "Destination"}: self.queue_table.resizeColumnToContents(column)
-        if self.selected_job_id:
-            selected_row = next((row for row, job in enumerate(jobs) if job.id == self.selected_job_id), -1)
-            if selected_row >= 0 and not self.queue_table.selectionModel().isRowSelected(
-                    selected_row, self.queue_table.rootIndex()):
-                self.queue_table.selectRow(selected_row)
-        self.queue_table.blockSignals(False)
+        self._queue_selection_ids.intersection_update(self.jobs)
+        if self.selected_job_id not in self.jobs: self.selected_job_id = ""
+        if not self._queue_selection_ids and self.selected_job_id:
+            self._queue_selection_ids.add(self.selected_job_id)
+        selection = self.queue_table.selectionModel(); blocker = QSignalBlocker(selection)
+        try:
+            structural = self.queue_model.sync(self.jobs.values(), view, self.settings.connection_mode)
+            self.queue_proxy.setFilterFixedString({"Media": "media", "Torrents": "torrent", "All": ""}[view])
+            # Restore all selected UUIDs after a reset/filter, never old row numbers.
+            rows = sorted(index.row() for key in self._queue_selection_ids
+                if (index := self.queue_proxy.mapFromSource(self.queue_model.index_for_id(key))).isValid())
+            restored = QItemSelection()
+            for first, last in contiguous_ranges(rows):
+                restored.select(self.queue_proxy.index(first, 0), self.queue_proxy.index(last, self.queue_proxy.columnCount()-1))
+            selection.select(restored, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
+            if self._queue_header_view != view or (not self._queue_header_populated and self.queue_proxy.rowCount() > 0):
+                header = self.queue_table.horizontalHeader()
+                header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+                for column, name in enumerate(self.queue_model.columns):
+                    if name in {"Title", "Destination"}: header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+                    elif name == "Progress": self.queue_table.setColumnWidth(column, 140)
+                    else: self.queue_table.resizeColumnToContents(column)
+                self._queue_header_view = view
+                self._queue_header_populated = self.queue_proxy.rowCount() > 0
+        finally: del blocker
+        self.queue_empty.setVisible(self.queue_proxy.rowCount() == 0)
         self.queue_table.verticalScrollBar().setValue(vertical)
         self.queue_table.horizontalScrollBar().setValue(horizontal)
         if focus is not None and structural: focus.setFocus()
-        if self.selected_job_id and self.selected_job_id not in self.jobs:
-            self.selected_job_id = ""
         self._refresh_selected_job_details()
 
     def _refresh_history(self, *_):

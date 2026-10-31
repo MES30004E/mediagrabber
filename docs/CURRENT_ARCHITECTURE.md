@@ -104,8 +104,17 @@ admitted slice while preventing future slices. Shutdown suppresses late results,
 persists uncertainty where possible, and preserves the running marker if that
 persistence fails; a marker failure cannot skip owned-worker shutdown.
 
+Queue presentation now uses `queue_model.QueueTableModel` with immutable display
+rows, stable UUID roles, a native QSortFilterProxyModel and style-painted progress
+in QTableView. No queue QTableWidgetItems or per-row progress widgets are created.
+Append/remove use begin/end row notifications; rare reorder/column changes reset
+and restore selection by UUID. Hidden-view selection memory cannot enter actions
+unless visibly selected. Single-job progress updates only its presentation row;
+full refresh still synchronizes all snapshots. Model mutations require its GUI
+thread. `display_format.py` shares existing byte/duration presentation helpers.
+
 These are incremental prerequisites, not completed scale/crash qualification.
-Queue/history still use item tables and per-row widgets, full refresh remains
+History/analysed playlists still use item tables, history refresh per callback is
 expensive, and bulk restart/collection/dedup work is incomplete. See
 `docs/QUEUE_SCALE.md` and `docs/FEATURE_BACKLOG.md` for measured limits and QA.
 
