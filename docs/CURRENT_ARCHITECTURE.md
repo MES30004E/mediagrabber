@@ -118,6 +118,19 @@ History/analysed playlists still use item tables, history refresh per callback i
 expensive, and bulk restart/collection/dedup work is incomplete. See
 `docs/QUEUE_SCALE.md` and `docs/FEATURE_BACKLOG.md` for measured limits and QA.
 
+`queue_check.exercise_queue` is an explicit disposable-state diagnostic, never a
+normal startup or transfer path. The source benchmark and startup diagnostic
+share real GUI/SQLite/TaskManager operations but replace transfers with two
+cancellation-only workers, guard external I/O and drain owners before restoring
+guards. `--startup-check REPORT --queue-items {100,800,1000,5000}` runs two cycles
+after window exposure. The packaged verifier requires complete frozen/Cocoa
+cycle and measurement evidence; failures retain bounded redacted native stacks.
+Workers must actually acknowledge their cancellation events without errors;
+read-only independent SQLite payload comparison verifies committed cancellation
+and removal, not merely the writer's own uncommitted view.
+This tests synthetic queue behavior, not accounts, real downloads, leaks or a
+whole-process restart. Normal startup and downloader/auth architecture are unchanged.
+
 `settings.SettingsStore` atomically writes schema-6 mode-0600 settings, migrates
 legacy preferences, and recovers corrupt JSON. `keychain.py` calls macOS security
 for proxy passwords; passwords are not serialized as preference fields.

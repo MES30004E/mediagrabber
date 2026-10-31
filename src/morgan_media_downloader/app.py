@@ -10,13 +10,16 @@ from .yt_runtime import get_runtime_manager
 
 
 def main() -> int:
-    if "--startup-check" in sys.argv[1:]:
+    if "--startup-check" in sys.argv[1:] or "--queue-items" in sys.argv[1:]:
         import argparse
         from pathlib import Path
         from .startup_check import run_startup_check
         parser = argparse.ArgumentParser(description="Launch/render/close the GUI in isolated temporary state; no live account or download checks.")
         parser.add_argument("--startup-check", type=Path, required=True, metavar="REPORT_JSON")
-        return run_startup_check(parser.parse_args().startup_check)
+        parser.add_argument("--queue-items", type=int, choices=(100, 800, 1000, 5000),
+                            help="Exercise two synthetic queue cycles in disposable state; no live downloads")
+        arguments = parser.parse_args()
+        return run_startup_check(arguments.startup_check, queue_items=arguments.queue_items)
     configure_logging()
     runtime_manager = get_runtime_manager()
     runtime_manager.initialize()

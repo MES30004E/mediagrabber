@@ -377,7 +377,75 @@ LTR/RTL were observed failing before the fix, then passing. Updated actual
 Light-window capture was inspected with correct left-to-right fill.
 
 Full local source666passed22.30s, focused model/UI20passed1.20s, JS10/drift9/pip
-check clean. This source follow-up requires a new exact hosted run; prior native
-success is not claimed to cover the fix. The paired performance matrix above
+check clean. Exact59a757c run41169869112 subsequently passed alljobs: Linux666,
+extension10, macOSbackend60/Swift25/drift9 and all existing packaged gates.
+Strict archive141705157bytes SHA25602593adb71b39beafc8da55a3821111b7c191bc1fc0e916e20b2c4f87277a536.
+No release/upload/install. The paired performance matrix above
 measures the model/header source before this paint-only follow-up. Memory/cache
 architecture did not change; no new timing measurements are inferred.
+
+## Frozen queue diagnostic extension (2026-10-31; native qualification pending)
+
+`queue_check.exercise_queue` now shares the real exercise with the benchmark and
+the explicit isolated startup check. Count choices100/800/1000/5000; frozen mode
+runs two cycles per fresh process. It presents synthetic analysis, enqueues actual
+persisted jobs, dispatches two real owned cancellation-only workers, presents
+37.5% progress, pauses/resumes/cancels, reloads cancelled jobs from SQLite, and
+removes entries with one keep-files confirmation per cycle. It does not invoke
+extractor/network analysis, real transfer, Keychain or deletion. Reload is within
+the process, not process-crash/relaunch recovery. The benchmark's prior zero-
+progress fixture is now37.5%; do not infer new timings from earlier profiles.
+
+Example **hosted only**, after the existing bundle build:
+
+```sh
+python scripts/check_packaged_app.py "/path/to/Morgan Media Downloader.app" --queue-items 800
+```
+
+The existing empty-window gate stays. Each queue child gets a narrow environment
+without CI/service/SSH tokens, isolated state and a150s parent timeout (90s exercise
+deadline). Reports stay bounded and require two complete cycles, correct counts,
+zero retained owners/row widgets/I/O attempts, measured memory/native threads and
+complete stage timings/SQL evidence. Native failure reports only whitelisted,
+redacted traceback lines, not arbitrary stdout/stderr; explicit mode enables fd2
+faulthandler even in a windowed app with Python stdioNone. Every owned task drains
+before global guards restore, including errors; undrained tasks retain guards.
+
+Source CLI tests cover all four sizes/two cycles with synthetic existing settings
+unchanged. Windowed-stdio and no-report safety cases pass. Local sandbox initially
+denied `/bin/ps`; actual report identified PermissionError, not a native crash.
+Approved read-only own-PID metrics completed. This remains source offscreen
+evidence until the exact new frozen Cocoa workflow is inspected. No live-media,
+leak, professional visual/fullscreen, real Trash or general crash acceptance.
+
+Local reviewed full suite702passed46.87s, extension10/protocol9, pip check and shell syntax
+clean (pip only warns its user cache is unwritable). No skipped tests. Before
+publication, native qualification still requires the new exact hosted run.
+
+Reviewed local source startup probes (offscreen, real runtime initialization;
+two cycles including independent full-payload persistence verification overhead,
+not comparable to the earlier single-cycle fake-runtime benchmark):
+
+| Items | Enqueue seconds cycle1/2 | Peak RSS MiB | Largest heartbeat gap seconds | Post-removal current RSS MiB cycle1/2 |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 |0.022362/0.010869|177.50|0.030116|176.16/177.50|
+| 800 |0.091538/0.094800|210.83|0.105136|209.48/210.83|
+| 1000 |0.114036/0.113400|219.23|0.134975|217.92/219.22|
+| 5000 |0.592058/0.573094|390.73|0.716010|370.53/379.75|
+
+Every case finished both cycles with at most2 owners, zero final owners/jobs,
+one confirmation per cycle and zero guarded I/O attempts. RSS did **not** return
+to its first-cycle level (5,000 grows about9.2MiB); two samples cannot distinguish
+allocator/cache retention from a leak. Retain longer-run memory profiling and
+history/playlist model/coalescing work; do not claim bounded long-run memory.
+
+Independent review reproduced three false-positive/evidence defects: expired
+worker waits could count as cancellation; a native teardown abort after writing
+JSON lost its stack; same-connection reads/zero commits could masquerade as
+persistence. Five RED→GREEN regressions now require actual cancellation-event
+acknowledgements with no worker errors, compare full payloads on an independent
+read-only SQLite connection, require positive commits on writing stages, preserve
+bounded redacted late-abort stacks, and make standalone failure-path redaction
+work without ambient source PYTHONPATH. Final full suite702passed46.87s. Actual
+whole-process restart remains untested. Deferred diagnostic minors: breadcrumbs
+are not forwarded, and a fatal trace after the first65536stderr chars is lost.

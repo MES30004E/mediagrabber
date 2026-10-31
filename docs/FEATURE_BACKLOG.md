@@ -8,11 +8,11 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 ## Current checkpoint and restrictions
 
 - Development branch: `improvement/download-reliability`. Latest hosted-tested
-  checkpoint: `ee097599bd0fc5584a14d5ff9a66aba483fee94a`, run `41168846246`,
-  all jobs passed. Actual logs: Linux664; macOS backend60, Swift25 and protocol9;
+  checkpoint: `59a757c1a2c4f274178216a1e8d3368ce2af1a19`, run `41169869112`,
+  all jobs passed. Actual logs: Linux666 (one warning); macOS backend60, Swift25 and protocol9;
   bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
-  strict extracted-archive verification/launch passed. Archive141705810bytes,
-  SHA256 `99e98e623c96aba8adf47dcebb0f25c5afd0ad83e6c59ca741ed79429d4ad4be`.
+  strict extracted-archive verification/launch passed. Archive141705157bytes,
+  SHA256 `02593adb71b39beafc8da55a3821111b7c191bc1fc0e916e20b2c4f87277a536`.
   No release asset was uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
@@ -28,7 +28,7 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   Entire confirmed removal snapshots supersede earlier pending restarts.
 - Synthetic cleanup100/800/1,000/5,000 probes pass with one confirmation, one
   cleanup worker and zero GUI cleanup calls; no actual user files touched.
-  The paint follow-up below needs its own hosted qualification. Native crash classification,
+  The paint follow-up passed the exact hosted run above. Native crash classification,
   real Trash/cross-volume QA, broader memory work, bulk restart and collections
   remain unfinished; no broad crash/scale/release acceptance is implied.
 - Queue-only QTableView/immutable presentation model/native proxy/painted progress
@@ -51,7 +51,20 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   correct percentage text. Missing Qt State_Horizontal and layout direction now
   have real Fusion pixel geometry tests, LTR/RTL both observed RED→GREEN.
   Full local **666passed22.30s**, JS10/protocol9/pipcheck clean. Updated Light
-  render inspected; this narrow follow-up is separate from ee09759's hosted run.
+  render inspected; this narrow follow-up also passed hosted run41169869112.
+- In-progress native queue diagnostic: share the real synthetic GUI/SQLite/owned-
+  worker exercise between source benchmark and opt-in frozen startup checker.
+  Four sizes100/800/1000/5000, two cycles each; source CLI matrix passes. Reports
+  require exact persisted counts, two workers, zero final owners, one keep-files
+  confirmation/cycle, no per-row widgets and measured RSS/thread/heartbeat/SQL.
+  No personal data/network/Keychain/real deletion; native crash traces are bounded
+  and redacted. Hosted frozen Cocoa matrix is not yet qualified; real transfers,
+  restart of the process, leak and user crash classification remain open.
+  Review fixes require actual cancellation acknowledgements/zero worker errors,
+  independent read-only SQLite visibility plus positive write commits, and retain
+  late teardown abort stacks. Full local702passed46.87s, extension10/protocol9
+  and pip check clean; no skips. Breadcrumb retention/long-stderr trace scanning
+  are deferred diagnostic improvements, not silent qualifications.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.

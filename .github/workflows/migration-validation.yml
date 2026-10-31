@@ -151,6 +151,11 @@ jobs:
           python scripts/check_packaged_provider.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           python scripts/check_packaged_media.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           python scripts/check_packaged_app.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
+          # Each size is a fresh frozen Cocoa process, with two real synthetic
+          # GUI/SQLite/owned-worker cycles; no accounts/network/media deletion.
+          for queue_items in 100 800 1000 5000; do
+            python scripts/check_packaged_app.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app" --queue-items "$queue_items"
+          done
           PYTHONPATH=src python scripts/check_packaged_replacement.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
           PYTHONPATH=src python scripts/check_packaged_archive.py "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app" "$GITHUB_SHA"
           codesign --verify --deep --strict "$RUNNER_TEMP/morgan-companion-dist/Morgan Media Downloader.app"
