@@ -113,6 +113,15 @@ unless visibly selected. Single-job progress updates only its presentation row;
 full refresh still synchronizes all snapshots. Model mutations require its GUI
 thread. `display_format.py` shares existing byte/duration presentation helpers.
 
+`queue_selection.QueueFilterProxyModel` combines kind, raw-status categories and
+literal normalized search over immutable STATUS_ROLE/SEARCH_ROLE. Search/status
+changes refilter without rebuilding source presentation. Its native selection
+helpers group ranges, map UUIDs and distinguish viewport rows from all filtered
+results. The UI owns remembered IDs/counts and reconciles visible details after
+filter/reset/live membership changes; hidden memory never supplies action targets.
+Explicit replacement/None clears hidden memory. No queue execution, database,
+authentication or networking is performed by these controls. See QUEUE_SELECTION.
+
 These are incremental prerequisites, not completed scale/crash qualification.
 History/analysed playlists still use item tables, full history refresh is
 expensive, and bulk restart/collection/dedup work is incomplete. See

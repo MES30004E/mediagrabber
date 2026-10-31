@@ -38,6 +38,14 @@ def validate_queue(data: object, count: int) -> None:
         expected = dict(cycle=number, analysed=count, enqueued=count, started_workers=2, acknowledged_workers=2, cancelled=count,
                         restored=count, removed=count, remaining=0, active_tasks=0, confirmation_requests=1)
         require(all(integer(cycle.get(key), value) for key, value in expected.items()) and cycle.get("queue_rendered") is True)
+        checks = cycle.get("selection_checks")
+        require(isinstance(checks, dict))
+        expected_selection = dict(filtered=count, status=count, all=count, none=0, sql_writes=0,
+                                  sql_commits=0, sql_statements=0, owned_tasks=0)
+        require(all(integer(checks.get(key), value) for key, value in expected_selection.items()))
+        require(checks.get("cleared_hidden") is True and checks.get("viewport_matched") is True and
+                type(checks.get("visible")) is int and 0 < checks["visible"] <= count)
+        require(finite(checks.get("wall_seconds")))
     measurements = data.get("measurements")
     require(isinstance(measurements, list) and len(measurements) == 18)
     for measurement, (cycle, stage) in zip(measurements, ((n, s) for n in (1, 2) for s in QUEUE_STAGES)):

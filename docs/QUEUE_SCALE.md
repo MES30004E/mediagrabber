@@ -536,3 +536,27 @@ Final local full suite742passed62.14s; history/bulk focused75passed8.85s,
 extension10/protocol9, pip check/shell syntax clean. No skipped tests. New source
 still requires its own exact hosted macOS/Linux/strict-archive run after audited
 publication; earlier053qualification does not cover this worktree.
+
+## Native queue selection checkpoint
+
+The history correction subsequently passed exact4c34124/run41206020420: Linux742,
+extension10, macOSbackend60/Swift25/actual workers/drift9 and the complete frozen
+matrix/replacement/strict-archive gates. Archive141896224bytes SHA256
+`fa43d7323c332f83df9e7a23330ebee75acc587f5d60b19aa39ffd2ec560108e`, not published.
+Frozen5,000max measured operation gap1.36s and post-removal RSS growth still mean
+no general freeze/leak freedom; full backlog/live QA remains.
+
+Queue filtering/selection now adds raw immutable roles, cached native predicates,
+range/UUID helpers and explicit all/filtered/viewport/none/status scopes. Source
+100/800/1000/5000observations, actual compact/standard render paths and limitations
+are in `docs/QUEUE_SELECTION.md`. Zero new workers/DB operations/source formatting
+in same-view filter/selection probes; changing kind still changes source columns.
+
+Both frozen diagnostic cycles now trigger the actual menu/filter actions and
+require exact selected UUIDs, hidden-memory clearing and independent viewport
+geometry evidence, plus zero SQL/owned tasks. All18original stage records and
+worker/persistence/archive gates remain. Extra All↔Media column/filter roundtrips
+occur between enqueue/start; do not treat later timing/RSS differences as a paired
+performance improvement. Full788source tests pass; new exact hosted run required.
+No Critical/Important findings in fresh review; details-dialog caption mismatch is
+a recorded minor. No release, upload, installation or local Apple build tools.

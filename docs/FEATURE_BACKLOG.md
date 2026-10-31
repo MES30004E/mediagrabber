@@ -8,11 +8,11 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 ## Current checkpoint and restrictions
 
 - Development branch: `improvement/download-reliability`. Latest hosted-tested
-  checkpoint: `053264c9711a4d3ffc16d7e51e755095b1c625c3`, run `41172016114`,
-  all jobs passed. Actual logs: Linux702 (one warning); macOS backend60, Swift25 and protocol9;
+  checkpoint: `4c3412422d1bfad7fa888b79e78a0c2f26bae9ab`, run `41206020420`,
+  all jobs passed. Actual logs: Linux742 (one warning); macOS backend60, Swift25 and protocol9;
   bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
-  strict extracted-archive verification/launch passed. Archive141893743bytes,
-  SHA256 `f29b55ec5b4f35e2531659f88e967085926f801f2fddca8b23ab827abc2da063`.
+  strict extracted-archive verification/launch passed. Archive141896224bytes,
+  SHA256 `fa43d7323c332f83df9e7a23330ebee75acc587f5d60b19aa39ffd2ec560108e`.
   No release asset was uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
@@ -68,7 +68,7 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 - User clarification2026-10-31: the reported large-queue incident left its window
   open but frozen, not an observed quit/crash dialog. Prioritize main-thread stall
   investigation. This is not proof of one cause or absence of every native fault.
-- Portable-tested history hot-path correction; hosted qualification pending:
+- Hosted-tested history hot-path correction, exact4c34124/run41206020420:
   immutable seven-column/order snapshots
   avoid SQL/history-cell rebuilding for progress/bytes/speed/ETA alone. Existing
   SQL filters and explicit metadata/status refresh stay unchanged. History still
@@ -81,7 +81,18 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   history/bulk75passed8.85s; extension10/protocol9/pipcheck/shellsyntax clean.
   Final paired5,000 steady callbacks0.505451→0.000969s;2history queries/70,000
   cells→0/0, while2writes/2commits remain. Single paired observations, not full
-  freeze/live-media/memory acceptance. Next exact hosted run must qualify this code.
+  freeze/live-media/memory acceptance. Native5000probe still measured1.36s max
+  operation gap; first unseen-status callback still queries history once.
+- In-progress Q04 queue selection: native kind/status/literal-search filters,
+  explicit all/filtered/viewport/none/status scopes and truthful counts/details.
+  Hidden memory cannot enter actions; None clears it; search/status do not format
+  the source list.800/5000filtered keep-file removal targets/one prompt tested.
+  Compact/standard real offscreen renders inspected; no P1 redesign acceptance.
+  Existing frozen matrix now requires actual selection-control evidence, not just
+  source tests. Full788passed57.77s, JS10/protocol9/pipcheckclean; independent
+  review found no Critical/Important. Exact new hosted qualification pending.
+  Deferred minor: open details-dialog caption can name the old selection or say
+  removed when merely filtered out; body/action IDs remain correct. All rows kept.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -112,7 +123,7 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | Q01 Release blocker; user describes freeze | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify UI stall/exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, `queue_check.py`, model/scale/bulk/history tests, `docs/QUEUE_SCALE.md` | Header/queue model fixes and native two-cycle matrix pass. User reports an open frozen window; no observed process crash. Remaining history/playlist stalls, memory growth, long-run/live QA; do not claim a unique cause or leak freedom |
 | Q02 Portable-tested fix | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains |
 | Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
-| Q04 Open | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `ui.py` queue table/filter and `_selected_jobs` | Queue selection is not the analysed-playlist checkbox selection; implement and test each action and stable selection across refresh/filter |
+| Q04 Portable-tested/reviewed; hosted pending | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Source scopes/counts/hidden-memory/live UUID/action tests and full788 pass; independent review no Critical/Important. Exact frozen hosted gate remains. Not analysed-playlist checkbox selection |
 | Q05 Partial; bounded status/removal connected | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/service tests | Status/retry and entry/file removal now yield with correlated outcomes and800-job regressions. Bulk restart still per-item; collection controls, real transfers and broad shutdown/crash qualification remain |
 | Q06 Open | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `Database.clear_completed`, queue actions | Discoverable group-level actions, tested counts and no per-item modal loop |
 | Q07 Open | Collection grouping, group progress/status totals and bulk controls remain responsive | `models.py`, `ui.py`, `database.py` | Define persisted collection identity/migration; incremental aggregate/model updates; restart compatibility tests |
@@ -188,8 +199,8 @@ whole-app rewrite.
 
 ## Next checkpoints and reporting contract
 
-1. Finish/qualify the history progress-refresh correction after the successful
-   queue-model/frozen-matrix checkpoint; preserve exact hosted evidence.
+1. Finish/qualify native queue filtering/selection after the successful history
+   hot-path checkpoint; preserve exact hosted evidence and full backlog.
 2. Continue P0 history/progress coalescing, bounded restart/selection/collection controls,
    persistence recovery and native crash classification from measured evidence.
 3. Design system/research/mockups and **approved** professional native screens;

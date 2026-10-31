@@ -48,7 +48,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QProgressBar
     from .models import DownloadJob, DownloadOptions, JobStatus, MediaItem
-    from .queue_model import PROGRESS_ROLE
+    from .queue_model import JOB_ID_ROLE, PROGRESS_ROLE
     from .ui import AnalysisContext
 
     if type(count) is not int or count not in SIZES or type(cycles) is not int or cycles not in (1, 2):
@@ -114,6 +114,45 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
         if {job.id: job.to_dict() for job in loaded} != {job.id: job.to_dict() for job in committed}:
             raise RuntimeError("Queue diagnostic persistence was not committed")
         return committed
+    def check_selection():
+        begin = time.monotonic(); before = dict(sql); wanted = set(window.jobs)
+        def require(condition):
+            if not condition: raise RuntimeError("Queue selection diagnostic failed")
+        def selected(): return {job.id for job in window._selected_jobs()}
+        window.queue_selection_actions["all"].trigger()
+        require(selected() == wanted)
+        window.queue_status_filter.setCurrentText("Paused")
+        require(window.queue_proxy.rowCount() == 0 and not selected())
+        window.queue_selection_actions["none"].trigger()
+        window.queue_status_filter.setCurrentText("Waiting")
+        cleared = not selected() and not window._queue_selection_ids
+        require(cleared)
+        window.queue_search.setText("SYNTHETIC VIDEO")
+        window.queue_selection_actions["filtered"].trigger(); filtered = len(selected())
+        require(selected() == wanted)
+        window.queue_selection_actions["status:Waiting"].trigger(); status = len(selected())
+        require(selected() == wanted)
+        application.processEvents()
+        proxy = window.queue_proxy; viewport_height = window.queue_table.viewport().height()
+        onscreen = set()
+        for row in range(proxy.rowCount()):
+            rectangle = window.queue_table.visualRect(proxy.index(row, 0))
+            if rectangle.bottom() >= 0 and rectangle.top() < viewport_height:
+                onscreen.add(proxy.index(row, 0).data(JOB_ID_ROLE))
+        window.queue_selection_actions["visible"].trigger(); visible = len(selected())
+        # Compare independent painted geometry, not another call to visible_rows.
+        require(0 < visible <= count and selected() == onscreen)
+        window.queue_selection_actions["all"].trigger(); all_count = len(selected())
+        require(selected() == wanted and window.queue_filter.currentText() == "All" and
+                window.queue_status_filter.currentText() == "All" and not window.queue_search.text())
+        require(f"{count:,} selected" in window.queue_counts.text())
+        window.queue_selection_actions["none"].trigger(); none = len(selected())
+        require(none == 0 and not window._queue_selection_ids)
+        window.queue_filter.setCurrentText("Media")
+        require(sql == before and not window.task_manager.active_count)
+        return dict(filtered=filtered, status=status, all=all_count, none=none, visible=visible,
+            cleared_hidden=cleared, viewport_matched=True, sql_writes=0, sql_commits=0, sql_statements=0, owned_tasks=0,
+            wall_seconds=round(time.monotonic()-begin, 6))
     def fake_cleanup(_job):
         cleanup["gui_thread_calls"] += threading.get_ident() == gui_thread
         time.sleep(.001); cleanup["jobs"] += 1
@@ -197,6 +236,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                 if len(window.items) != count: raise RuntimeError("Queue diagnostic lost analysis items")
                 measure(cycle, "enqueue", lambda: window._enqueue_payload(items, None, options))
                 if len(window.jobs) != count: raise RuntimeError("Queue diagnostic lost admitted jobs")
+                selection_checks = check_selection()
                 measure(cycle, "start", window._dispatch)
                 spin_until(lambda: len(started)-initial_started == 2,
                     fail_when=lambda: not window.task_manager.active_count)
@@ -225,7 +265,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                 completed.append(dict(cycle=cycle, analysed=count, enqueued=count, started_workers=len(started)-initial_started,
                     acknowledged_workers=len(acknowledged)-initial_acknowledged, cancelled=count,
                     restored=len(restored), removed=count, remaining=0, active_tasks=0,
-                    confirmation_requests=len(prompts)-initial_prompts, queue_rendered=True))
+                    confirmation_requests=len(prompts)-initial_prompts, queue_rendered=True, selection_checks=selection_checks))
             if max_owned > 2 or any(attempts.values()): raise RuntimeError("Queue diagnostic escaped its I/O/worker bounds")
     finally:
         heartbeat.stop(); heartbeat.deleteLater()

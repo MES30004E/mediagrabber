@@ -63,7 +63,9 @@ def queue_payload(count=100):
     for cycle in (1, 2):
         queue["cycles"].append({"cycle": cycle, "analysed": count, "enqueued": count, "started_workers": 2,
             "acknowledged_workers": 2, "cancelled": count, "restored": count, "removed": count, "remaining": 0, "active_tasks": 0,
-            "confirmation_requests": 1, "queue_rendered": True})
+            "confirmation_requests": 1, "queue_rendered": True,
+            "selection_checks": {"filtered": count, "status": count, "all": count, "none": 0, "visible": 5,
+                "cleared_hidden": True, "viewport_matched": True, "sql_writes": 0, "sql_commits": 0, "sql_statements": 0, "owned_tasks": 0, "wall_seconds": .01}})
         for stage in stages:
             queue["measurements"].append({"cycle": cycle, "operation": stage, "wall_seconds": .01, "cpu_seconds": .01,
                 "max_heartbeat_gap_seconds": .01, "peak_rss_mib": 128.0, "current_rss_mib": 120.0,
@@ -167,3 +169,21 @@ def test_standalone_checker_reports_native_failure_without_source_on_pythonpath(
                             env={"PATH": "/usr/bin:/bin"}, capture_output=True, text=True, timeout=10)
     assert result.returncode != 0 and "Aborted" in result.stderr
     assert "ModuleNotFoundError" not in result.stderr and "exit 6" in result.stderr
+
+
+@pytest.mark.parametrize("defect", ["missing", "filtered", "visible", "none", "hidden", "writes", "boolean", "viewport"])
+def test_packaged_queue_requires_actual_selection_evidence(tmp_path, defect):
+    data = queue_payload(); cycle = data["queue"]["cycles"][0]; checks = cycle["selection_checks"]
+    if defect == "missing": cycle.pop("selection_checks")
+    elif defect == "filtered": checks["filtered"] = 99
+    elif defect == "visible": checks["visible"] = 101
+    elif defect == "none": checks["none"] = 1
+    elif defect == "hidden": checks["cleared_hidden"] = False
+    elif defect == "writes": checks["sql_writes"] = 1
+    elif defect == "boolean": checks["owned_tasks"] = False
+    elif defect == "viewport": checks["viewport_matched"] = False
+    def run(command, **kwargs):
+        from pathlib import Path
+        Path(command[command.index("--startup-check")+1]).write_text(json.dumps(data))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    with pytest.raises(RuntimeError): verify(bundle(tmp_path), runner=run, queue_items=100)

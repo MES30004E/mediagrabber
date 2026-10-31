@@ -38,7 +38,11 @@ def test_real_queue_diagnostic_completes_two_cycles_with_owned_workers_and_persi
     assert report["schema"] == 1 and report["result"] == "passed" and report["items"] == 100
     assert len(report["cycles"]) == 2 and report["max_owned_workers"] == 2
     for cycle, result in enumerate(report["cycles"], 1):
-        assert result == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
+        checks = result["selection_checks"]
+        assert all(checks[key] == value for key, value in {"filtered": 100, "status": 100, "all": 100,
+            "none": 0, "sql_writes": 0, "sql_commits": 0, "owned_tasks": 0}.items())
+        assert checks["cleared_hidden"] is True and 0 < checks["visible"] <= 100 and checks["wall_seconds"] >= 0
+        assert {key: value for key, value in result.items() if key != "selection_checks"} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
             "acknowledged_workers": 2, "cancelled": 100, "restored": 100, "removed": 100, "remaining": 0, "active_tasks": 0,
             "confirmation_requests": 1, "queue_rendered": True}
     assert report["network_attempts"] == report["keychain_attempts"] == report["deletion_attempts"] == report["process_attempts"] == 0
@@ -102,3 +106,16 @@ def test_uncommitted_queue_rows_cannot_establish_persistence(isolated_window, tm
     with pytest.raises(RuntimeError, match="persist"):
         exercise_queue(isolated_window, APP, 100, tmp_path)
     assert isolated_window.task_manager.active_count == 0
+
+
+def test_diagnostic_rejects_nonworking_selection_actions(isolated_window, tmp_path, monkeypatch):
+    monkeypatch.setattr(isolated_window, "select_queue", lambda *_args: None)
+    with pytest.raises(RuntimeError, match="selection"):
+        exercise_queue(isolated_window, APP, 100, tmp_path)
+
+
+def test_diagnostic_rejects_visible_action_that_selects_offscreen_rows(isolated_window, tmp_path, monkeypatch):
+    original = isolated_window.select_queue
+    monkeypatch.setattr(isolated_window, "select_queue", lambda scope, status="All": original("filtered" if scope == "visible" else scope, status))
+    with pytest.raises(RuntimeError, match="selection"):
+        exercise_queue(isolated_window, APP, 100, tmp_path)

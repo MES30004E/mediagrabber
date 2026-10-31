@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from PySide6.QtCore import QTimer, Qt, QUrl, Slot, QEvent, QItemSelection, QItemSelectionModel, QSignalBlocker, QSortFilterProxyModel
+from PySide6.QtCore import QTimer, Qt, QUrl, Slot, QEvent, QSignalBlocker
 from PySide6.QtGui import QAction, QDesktopServices, QFontDatabase, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -28,7 +28,8 @@ from .queue_batch import BatchOutcome, QueueBatch
 from .file_removal import FileRemovalResult, FileRemovalService
 from .display_format import human_bytes, human_duration
 from .history_presentation import HistoryRefreshState, history_row
-from .queue_model import JOB_ID_ROLE, KIND_ROLE, QueueProgressDelegate, QueueTableModel, contiguous_ranges
+from .queue_model import JOB_ID_ROLE, QueueProgressDelegate, QueueTableModel
+from .queue_selection import QueueFilterProxyModel, STATUS_GROUPS, restore_ids, select_rows, status_matches, visible_rows
 from .console import ConsoleEvent, ConsoleStore
 from .diagnostics import run_checks
 from .downloader import analyse_with_authentication, download_job
@@ -451,8 +452,32 @@ class MainWindow(QMainWindow):
         self.queue_empty = QLabel("No downloads yet. Add a URL on Download to get started."); self.queue_empty.setObjectName("muted"); self.queue_empty.setWordWrap(True); layout.addWidget(self.queue_empty)
         filter_row = QHBoxLayout(); filter_row.addWidget(QLabel("View:"))
         self.queue_filter = QComboBox(); self.queue_filter.addItems(["Media", "Torrents", "All"])
-        self.queue_filter.currentTextChanged.connect(self._refresh_queue); filter_row.addWidget(self.queue_filter); filter_row.addStretch()
+        self.queue_filter.currentTextChanged.connect(self._refresh_queue); filter_row.addWidget(self.queue_filter)
+        filter_row.addWidget(QLabel("Status:"))
+        self.queue_status_filter = QComboBox(); self.queue_status_filter.addItems(list(STATUS_GROUPS))
+        self.queue_status_filter.setAccessibleName("Queue status filter")
+        self.queue_status_filter.currentTextChanged.connect(lambda *_: self._refresh_queue(filters_only=True))
+        filter_row.addWidget(self.queue_status_filter)
+        self.queue_search = QLineEdit(); self.queue_search.setPlaceholderText("Search title, URL or destination")
+        self.queue_search.setAccessibleName("Search queued jobs"); self.queue_search.setClearButtonEnabled(True)
+        self.queue_search.setMinimumWidth(140)
+        self.queue_search.textChanged.connect(lambda *_: self._refresh_queue(filters_only=True))
+        filter_row.addWidget(self.queue_search, 1)
         layout.addLayout(filter_row)
+        selection_row = QHBoxLayout(); self.queue_select_button = QToolButton(); self.queue_select_button.setText("Select")
+        self.queue_select_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.queue_selection_menu = QMenu(self.queue_select_button); self.queue_select_button.setMenu(self.queue_selection_menu)
+        self.queue_selection_actions = {}
+        for scope, text in [("all", "All queue jobs (show all)"), ("filtered", "Filtered results"), ("visible", "Visible rows"), ("none", "None")]:
+            self.queue_selection_actions[scope] = self.queue_selection_menu.addAction(text, lambda _checked=False, value=scope: self.select_queue(value))
+        status_menu = self.queue_selection_menu.addMenu("By status in filtered results")
+        for group in STATUS_GROUPS:
+            if group != "All":
+                self.queue_selection_actions[f"status:{group}"] = status_menu.addAction(group, lambda _checked=False, value=group: self.select_queue("status", value))
+        selection_row.addWidget(self.queue_select_button)
+        self.queue_counts = QLabel(); self.queue_counts.setAccessibleName("Queue selection counts"); selection_row.addWidget(self.queue_counts, 1)
+        self.queue_clear_filters = QPushButton("Clear filters"); self.queue_clear_filters.clicked.connect(self.clear_queue_filters)
+        selection_row.addWidget(self.queue_clear_filters); layout.addLayout(selection_row)
         self.job_banner = QWidget(); banner_layout = QVBoxLayout(self.job_banner); banner_layout.setContentsMargins(8, 8, 8, 8)
         self.job_banner_text = QLabel(); self.job_banner_text.setWordWrap(True); banner_layout.addWidget(self.job_banner_text)
         banner_actions = QHBoxLayout(); banner_layout.addLayout(banner_actions)
@@ -465,10 +490,8 @@ class MainWindow(QMainWindow):
         self.job_banner.hide(); layout.addWidget(self.job_banner)
         self.queue_table = QTableView()
         self.queue_model = QueueTableModel(self)
-        self.queue_proxy = QSortFilterProxyModel(self)
+        self.queue_proxy = QueueFilterProxyModel(self)
         self.queue_proxy.setSourceModel(self.queue_model)
-        self.queue_proxy.setFilterRole(KIND_ROLE); self.queue_proxy.setFilterKeyColumn(0)
-        self.queue_proxy.setFilterFixedString("media")
         self.queue_table.setModel(self.queue_proxy)
         self.queue_table.setItemDelegate(QueueProgressDelegate(self.queue_table))
         polish_table(self.queue_table)
@@ -1656,9 +1679,45 @@ class MainWindow(QMainWindow):
             if not self.queue_proxy.mapFromSource(self.queue_model.index_for_id(key)).isValid()}
         self._queue_selection_ids = hidden | {job.id for job in selected}
         if selected: self.selected_job_id = selected[0].id
-        elif self.queue_proxy.mapFromSource(self.queue_model.index_for_id(self.selected_job_id)).isValid():
-            self.selected_job_id = ""
+        else: self.selected_job_id = ""
+        self._update_queue_counts(len(selected))
         self._refresh_selected_job_details()
+
+    def _update_queue_counts(self, selected_count=None):
+        if selected_count is None: selected_count = len(self._selected_jobs())
+        shown = self.queue_proxy.rowCount()
+        self.queue_counts.setText(f"{selected_count:,} selected · {shown:,} shown · {len(self.jobs):,} total")
+        self.queue_empty.setVisible(shown == 0)
+        self.queue_empty.setText("No matching queued jobs. Change or clear the queue filters." if self.jobs else
+                                 "No downloads yet. Add a URL on Download to get started.")
+
+    def _restore_queue_selection(self):
+        visible = restore_ids(self.queue_table, self.queue_model, self._queue_selection_ids)
+        if self.selected_job_id not in visible: self.selected_job_id = visible[0] if visible else ""
+        self._update_queue_counts(len(visible))
+
+    def clear_queue_filters(self):
+        blockers = [QSignalBlocker(widget) for widget in (self.queue_filter, self.queue_status_filter, self.queue_search)]
+        self.queue_filter.setCurrentText("All"); self.queue_status_filter.setCurrentText("All"); self.queue_search.clear()
+        del blockers
+        self._refresh_queue(filters_only=True)
+
+    def select_queue(self, scope: str, status: str = "All"):
+        if scope not in {"all", "filtered", "visible", "none", "status"} or status not in STATUS_GROUPS:
+            raise ValueError("Invalid queue selection scope")
+        if scope == "all": self.clear_queue_filters()
+        if scope in {"all", "filtered"}: rows = range(self.queue_proxy.rowCount())
+        elif scope == "visible": rows = visible_rows(self.queue_table)
+        elif scope == "status":
+            from .queue_model import STATUS_ROLE
+            rows = [row for row in range(self.queue_proxy.rowCount()) if status_matches(self.queue_proxy.index(row, 0).data(STATUS_ROLE), status)]
+        else: rows = []
+        # Explicit replacement must clear hidden remembered IDs as well.
+        self._queue_selection_ids.clear(); self.selected_job_id = ""
+        blocker = QSignalBlocker(self.queue_table.selectionModel())
+        try: select_rows(self.queue_table, rows)
+        finally: del blocker
+        self._queue_selection_changed()
 
     def _refresh_selected_job_details(self):
         job = self.jobs.get(self.selected_job_id)
@@ -1968,14 +2027,19 @@ class MainWindow(QMainWindow):
         menu.addAction("Convert As…", lambda: self.open_video_converter(job.output_file))
         menu.exec(self.history_table.viewport().mapToGlobal(position))
 
-    def _refresh_queue(self, *_, job_id=None):
+    def _refresh_queue(self, *_, job_id=None, filters_only=False):
         if not hasattr(self, "queue_table"): return
         view = self.queue_filter.currentText()
-        if job_id is not None and view == self.queue_model.view and (job := self.jobs.get(job_id)):
-            if self.queue_model.update_job(job, self.settings.connection_mode):
-                self.queue_empty.setVisible(self.queue_proxy.rowCount() == 0)
-                self._refresh_selected_job_details()
-                return
+        if job_id is not None and view == self.queue_model.view and self.queue_model.rowCount() == len(self.jobs) and (job := self.jobs.get(job_id)):
+            selection = self.queue_table.selectionModel(); blocker = QSignalBlocker(selection)
+            try:
+                before = self.queue_proxy.mapFromSource(self.queue_model.index_for_id(job_id)).isValid()
+                updated = self.queue_model.update_job(job, self.settings.connection_mode)
+                after = self.queue_proxy.mapFromSource(self.queue_model.index_for_id(job_id)).isValid()
+                if updated and before != after: self._restore_queue_selection()
+            finally: del blocker
+            if updated:
+                self._refresh_selected_job_details(); return
         vertical = self.queue_table.verticalScrollBar().value()
         horizontal = self.queue_table.horizontalScrollBar().value()
         focus = QApplication.focusWidget()
@@ -1985,15 +2049,12 @@ class MainWindow(QMainWindow):
             self._queue_selection_ids.add(self.selected_job_id)
         selection = self.queue_table.selectionModel(); blocker = QSignalBlocker(selection)
         try:
-            structural = self.queue_model.sync(self.jobs.values(), view, self.settings.connection_mode)
-            self.queue_proxy.setFilterFixedString({"Media": "media", "Torrents": "torrent", "All": ""}[view])
-            # Restore all selected UUIDs after a reset/filter, never old row numbers.
-            rows = sorted(index.row() for key in self._queue_selection_ids
-                if (index := self.queue_proxy.mapFromSource(self.queue_model.index_for_id(key))).isValid())
-            restored = QItemSelection()
-            for first, last in contiguous_ranges(rows):
-                restored.select(self.queue_proxy.index(first, 0), self.queue_proxy.index(last, self.queue_proxy.columnCount()-1))
-            selection.select(restored, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
+            structural = False
+            if not filters_only or view != self.queue_model.view or self.queue_model.rowCount() != len(self.jobs):
+                structural = self.queue_model.sync(self.jobs.values(), view, self.settings.connection_mode)
+            self.queue_proxy.set_filters({"Media": "media", "Torrents": "torrent", "All": ""}[view],
+                                         self.queue_status_filter.currentText(), self.queue_search.text())
+            self._restore_queue_selection()
             if self._queue_header_view != view or (not self._queue_header_populated and self.queue_proxy.rowCount() > 0):
                 header = self.queue_table.horizontalHeader()
                 header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -2004,7 +2065,6 @@ class MainWindow(QMainWindow):
                 self._queue_header_view = view
                 self._queue_header_populated = self.queue_proxy.rowCount() > 0
         finally: del blocker
-        self.queue_empty.setVisible(self.queue_proxy.rowCount() == 0)
         self.queue_table.verticalScrollBar().setValue(vertical)
         self.queue_table.horizontalScrollBar().setValue(horizontal)
         if focus is not None and structural: focus.setFocus()
