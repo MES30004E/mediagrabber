@@ -90,7 +90,7 @@ def test_large_keep_removal_drains_real_owned_task_threads_before_reporting_comp
         job.status = JobStatus.PAUSED
         return job
     monkeypatch.setattr("morgan_media_downloader.ui._media_download_operation", held)
-    monkeypatch.setattr("morgan_media_downloader.ui.delete_restart_state", lambda *_, **__: deleted_restart_data.append(True))
+    monkeypatch.setattr("morgan_media_downloader.queue_restart.delete_restart_state", lambda *_, **__: deleted_restart_data.append(True))
     try:
         for timer in window.findChildren(QTimer): timer.stop()
         jobs(window, 800); window.database.save_jobs(window.jobs.values())
@@ -446,7 +446,7 @@ def test_confirmed_removal_supersedes_restart_before_later_slice_is_admitted(tmp
     from test_queue_batch import drain
     window = _window(tmp_path, monkeypatch); restart_deletions = []
     monkeypatch.setattr(window, "_confirm_remove", lambda _: choice)
-    monkeypatch.setattr("morgan_media_downloader.ui.delete_restart_state",
+    monkeypatch.setattr("morgan_media_downloader.queue_restart.delete_restart_state",
         lambda *_, **__: restart_deletions.append(True))
     window.file_removal.deleter = lambda _: []
     try:

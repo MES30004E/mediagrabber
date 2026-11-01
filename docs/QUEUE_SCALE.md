@@ -560,3 +560,21 @@ occur between enqueue/start; do not treat later timing/RSS differences as a pair
 performance improvement. Full788source tests pass; new exact hosted run required.
 No Critical/Important findings in fresh review; details-dialog caption mismatch is
 a recorded minor. No release, upload, installation or local Apple build tools.
+
+## Bounded restart worktree
+
+Queue selection subsequently passed exact72fd947/run41210675065: Linux788,
+extension10, macOSbackend60/Swift25/actual workers/drift9 and frozen Cocoa four-
+size/two-cycle/replacement/strict-archive gates. Archive141895093bytes SHA256
+`f76f05543a3e9f814cc769ef0babe61aa00fcbcf8da210b039e17cf1c857211a`.
+Native5,000reload max recorded gap1.848886s; post-removal RSS344.31→355.31MiB.
+Selection's whole multi-action sequence2.55/2.17s is not an individual filter
+timing. These remain reasons not to claim freeze/leak freedom.
+
+Current restart work replaces per-job modal/GUI cleanup/commits with one explicit
+decision,32-ID admission, one worker, owner drain, durable Interrupted preparation
+and atomic Waiting publication. Fresh child destinations prevent reuse of unknown
+partials; no foreign paths are deleted. Source regression/paired evidence and
+limits are in BULK_RESTART.md. Both frozen cycles now require real restart evidence
+in addition to all older gates; added work changes timings, not prior acceptance.
+Full local826passed75.89s; exact hosted and fresh independent review still pending.

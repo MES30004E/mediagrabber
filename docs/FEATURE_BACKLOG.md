@@ -1,6 +1,6 @@
 # MediaGrabber feature backlog and qualification ledger
 
-Updated 2026-10-31. This extends, rather than replaces, the Reliable Downloads,
+Updated 2026-11-01. This extends, rather than replaces, the Reliable Downloads,
 Better UX and Public Releases master goal. The Critical UX, Scalability and
 Architecture Addendum changes the implementation order below. An existing helper,
 passing unit test or metadata inspector is not evidence of a finished feature.
@@ -8,11 +8,11 @@ passing unit test or metadata inspector is not evidence of a finished feature.
 ## Current checkpoint and restrictions
 
 - Development branch: `improvement/download-reliability`. Latest hosted-tested
-  checkpoint: `4c3412422d1bfad7fa888b79e78a0c2f26bae9ab`, run `41206020420`,
-  all jobs passed. Actual logs: Linux742 (one warning); macOS backend60, Swift25 and protocol9;
+  checkpoint: `72fd947f1c1a2d2ea076ad1af520369f0e3c6843`, run `41210675065`,
+  all jobs passed. Actual logs: Linux788 (one warning); macOS backend60, Swift25 and protocol9;
   bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
-  strict extracted-archive verification/launch passed. Archive141896224bytes,
-  SHA256 `fa43d7323c332f83df9e7a23330ebee75acc587f5d60b19aa39ffd2ec560108e`.
+  strict extracted-archive verification/launch passed. Archive141895093bytes,
+  SHA256 `f76f05543a3e9f814cc769ef0babe61aa00fcbcf8da210b039e17cf1c857211a`.
   No release asset was uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
@@ -83,16 +83,27 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   cells→0/0, while2writes/2commits remain. Single paired observations, not full
   freeze/live-media/memory acceptance. Native5000probe still measured1.36s max
   operation gap; first unseen-status callback still queries history once.
-- In-progress Q04 queue selection: native kind/status/literal-search filters,
+- Hosted-tested Q04 queue selection, exact72fd947/run41210675065: native kind/status/literal-search filters,
   explicit all/filtered/viewport/none/status scopes and truthful counts/details.
   Hidden memory cannot enter actions; None clears it; search/status do not format
   the source list.800/5000filtered keep-file removal targets/one prompt tested.
   Compact/standard real offscreen renders inspected; no P1 redesign acceptance.
   Existing frozen matrix now requires actual selection-control evidence, not just
   source tests. Full788passed57.77s, JS10/protocol9/pipcheckclean; independent
-  review found no Critical/Important. Exact new hosted qualification pending.
+  review found no Critical/Important. Frozen100/800/1000/5000two-cycle checks
+  passed exact scopes/UUIDs/zero selection SQL/owned tasks/one removal prompt.
+  Native5,000reload still reached1.85s gap and retained RSS grew; not freeze/leak freedom.
   Deferred minor: open details-dialog caption can name the old selection or say
   removed when merely filtered out; body/action IDs remain correct. All rows kept.
+- In-progress Q05 bulk restart: one native count/default-Keep confirmation,
+  QueueRestart controller/one worker/32-job slices, stop owners before cleanup;
+  durable Interrupted preparation before filesystem changes and atomic Waiting
+  publication only after worker exit. Every restart uses a fresh child destination
+  so unreported partials cannot silently resume (also safe for torrent fixed paths).
+  Keep retains final/sidecar/thumbnail aliases; Replace explicitly deletes only
+  recorded in-root paths. Stop finishes admitted slice; failures/shutdown retain
+  uncertainty. Actual compact-parent dialog captured/inspected. New exact hosted
+  restart matrix/review/full-source qualification pending; see BULK_RESTART.md.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -123,8 +134,8 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | Q01 Release blocker; user describes freeze | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify UI stall/exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, `queue_check.py`, model/scale/bulk/history tests, `docs/QUEUE_SCALE.md` | Header/queue model fixes and native two-cycle matrix pass. User reports an open frozen window; no observed process crash. Remaining history/playlist stalls, memory growth, long-run/live QA; do not claim a unique cause or leak freedom |
 | Q02 Portable-tested fix | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains |
 | Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
-| Q04 Portable-tested/reviewed; hosted pending | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Source scopes/counts/hidden-memory/live UUID/action tests and full788 pass; independent review no Critical/Important. Exact frozen hosted gate remains. Not analysed-playlist checkbox selection |
-| Q05 Partial; bounded status/removal connected | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/service tests | Status/retry and entry/file removal now yield with correlated outcomes and800-job regressions. Bulk restart still per-item; collection controls, real transfers and broad shutdown/crash qualification remain |
+| Q04 Hosted-tested narrow scopes | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Exact72fd947/run41210675065 frozen gates pass. Details-dialog caption minor remains; no professional visual/live-media acceptance. Not analysed-playlist checkbox selection |
+| Q05 Partial; bulk restart worktree | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart tests | One restart dialog/default Keep,32 snapshots/one worker, owner drain and prepare/commit failure tests connected; exact hosted/review pending. Collection controls, real transfers and broad shutdown/crash qualification remain |
 | Q06 Open | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `Database.clear_completed`, queue actions | Discoverable group-level actions, tested counts and no per-item modal loop |
 | Q07 Open | Collection grouping, group progress/status totals and bulk controls remain responsive | `models.py`, `ui.py`, `database.py` | Define persisted collection identity/migration; incremental aggregate/model updates; restart compatibility tests |
 | Q08 Open | Stable extractor/media identity deduplicates queue/download archive; completed outputs are not accidentally redownloaded or destroyed | `models.py`, `downloader.py`, `database.py`, `organisation.py` | Explicit duplicate/archive policy, cross-URL identities, missing outputs, retries and deliberate restart tests; no assumed guarantee from UUID job IDs |
@@ -190,7 +201,7 @@ whole-app rewrite.
 | UI concentration | `ui.py` 2,169 lines; settings762; queue presentation/formatting/model plus batch/cleanup responsibilities extracted, orchestration still concentrated | Preserve behavior/DB compatibility; measure coupling, not only moved lines |
 | Per-row queue objects: removed | QTableView/model/native proxy and style-painted progress; no per-row Qt item/widget ownership; incremental append/remove, rare reset with UUID restoration | Paired100–5,000 RSS/widget/latency evidence in QUEUE_SCALE. History/analysed playlist still item-based; no global memory/leak guarantee |
 | Full queue/history work: partial | Targeted queue progress; full history consumed0.530/0.537s in two callbacks/10000decoded jobs/70000cells. History projection guard in progress | Verify zero unchanged-history queries/cell replacements with immutable/filter/failure regressions and paired metrics. Metadata refresh/model migration still open |
-| Selection/details minor | Review: remove primaryA from selectedA+B; B stays correctly actionable but inline details become blank | Reconcile surviving details target in next selection/UX checkpoint; not an action-ID mix-up |
+| Selection/details minor: narrowed | Selection checkpoint reconciles surviving inline details; open dialog caption may still name A while body follows B, or say removed when merely filtered | Deferred caption/no-visible wording follow-up; not an action-ID mix-up |
 | Existing theme switch rendering | Light→Dark leaves light/stale child/table palettes in both baseline423160a and model renders despite correct app palette | Rendered regression and Qt repolish/inheritance diagnosis; do not claim polish from app-palette assertions alone |
 | Per-job persistence: admission/status/removal batched | Atomic iterable transactions; media admission saves before UI publication, large status/removal actions commit32-ID slices | Rollback/phantom/partial cleanup regressions pass. Small actions/restart still per-job; collection/relaunch, fault recovery and GUI enqueue latency remain |
 | Modal batch loop: narrow fix verified | Previously one prompt per selected job; now one ID snapshot/one native keep-default dialog,800-job tests pass | Retain broader bounded asynchronous cancellation, per-item failure aggregation, collection controls and realistic worker/file-race qualification |
@@ -199,8 +210,8 @@ whole-app rewrite.
 
 ## Next checkpoints and reporting contract
 
-1. Finish/qualify native queue filtering/selection after the successful history
-   hot-path checkpoint; preserve exact hosted evidence and full backlog.
+1. Finish/qualify bounded bulk restart after the successful queue-selection
+   checkpoint; preserve exact hosted evidence and full backlog.
 2. Continue P0 history/progress coalescing, bounded restart/selection/collection controls,
    persistence recovery and native crash classification from measured evidence.
 3. Design system/research/mockups and **approved** professional native screens;

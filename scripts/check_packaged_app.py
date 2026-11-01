@@ -46,6 +46,12 @@ def validate_queue(data: object, count: int) -> None:
         require(checks.get("cleared_hidden") is True and checks.get("viewport_matched") is True and
                 type(checks.get("visible")) is int and 0 < checks["visible"] <= count)
         require(finite(checks.get("wall_seconds")))
+        restart = cycle.get("restart_checks")
+        require(isinstance(restart, dict))
+        expected_restart = dict(restarted=count, confirmation_requests=1, prepared_rows=count, committed_rows=count,
+                                max_owned_workers=1, max_slice=32, gui_cleanup_calls=0, worker_errors=0)
+        require(all(integer(restart.get(key), value) for key, value in expected_restart.items()))
+        require(all(finite(restart.get(key)) for key in ("wall_seconds", "cpu_seconds", "max_heartbeat_gap_seconds")))
     measurements = data.get("measurements")
     require(isinstance(measurements, list) and len(measurements) == 18)
     for measurement, (cycle, stage) in zip(measurements, ((n, s) for n in (1, 2) for s in QUEUE_STAGES)):

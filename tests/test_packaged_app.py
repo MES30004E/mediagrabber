@@ -65,7 +65,10 @@ def queue_payload(count=100):
             "acknowledged_workers": 2, "cancelled": count, "restored": count, "removed": count, "remaining": 0, "active_tasks": 0,
             "confirmation_requests": 1, "queue_rendered": True,
             "selection_checks": {"filtered": count, "status": count, "all": count, "none": 0, "visible": 5,
-                "cleared_hidden": True, "viewport_matched": True, "sql_writes": 0, "sql_commits": 0, "sql_statements": 0, "owned_tasks": 0, "wall_seconds": .01}})
+                "cleared_hidden": True, "viewport_matched": True, "sql_writes": 0, "sql_commits": 0, "sql_statements": 0, "owned_tasks": 0, "wall_seconds": .01},
+            "restart_checks": {"restarted": count, "confirmation_requests": 1, "prepared_rows": count, "committed_rows": count,
+                "max_owned_workers": 1, "max_slice": 32, "gui_cleanup_calls": 0, "worker_errors": 0,
+                "wall_seconds": .1, "cpu_seconds": .1, "max_heartbeat_gap_seconds": .01}})
         for stage in stages:
             queue["measurements"].append({"cycle": cycle, "operation": stage, "wall_seconds": .01, "cpu_seconds": .01,
                 "max_heartbeat_gap_seconds": .01, "peak_rss_mib": 128.0, "current_rss_mib": 120.0,
@@ -182,6 +185,26 @@ def test_packaged_queue_requires_actual_selection_evidence(tmp_path, defect):
     elif defect == "writes": checks["sql_writes"] = 1
     elif defect == "boolean": checks["owned_tasks"] = False
     elif defect == "viewport": checks["viewport_matched"] = False
+    def run(command, **kwargs):
+        from pathlib import Path
+        Path(command[command.index("--startup-check")+1]).write_text(json.dumps(data))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    with pytest.raises(RuntimeError): verify(bundle(tmp_path), runner=run, queue_items=100)
+
+
+@pytest.mark.parametrize("defect", ["missing", "restarted", "confirmations", "prepare", "commit", "workers", "slice", "gui", "errors", "boolean"])
+def test_packaged_queue_requires_bounded_restart_evidence(tmp_path, defect):
+    data = queue_payload(); cycle = data["queue"]["cycles"][0]; checks = cycle["restart_checks"]
+    if defect == "missing": cycle.pop("restart_checks")
+    elif defect == "restarted": checks["restarted"] = 99
+    elif defect == "confirmations": checks["confirmation_requests"] = 100
+    elif defect == "prepare": checks["prepared_rows"] = 0
+    elif defect == "commit": checks["committed_rows"] = 99
+    elif defect == "workers": checks["max_owned_workers"] = 2
+    elif defect == "slice": checks["max_slice"] = 33
+    elif defect == "gui": checks["gui_cleanup_calls"] = 1
+    elif defect == "errors": checks["worker_errors"] = 1
+    elif defect == "boolean": checks["gui_cleanup_calls"] = False
     def run(command, **kwargs):
         from pathlib import Path
         Path(command[command.index("--startup-check")+1]).write_text(json.dumps(data))

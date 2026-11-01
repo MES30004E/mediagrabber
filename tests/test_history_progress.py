@@ -175,8 +175,10 @@ def test_noncallback_status_changes_reach_history_without_another_metadata_chang
     elif action == "resume": window._resume([target])
     elif action == "cancel": window.cancel_selected()
     elif action == "restart":
-        monkeypatch.setattr("morgan_media_downloader.ui.delete_restart_state", lambda *_args, **_kw: None)
+        from test_queue_restart import spin
+        monkeypatch.setattr(window, "_confirm_restart", lambda _jobs: "keep")
         window.restart_selected()
+        spin(lambda: not window.queue_batch.busy)
     elif action == "stop_seeding": window.stop_seeding()
     elif action == "dispatch":
         monkeypatch.setattr(window.task_manager, "start", lambda _kind, _operation, **kw: kw["task_id"])

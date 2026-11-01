@@ -42,7 +42,12 @@ def test_real_queue_diagnostic_completes_two_cycles_with_owned_workers_and_persi
         assert all(checks[key] == value for key, value in {"filtered": 100, "status": 100, "all": 100,
             "none": 0, "sql_writes": 0, "sql_commits": 0, "owned_tasks": 0}.items())
         assert checks["cleared_hidden"] is True and 0 < checks["visible"] <= 100 and checks["wall_seconds"] >= 0
-        assert {key: value for key, value in result.items() if key != "selection_checks"} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
+        restart = result["restart_checks"]
+        assert all(restart[key] == value for key, value in {"restarted": 100, "confirmation_requests": 1,
+            "prepared_rows": 100, "committed_rows": 100, "max_owned_workers": 1, "max_slice": 32,
+            "gui_cleanup_calls": 0, "worker_errors": 0}.items())
+        assert restart["wall_seconds"] > 0 and restart["max_heartbeat_gap_seconds"] >= 0
+        assert {key: value for key, value in result.items() if key not in {"selection_checks", "restart_checks"}} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
             "acknowledged_workers": 2, "cancelled": 100, "restored": 100, "removed": 100, "remaining": 0, "active_tasks": 0,
             "confirmation_requests": 1, "queue_rendered": True}
     assert report["network_attempts"] == report["keychain_attempts"] == report["deletion_attempts"] == report["process_attempts"] == 0
@@ -118,4 +123,10 @@ def test_diagnostic_rejects_visible_action_that_selects_offscreen_rows(isolated_
     original = isolated_window.select_queue
     monkeypatch.setattr(isolated_window, "select_queue", lambda scope, status="All": original("filtered" if scope == "visible" else scope, status))
     with pytest.raises(RuntimeError, match="selection"):
+        exercise_queue(isolated_window, APP, 100, tmp_path)
+
+
+def test_diagnostic_rejects_nonworking_restart_control(isolated_window, tmp_path, monkeypatch):
+    monkeypatch.setattr(isolated_window, "restart_selected", lambda: None)
+    with pytest.raises(RuntimeError, match="restart"):
         exercise_queue(isolated_window, APP, 100, tmp_path)

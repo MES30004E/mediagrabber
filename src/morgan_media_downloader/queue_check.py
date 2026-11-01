@@ -64,7 +64,8 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
     if window.jobs or window.active or window.task_manager.active_count or window.queue_batch.busy or window.database.search_history():
         raise ValueError("Queue diagnostic refuses populated state")
 
-    measurements = []; completed = []; prompts = []; started = []; acknowledged = []; worker_errors = []
+    measurements = []; completed = []; prompts = []; restart_prompts = []; started = []; acknowledged = []; worker_errors = []
+    restart_stats = dict(prepared=set(), processed=set(), max_slice=0, max_owned_workers=0, gui_cleanup_calls=0)
     attempts = dict(network=0, keychain=0, deletion=0, process=0)
     cleanup = dict(jobs=0, max_active_workers=0, max_slice=0, gui_thread_calls=0, heartbeat_ticks=0)
     import threading
@@ -90,6 +91,17 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
         max_owned = max(max_owned, window.task_manager.active_count)
         if _kind == "queue-file-removal":
             cleanup["max_active_workers"] = max(cleanup["max_active_workers"], len(window.task_manager.active_ids(_kind)))
+        if _kind == "queue-restart":
+            ids = window.queue_restart._ids
+            restart_stats["max_slice"] = max(restart_stats["max_slice"], len(ids))
+            restart_stats["max_owned_workers"] = max(restart_stats["max_owned_workers"], len(window.task_manager.active_ids(_kind)))
+            connection = sqlite3.connect(window.database.path.resolve().as_uri() + "?mode=ro", uri=True)
+            try:
+                rows = connection.execute("SELECT id,status FROM jobs WHERE id IN (" + ",".join("?" for _ in ids) + ")", ids).fetchall()
+            finally: connection.close()
+            if len(rows) != len(ids) or any(status != JobStatus.INTERRUPTED.value for _, status in rows):
+                raise RuntimeError("Queue restart preparation was not committed")
+            restart_stats["prepared"].update(key for key, _ in rows)
     def synthetic_download(job, proxy, captured, runtime, cancel, progress, tor):
         try:
             if job.options.authentication_mode != "None" or proxy is not None or tor is not None:
@@ -153,6 +165,31 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
         return dict(filtered=filtered, status=status, all=all_count, none=none, visible=visible,
             cleared_hidden=cleared, viewport_matched=True, sql_writes=0, sql_commits=0, sql_statements=0, owned_tasks=0,
             wall_seconds=round(time.monotonic()-begin, 6))
+    def check_restart():
+        nonlocal last_tick
+        restart_stats.update(prepared=set(), processed=set(), max_slice=0, max_owned_workers=0, gui_cleanup_calls=0)
+        window.queue_selection_actions["all"].trigger()
+        initial_prompts = len(restart_prompts); before = dict(sql); gaps.clear(); last_tick = time.monotonic()
+        cpu = time.process_time(); begin = time.monotonic()
+        window.restart_selected(); spin_until(lambda: not window.queue_batch.busy)
+        application.processEvents(); tick()
+        committed = verified_reload(); info = window.queue_batch.describe()
+        if (info["completed"] != count or info["failed"] or info["skipped"] or info["pending"] or
+                len(restart_prompts)-initial_prompts != 1 or len(committed) != count or
+                any(job.status != JobStatus.WAITING for job in committed) or
+                {job.id: job.to_dict() for job in committed} != {key: job.to_dict() for key, job in window.jobs.items()} or
+                restart_stats["prepared"] != set(window.jobs) or restart_stats["processed"] != set(window.jobs) or
+                restart_stats["max_owned_workers"] != 1 or not 0 < restart_stats["max_slice"] <= 32 or
+                restart_stats["gui_cleanup_calls"] or window.task_manager.active_count or
+                sql["writes"]-before["writes"] != 2*count or sql["commits"]-before["commits"] != 2*((count+31)//32)):
+            raise RuntimeError("Queue restart diagnostic failed")
+        result = dict(restarted=count, confirmation_requests=1, prepared_rows=len(restart_stats["prepared"]),
+            committed_rows=len(committed), max_owned_workers=restart_stats["max_owned_workers"], max_slice=restart_stats["max_slice"],
+            gui_cleanup_calls=restart_stats["gui_cleanup_calls"], worker_errors=info["failed"],
+            wall_seconds=round(time.monotonic()-begin, 6), cpu_seconds=round(time.process_time()-cpu, 6),
+            max_heartbeat_gap_seconds=round(max(gaps, default=0), 6))
+        window.queue_selection_actions["none"].trigger(); window.queue_filter.setCurrentText("Media")
+        return result
     def fake_cleanup(_job):
         cleanup["gui_thread_calls"] += threading.get_ident() == gui_thread
         time.sleep(.001); cleanup["jobs"] += 1
@@ -204,7 +241,14 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
         if on_measurement is not None: on_measurement(dict(result))
 
     from contextlib import ExitStack
-    from . import ui
+    from . import ui, queue_restart
+    original_restart_cleanup = queue_restart.delete_restart_state
+    def empty_restart_cleanup(job, **kwargs):
+        if any((job.final_files, job.partial_files, job.temporary_files, job.subtitle_files, job.thumbnail_files, job.output_file)):
+            return forbidden("deletion")()
+        restart_stats["gui_cleanup_calls"] += threading.get_ident() == gui_thread
+        restart_stats["processed"].add(job.id)
+        return original_restart_cleanup(job, **kwargs)  # Empty inventories: no filesystem paths are touched.
     from .youtube_companion.storage import KeychainSessionStore
     window.database._connection.set_trace_callback(trace)
     window.task_manager.task_started.connect(owned_started); heartbeat.start()
@@ -215,12 +259,14 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
             stack.enter_context(patch.object(KeychainSessionStore, "_operation", side_effect=forbidden("keychain")))
             stack.enter_context(patch("subprocess.Popen", guarded_popen))
             stack.enter_context(patch.object(ui, "delete_owned_files", side_effect=forbidden("deletion")))
-            stack.enter_context(patch.object(ui, "delete_restart_state", side_effect=forbidden("deletion")))
+            stack.enter_context(patch.object(queue_restart, "delete_restart_state", empty_restart_cleanup))
             stack.enter_context(patch.object(ui, "_media_download_operation", synthetic_download))
             stack.enter_context(patch.object(window.file_removal, "deleter", fake_cleanup if synthetic_cleanup else forbidden("deletion")))
             stack.enter_context(patch.object(window.file_removal, "start", admit_cleanup))
             def confirm(_jobs): prompts.append(True); return "delete" if synthetic_cleanup else "list"
             stack.enter_context(patch.object(window, "_confirm_remove", confirm))
+            def confirm_restart(_jobs): restart_prompts.append(True); return "keep"
+            stack.enter_context(patch.object(window, "_confirm_restart", confirm_restart))
             # ExitStack unwinds LIFO: drain owned work before any I/O target or
             # global transfer callback can be restored, including on exceptions.
             stack.callback(drain_before_restore, stack)
@@ -237,6 +283,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                 measure(cycle, "enqueue", lambda: window._enqueue_payload(items, None, options))
                 if len(window.jobs) != count: raise RuntimeError("Queue diagnostic lost admitted jobs")
                 selection_checks = check_selection()
+                restart_checks = check_restart()
                 measure(cycle, "start", window._dispatch)
                 spin_until(lambda: len(started)-initial_started == 2,
                     fail_when=lambda: not window.task_manager.active_count)
@@ -265,7 +312,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                 completed.append(dict(cycle=cycle, analysed=count, enqueued=count, started_workers=len(started)-initial_started,
                     acknowledged_workers=len(acknowledged)-initial_acknowledged, cancelled=count,
                     restored=len(restored), removed=count, remaining=0, active_tasks=0,
-                    confirmation_requests=len(prompts)-initial_prompts, queue_rendered=True, selection_checks=selection_checks))
+                    confirmation_requests=len(prompts)-initial_prompts, queue_rendered=True, selection_checks=selection_checks, restart_checks=restart_checks))
             if max_owned > 2 or any(attempts.values()): raise RuntimeError("Queue diagnostic escaped its I/O/worker bounds")
     finally:
         heartbeat.stop(); heartbeat.deleteLater()

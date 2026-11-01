@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from .database import Database
 from .queue_batch import BatchOutcome, QueueBatch
+from .queue_restart import QueueRestart
 from .file_removal import FileRemovalResult, FileRemovalService
 from .display_format import human_bytes, human_duration
 from .history_presentation import HistoryRefreshState, history_row
@@ -33,7 +34,7 @@ from .queue_selection import QueueFilterProxyModel, STATUS_GROUPS, restore_ids, 
 from .console import ConsoleEvent, ConsoleStore
 from .diagnostics import run_checks
 from .downloader import analyse_with_authentication, download_job
-from .file_ownership import (delete_owned_files, delete_restart_state, owned_paths,
+from .file_ownership import (delete_owned_files,
                              prepare_resumable_job, primary_output)
 from .keychain import load_proxy_password, save_proxy_password
 from .job_diagnostics import diagnostics_text, status_summary
@@ -255,8 +256,11 @@ class MainWindow(QMainWindow):
         self.displayed_input = ""
         self.analysis_stale = False
         self._closing = False
-        self.pending_restarts: dict[str, str] = {}
         self.pending_removals: dict[str, bool] = {}
+        self.queue_restart = QueueRestart(self.task_manager, self.queue_batch, self.database,
+            lambda: self.jobs, lambda: self.active, lambda: self.pending_removals, self)
+        self.queue_restart.persisted.connect(self._history_refresh_state.invalidate)
+        self.pending_restarts = self.queue_restart.pending
         self.proxy_passwords: dict[str, str] = {}
         self.external_tor_port: int | None = None
         self.tor_internet_state = "unknown"
@@ -1350,9 +1354,10 @@ class MainWindow(QMainWindow):
         # The latest removal decision supersedes an older restart request;
         # especially, keep-files removal must never delete restart data first.
         if job_id in self.pending_removals: self.pending_restarts.pop(job_id, None)
-        if job_id in self.pending_restarts:
-            choice = self.pending_restarts.pop(job_id)
-            if job := self.jobs.get(job_id): self._restart_job(job, choice)
+        if self.queue_restart.owns(job_id):
+            self.queue_restart.owner_stopped(job_id)
+            self._refresh_activity()
+            return
         if job_id in self.pending_removals:
             delete_files = self.pending_removals.pop(job_id)
             if self.queue_batch.is_waiting(job_id):
@@ -1477,42 +1482,26 @@ class MainWindow(QMainWindow):
     def restart_selected(self):
         if self._queue_action_blocked(): return
         selected = self._selected_jobs()
-        for job in selected:
-            choice = self._confirm_restart(job)
-            if choice == "cancel": continue
-            job.technical_details = "Restarting from the beginning…"
-            if job.id in self.active:
-                self.pending_restarts[job.id] = choice; self.task_manager.cancel(self.active[job.id])
-            else:
-                self._restart_job(job, choice)
-        self._refresh_queue()
-        if selected: self._refresh_history()
+        if not selected: return
+        ids = tuple(job.id for job in selected)
+        choice = self._confirm_restart(selected)
+        if choice == "cancel" or self._queue_action_blocked(): return
+        self.queue_restart.start(ids, choice)
 
-    def _confirm_restart(self, job: DownloadJob) -> str:
-        final_exists = any(Path(path).exists() for path in job.final_files)
-        if final_exists:
-            box = QMessageBox(QMessageBox.Icon.Question, "Restart download", "An output file already exists.", parent=self)
-            keep = box.addButton("Keep existing and create a new file", QMessageBox.ButtonRole.AcceptRole)
-            replace = box.addButton("Replace existing", QMessageBox.ButtonRole.DestructiveRole)
-            cancel = box.addButton(QMessageBox.StandardButton.Cancel); box.exec()
-            return "keep" if box.clickedButton() is keep else "replace" if box.clickedButton() is replace else "cancel"
-        partial_exists = any(Path(path).exists() for path in owned_paths(job, include_final=False))
-        if partial_exists and QMessageBox.question(
-                self, "Restart download", "Restart this download from the beginning?\n\nExisting partial download data for this job will be deleted.",
-                QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok,
-                QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Ok:
-            return "cancel"
-        return "restart"
-
-    def _restart_job(self, job: DownloadJob, choice: str):
-        replace = choice == "replace"
-        keep = choice == "keep"
-        delete_restart_state(job, delete_final=replace)
-        if keep:
-            job.options.filename_template = "%(title)s (new).%(ext)s"
-            job.output_file = ""; job.final_files.clear()
-        job.status = JobStatus.WAITING
-        self.database.save_job(job); self._history_refresh_state.invalidate()
+    def _confirm_restart(self, jobs: list[DownloadJob]) -> str:
+        active = sum(job.id in self.active for job in jobs)
+        completed = sum(job.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS} for job in jobs)
+        box = QMessageBox(QMessageBox.Icon.Question, "Restart selected jobs",
+            f"Restart {len(jobs):,} selected jobs from the beginning?\n\n{active} active; {completed} completed.\n"
+            "Active tasks must stop first. Recorded partial/temporary state will be deleted.\n"
+            "Every restart uses a fresh subfolder to avoid reusing partial data. Keep retains old outputs;\n"
+            "Replace permanently deletes only verified job-owned outputs. Unrecorded files are never deleted.\n"
+            "Stop finishes the admitted slice (up to 32 jobs), then stops further restarts.", parent=self)
+        keep = box.addButton("Restart, keep existing outputs", QMessageBox.ButtonRole.AcceptRole)
+        replace = box.addButton("Restart, replace verified job-owned outputs", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(keep); box.setEscapeButton(QMessageBox.StandardButton.Cancel); box.exec()
+        return "keep" if box.clickedButton() is keep else "replace" if box.clickedButton() is replace else "cancel"
 
     def remove_selected(self):
         if self._queue_action_blocked(): return
@@ -1520,7 +1509,7 @@ class MainWindow(QMainWindow):
         if not selected: return
         selected_ids = [job.id for job in selected]
         choice = self._confirm_remove(selected)
-        if choice == "cancel": return
+        if choice == "cancel" or self._queue_action_blocked(): return
         # A confirmed removal supersedes earlier restarts for the entire ID
         # snapshot, including owners that finish before their slice is admitted.
         for job_id in selected_ids: self.pending_restarts.pop(job_id, None)
@@ -2215,9 +2204,11 @@ class MainWindow(QMainWindow):
             self._shutdown_persistence_failed = False
             self.file_removal.close()
             self.queue_batch.cancel(abandon=True)
-            uncertain = [self.jobs[key] for key in self._delete_slice_ids if key in self.jobs]
-            for job in uncertain:
+            uncertain = self.queue_restart.close()
+            removal_uncertain = [self.jobs[key] for key in self._delete_slice_ids if key in self.jobs]
+            for job in removal_uncertain:
                 job.technical_details = "Cleanup interrupted during shutdown; queue entry retained; files may already have moved. Review owned files before retrying."
+            uncertain.extend(removal_uncertain)
             if uncertain:
                 try: self.database.save_jobs(uncertain)
                 except Exception:

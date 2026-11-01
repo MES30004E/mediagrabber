@@ -88,7 +88,7 @@ waits, without forced QThread termination. Cancellation is cooperative and not
 implemented by every external processing operation.
 
 Resume/Retry keep resumable state. Restart waits for worker ownership to end,
-then deletes only recorded state and resets progress. `file_ownership.py` protects
+then cleans only recorded state and resets progress. `file_ownership.py` protects
 unrelated files/directories and uses Trash for completed outputs where practical.
 Queue selection is tied to job ID rather than changing row indices.
 
@@ -103,6 +103,19 @@ partial cleanup or DB failure retains entries with a warning. Stop finishes the
 admitted slice while preventing future slices. Shutdown suppresses late results,
 persists uncertainty where possible, and preserves the running marker if that
 persistence fails; a marker failure cannot skip owned-worker shutdown.
+
+`queue_restart.QueueRestart` shares QueueBatch admission and owns one restart
+worker/at most32 independent snapshots. A single explicit UI confirmation fixes
+the selected UUIDs and Keep/Replace policy. Latest inventories are copied only
+after transfer owners stop. GUI commits Interrupted preparation BEFORE worker
+cleanup; only after thread exit may it atomically persist/publish Waiting jobs.
+Partial cleanup/final-save failure cannot publish a runnable half-restarted job.
+Stop finishes the admitted slice; close suppresses results/persists uncertainty.
+Every restart uses a unique child destination: cancellation can suppress the last
+worker inventory, so unknown partials must not be reused. Keep retains final/
+subtitle/thumbnail outputs, including overlapping legacy aliases; Replace permits
+permanent removal only of recorded in-root paths. Auth/route/template/torrent
+metadata remain captured. See BULK_RESTART.md for compatibility and QA limits.
 
 Queue presentation now uses `queue_model.QueueTableModel` with immutable display
 rows, stable UUID roles, a native QSortFilterProxyModel and style-painted progress
@@ -124,7 +137,7 @@ authentication or networking is performed by these controls. See QUEUE_SELECTION
 
 These are incremental prerequisites, not completed scale/crash qualification.
 History/analysed playlists still use item tables, full history refresh is
-expensive, and bulk restart/collection/dedup work is incomplete. See
+expensive, and collection/dedup/broad restart qualification remains incomplete. See
 `docs/QUEUE_SCALE.md` and `docs/FEATURE_BACKLOG.md` for measured limits and QA.
 
 `queue_check.exercise_queue` is an explicit disposable-state diagnostic, never a
