@@ -165,6 +165,7 @@ def test_failed_explicit_filter_refresh_retries_on_unchanged_callback(window, mo
     ("dispatch", JobStatus.WAITING, "Analysing"), ("watchdog", JobStatus.DOWNLOADING, "Failed")])
 def test_noncallback_status_changes_reach_history_without_another_metadata_change(window, monkeypatch, action, initial, expected):
     target, other = jobs_in(window); target.status = initial
+    if action == "restart": target.options.download_dir = str(window.database.path.parent / "downloads")
     other.metadata_success = True  # Do not make the watchdog fail the unrelated job.
     if action == "stop_seeding": target.kind = "torrent"; window.queue_filter.setCurrentText("All")
     window.database.save_jobs([target, other]); window._refresh_queue(); window._refresh_history()

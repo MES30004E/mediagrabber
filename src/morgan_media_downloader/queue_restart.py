@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from uuid import uuid4
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -17,15 +17,21 @@ from .queue_batch import BatchOutcome
 
 def restart_job(job: DownloadJob, choice: str, *, cleaner=None) -> DownloadJob:
     if choice not in {"keep", "replace"}: raise ValueError("Invalid restart choice")
+    if not isinstance(job.options.download_dir, str) or not job.options.download_dir.strip():
+        raise ValueError("Restart requires a destination directory")
+    paths = job.torrent_file_paths if job.kind == "torrent" else [job.options.filename_template]
+    for value in paths:
+        if (not isinstance(value, str) or not value.strip() or "\x00" in value or
+                PurePosixPath(value.replace("\\", "/")).is_absolute() or PureWindowsPath(value).drive or
+                ".." in PurePosixPath(value.replace("\\", "/")).parts):
+            raise ValueError("Restart requires relative output paths without '..'; choose a safe filename template/destination and requeue")
     changed = copy.deepcopy(job)
     if choice == "keep":
-        # Keep final/sidecar outputs even when legacy inventory aliases also
-        # categorize them as partial or temporary files.
-        normal = lambda value: str(Path(value).expanduser().resolve(strict=False))
-        protected = {normal(value) for values in (changed.final_files, changed.subtitle_files, changed.thumbnail_files) for value in values}
-        changed.partial_files = [value for value in changed.partial_files if normal(value) not in protected]
-        changed.temporary_files = [value for value in changed.temporary_files if normal(value) not in protected]
-        changed.subtitle_files.clear(); changed.thumbnail_files.clear()
+        # Cancellation suppresses the final inventory. Even a recorded temporary
+        # path might now be a finished output. Keep never deletes any old path;
+        # the fresh destination, not cleanup, guarantees a from-beginning attempt.
+        changed.final_files.clear(); changed.partial_files.clear(); changed.temporary_files.clear()
+        changed.subtitle_files.clear(); changed.thumbnail_files.clear(); changed.output_file = ""
     (cleaner or delete_restart_state)(changed, delete_final=choice == "replace")
     # A cancelled worker's final inventory can be incomplete. Never reuse an
     # unrecorded partial, nor overwrite a fixed torrent path or final output.

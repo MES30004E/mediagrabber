@@ -59,7 +59,7 @@ CURRENT_ARCHITECTURE, QUEUE_SCALE; new docs/BULK_RESTART.md.
   Keep all existing18measurements/selection/worker/archive checks.
 - [x] Record paired old/new synthetic restart responsiveness, source scale and
   actual dialog capture; preserve all backlog items and exact72fd947 evidence.
-- [ ] Full Python/JS/drift/pipcheck; one fresh read-only final review, one
+- [x] Full Python/JS/drift/pipcheck; one fresh read-only final review, one
   Critical/Important RED→GREEN fix pass/full suite; defer minors.
 - [ ] Audit exact index/history/provider/Public/protected refs; coherent commit,
   nonforce development push; verify remote and exact hosted results. No release.

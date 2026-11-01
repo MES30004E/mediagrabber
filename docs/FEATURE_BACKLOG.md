@@ -100,10 +100,13 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   durable Interrupted preparation before filesystem changes and atomic Waiting
   publication only after worker exit. Every restart uses a fresh child destination
   so unreported partials cannot silently resume (also safe for torrent fixed paths).
-  Keep retains final/sidecar/thumbnail aliases; Replace explicitly deletes only
+  Keep retains ALL old files (late temporary→final promotions can be unreported);
+  unsafe output templates are refused before cleanup. Replace explicitly deletes only
   recorded in-root paths. Stop finishes admitted slice; failures/shutdown retain
-  uncertainty. Actual compact-parent dialog captured/inspected. New exact hosted
-  restart matrix/review/full-source qualification pending; see BULK_RESTART.md.
+  uncertainty. Actual compact-parent dialog captured/inspected. Review's three
+  blocking findings fixed RED→GREEN (unsafe template, late final promotion and
+  close persistence); full841passed82.04s/JS10/protocol9/pipcheckclean. New exact
+  hosted restart matrix qualification pending; see BULK_RESTART.md.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -135,7 +138,7 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | Q02 Portable-tested fix | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains |
 | Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
 | Q04 Hosted-tested narrow scopes | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Exact72fd947/run41210675065 frozen gates pass. Details-dialog caption minor remains; no professional visual/live-media acceptance. Not analysed-playlist checkbox selection |
-| Q05 Partial; bulk restart worktree | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart tests | One restart dialog/default Keep,32 snapshots/one worker, owner drain and prepare/commit failure tests connected; exact hosted/review pending. Collection controls, real transfers and broad shutdown/crash qualification remain |
+| Q05 Portable-tested/reviewed restart; hosted pending | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart tests | One restart dialog/default Keep,32 snapshots/one worker, owner drain and prepare/commit failure tests connected;841source tests/review fix pass green, exact hosted pending. Collection controls, real transfers and broad shutdown/crash qualification remain |
 | Q06 Open | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `Database.clear_completed`, queue actions | Discoverable group-level actions, tested counts and no per-item modal loop |
 | Q07 Open | Collection grouping, group progress/status totals and bulk controls remain responsive | `models.py`, `ui.py`, `database.py` | Define persisted collection identity/migration; incremental aggregate/model updates; restart compatibility tests |
 | Q08 Open | Stable extractor/media identity deduplicates queue/download archive; completed outputs are not accidentally redownloaded or destroyed | `models.py`, `downloader.py`, `database.py`, `organisation.py` | Explicit duplicate/archive policy, cross-URL identities, missing outputs, retries and deliberate restart tests; no assumed guarantee from UUID job IDs |

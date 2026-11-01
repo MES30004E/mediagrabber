@@ -12,8 +12,9 @@ is an engineering choice under the autonomous existing-project instructions,
 not permission for a redesign or real user-file cleanup during validation.
 
 One dialog snapshots selected UUIDs and shows actual active/completed counts.
-Default Keep outputs deletes recorded partial/temporary state while retaining
-final/subtitle/thumbnail outputs, including legacy overlapping aliases. Every
+Default Keep retains ALL old files: even temporary paths may have finalized after
+cancellation while the last inventory is suppressed. No Keep deletion is safe to
+infer from stale categories. Every
 restart uses a unique child destination: cancellation suppresses a worker's final
 result, so its last file inventory may be incomplete. Never silently reuse an
 unrecorded partial. This also
@@ -22,6 +23,9 @@ Replace explicitly permits permanent deletion of recorded in-root final paths
 but still uses a fresh destination. Never scan
 the destination or delete unrelated files. No GUI existence checks are needed.
 Re-read current inventories after active owners stop, not before the modal dialog.
+Reject absolute/parent-traversing filename templates/torrent paths before cleanup;
+do not silently change unsafe user templates. Shutdown DB/settings failures must
+not bypass owner draining; retain the running marker and report persistence loss.
 
 Persist admitted jobs as Interrupted BEFORE any cleanup. Only after cleanup and
 the stopped cleanup thread may the GUI atomically save/publish Waiting snapshots.

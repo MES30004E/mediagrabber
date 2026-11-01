@@ -1493,8 +1493,8 @@ class MainWindow(QMainWindow):
         completed = sum(job.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS} for job in jobs)
         box = QMessageBox(QMessageBox.Icon.Question, "Restart selected jobs",
             f"Restart {len(jobs):,} selected jobs from the beginning?\n\n{active} active; {completed} completed.\n"
-            "Active tasks must stop first. Recorded partial/temporary state will be deleted.\n"
-            "Every restart uses a fresh subfolder to avoid reusing partial data. Keep retains old outputs;\n"
+            "Active tasks must stop first. Every restart uses a fresh subfolder to avoid reusing partial data.\n"
+            "Keep retains ALL old files, including partial/temporary state;\n"
             "Replace permanently deletes only verified job-owned outputs. Unrecorded files are never deleted.\n"
             "Stop finishes the admitted slice (up to 32 jobs), then stops further restarts.", parent=self)
         keep = box.addButton("Restart, keep existing outputs", QMessageBox.ButtonRole.AcceptRole)
@@ -2216,14 +2216,20 @@ class MainWindow(QMainWindow):
                     # Keep the existing running marker for next-start recovery.
                     self._shutdown_persistence_failed = True
                     self.console_store.append("ERROR", "Cleanup interruption could not be persisted; queue entries retained. Review owned files after restarting.", level="error")
-            self._persist_settings()
+            try: self._persist_settings()
+            except Exception:
+                self._shutdown_persistence_failed = True
+                self.console_store.append("ERROR", "Settings could not be saved during shutdown; review settings after restarting.", level="error")
             for timer in self.findChildren(QTimer):
                 timer.stop()
             for job_id in list(self.active):
                 job = self.jobs.get(job_id)
                 if job:
                     job.status = JobStatus.INTERRUPTED
-                    self.database.save_job(job)
+                    try: self.database.save_job(job)
+                    except Exception:
+                        self._shutdown_persistence_failed = True
+                        self.console_store.append("ERROR", "Interrupted owner state could not be persisted; review queue after restarting.", level="error")
             if self.settings.managed_tor_stop_on_exit:
                 self.managed_tor.stop()
         if not self.task_manager.shutdown(10_000):

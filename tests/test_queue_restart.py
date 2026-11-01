@@ -31,7 +31,7 @@ def test_keep_final_uses_fresh_destination_without_touching_final_or_foreign_fil
     before = copy.deepcopy(job)
     first = restart_job(job, "keep"); second = restart_job(job, "keep", cleaner=lambda *_a, **_kw: None)
     assert job.to_dict() == before.to_dict(), "Policy must not mutate the live job"
-    assert final.read_bytes() == b"retained final" and foreign.exists() and not partial.exists()
+    assert final.read_bytes() == b"retained final" and foreign.exists() and partial.exists()
     assert Path(first.options.download_dir).parent == tmp_path
     assert first.options.download_dir != second.options.download_dir and not Path(first.options.download_dir).exists()
     assert not first.final_files and not first.output_file and first.progress == 0 and first.downloaded_bytes == 0
@@ -59,7 +59,7 @@ def test_restart_uses_fresh_destination_even_without_recorded_final_and_invalid_
     with pytest.raises(ValueError): restart_job(job, "typo")
     assert partial.exists()
     changed = restart_job(job, "keep")
-    assert not partial.exists() and Path(changed.options.download_dir).parent == tmp_path
+    assert partial.exists() and Path(changed.options.download_dir).parent == tmp_path
     assert changed.options.download_dir != str(tmp_path)
 
 
@@ -205,3 +205,33 @@ def test_refused_owner_stop_does_not_clean_or_change_live_job(rig, tmp_path, mon
     controller.processor = lambda *_a: calls.append(True)
     controller.start([job.id], "keep"); spin(lambda: not batch.busy)
     assert not calls and batch.describe()["failed"] == 1 and jobs[job.id].status == JobStatus.FAILED
+
+
+@pytest.mark.parametrize("choice", ["keep", "replace"])
+@pytest.mark.parametrize("template", ["/outside/%(title)s.%(ext)s", "../%(title)s.%(ext)s", "nested/../../old.%(ext)s", "..\\escape.%(ext)s"])
+def test_unsafe_restart_template_is_refused_before_any_cleanup(tmp_path, choice, template):
+    job = job_at(tmp_path); job.options.filename_template = template; calls = []
+    with pytest.raises(ValueError, match="relative|destination"):
+        restart_job(job, choice, cleaner=lambda *_a, **_kw: calls.append(True))
+    assert not calls and job.options.download_dir == str(tmp_path)
+
+
+@pytest.mark.parametrize("choice", ["keep", "replace"])
+def test_restart_downloader_options_remain_inside_fresh_child(tmp_path, choice):
+    from morgan_media_downloader.formats import build_ydl_options
+    job = job_at(tmp_path); job.options.filename_template = "album/%(title)s.%(ext)s"
+    changed = restart_job(job, choice)
+    options = build_ydl_options(changed.options, include_authentication=False)
+    assert Path(options["outtmpl"]).resolve().is_relative_to(Path(changed.options.download_dir).resolve())
+    assert not Path(changed.options.download_dir).exists()
+
+
+@pytest.mark.parametrize("choice", ["keep", "replace"])
+def test_bad_template_stays_interrupted_without_deleting_any_owned_file(rig, tmp_path, choice):
+    _manager, batch, database, jobs, _active, _excluded, controller = rig
+    job = job_at(tmp_path); final = tmp_path/"final.mp4"; final.write_bytes(b"keep")
+    job.options.filename_template = "../escape.%(ext)s"; job.final_files = [str(final)]
+    jobs[job.id] = job; database.save_job(job)
+    controller.start([job.id], choice); spin(lambda: not batch.busy)
+    assert batch.describe()["failed"] == 1 and final.exists()
+    assert database.load_jobs()[0].status == JobStatus.INTERRUPTED

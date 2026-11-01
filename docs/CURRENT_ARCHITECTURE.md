@@ -112,8 +112,9 @@ cleanup; only after thread exit may it atomically persist/publish Waiting jobs.
 Partial cleanup/final-save failure cannot publish a runnable half-restarted job.
 Stop finishes the admitted slice; close suppresses results/persists uncertainty.
 Every restart uses a unique child destination: cancellation can suppress the last
-worker inventory, so unknown partials must not be reused. Keep retains final/
-subtitle/thumbnail outputs, including overlapping legacy aliases; Replace permits
+worker inventory, so unknown partials must not be reused. Keep retains ALL old
+paths, since even temporary files may have finalized after cancellation. Escaping
+filename templates/torrent paths are rejected before cleanup; Replace permits
 permanent removal only of recorded in-root paths. Auth/route/template/torrent
 metadata remain captured. See BULK_RESTART.md for compatibility and QA limits.
 

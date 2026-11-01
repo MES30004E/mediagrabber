@@ -66,7 +66,7 @@ def test_restart_uses_post_modal_inventory_and_keeps_outputs(window, tmp_path, m
     monkeypatch.setattr(window, "_confirm_restart", confirm)
     window.restart_selected(); finish(window)
     changed = window.jobs[original.id]
-    assert not partial.exists() and final.read_bytes() == b"keep"
+    assert partial.exists() and final.read_bytes() == b"keep"
     assert changed.options.download_dir != str(tmp_path) and not changed.output_file
 
 
@@ -174,3 +174,59 @@ def test_empty_selection_does_not_prompt_or_start_restart(window, monkeypatch):
     monkeypatch.setattr(window, "_confirm_restart", unexpected)
     window.restart_selected()
     assert not window.queue_batch.busy and window.task_manager.active_count == 0
+
+
+def test_keep_retains_file_promoted_from_temporary_to_final_after_cancel(window, tmp_path, monkeypatch):
+    job = populate(window, tmp_path, 1)[0]; output = tmp_path/"finished.mp4"; output.write_bytes(b"in progress")
+    job.temporary_files = [str(output)]; job.status = JobStatus.CONVERTING
+    window.database.save_job(job); stopped = threading.Event(); release = threading.Event()
+    def transfer(cancel, _progress):
+        assert cancel.wait(5); stopped.set(); assert release.wait(5)
+        output.write_bytes(b"completed final")
+        final = copy.deepcopy(job); final.final_files = [str(output)]; final.temporary_files.clear()
+        return final  # TaskManager correctly suppresses this after cancellation.
+    task = "job-"+job.id
+    window.active[job.id] = window.task_manager.start("download-media", transfer, task_id=task,
+        on_result=window._job_changed, on_finished=window._job_finished)
+    monkeypatch.setattr(window, "_confirm_restart", lambda _jobs: "keep"); window.restart_selected()
+    deadline = time.monotonic()+3
+    try:
+        while not stopped.is_set() and time.monotonic() < deadline: _APP.processEvents()
+        assert stopped.is_set()
+    finally: release.set()
+    finish(window)
+    assert output.exists() and output.read_bytes() == b"completed final"
+    assert window.jobs[job.id].status == JobStatus.WAITING
+
+
+@pytest.mark.parametrize("failure", ["database", "settings"])
+def test_close_persistence_failure_while_restart_waits_for_owner_cannot_skip_shutdown(window, tmp_path, monkeypatch, failure):
+    from PySide6.QtGui import QCloseEvent
+    job = populate(window, tmp_path, 1)[0]; job.status = JobStatus.DOWNLOADING
+    window.database.save_job(job); stopped = threading.Event(); release = threading.Event(); calls = []
+    def transfer(cancel, _progress):
+        assert cancel.wait(5); stopped.set(); assert release.wait(5)
+    task = "job-"+job.id
+    window.active[job.id] = window.task_manager.start("download-media", transfer, task_id=task, on_finished=window._job_finished)
+    monkeypatch.setattr(window, "_confirm_restart", lambda _jobs: "keep"); window.restart_selected()
+    deadline = time.monotonic()+3
+    while not stopped.is_set() and time.monotonic() < deadline: _APP.processEvents()
+    assert stopped.is_set()
+    def fail(*_a, **_kw): raise OSError("synthetic persistent shutdown failure")
+    if failure == "database": monkeypatch.setattr(window.database, "save_jobs", fail)
+    else: monkeypatch.setattr(window, "_persist_settings", fail)
+    original = window.task_manager.shutdown
+    def shutdown(timeout): calls.append(timeout); return original(timeout)
+    monkeypatch.setattr(window.task_manager, "shutdown", shutdown)
+    timer = threading.Timer(.03, release.set); timer.start()
+    try:
+        event = QCloseEvent(); window.closeEvent(event)
+        assert calls == [10_000] and event.isAccepted()
+        assert not any(record.thread.isRunning() for record in window.task_manager._records.values())
+        # QThread ended/ownership relay is queued; native threads must already
+        # be stopped, then one bounded GUI drain releases the bookkeeping.
+        deadline = time.monotonic()+1
+        while window.task_manager.active_count and time.monotonic() < deadline: _APP.processEvents()
+        assert window.task_manager.active_count == 0
+        assert window.clean_marker.exists()
+    finally: release.set(); timer.join(); original(1000)

@@ -577,4 +577,6 @@ and atomic Waiting publication. Fresh child destinations prevent reuse of unknow
 partials; no foreign paths are deleted. Source regression/paired evidence and
 limits are in BULK_RESTART.md. Both frozen cycles now require real restart evidence
 in addition to all older gates; added work changes timings, not prior acceptance.
-Full local826passed75.89s; exact hosted and fresh independent review still pending.
+Final review's template-escape/late-final-promotion/close-persistence findings are
+fixed RED→GREEN. Keep now retains ALL old paths; no deletion is inferred from stale
+temporary categories. Full local841passed82.04s; exact hosted still pending.
