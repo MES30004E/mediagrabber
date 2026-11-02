@@ -38,7 +38,9 @@ def collection_key(job: DownloadJob) -> str:
     if _text(job.collection_id): return job.collection_id
     source, title, kind = _provenance(job.item)
     if source and title:
-        return "legacy:" + hashlib.sha256(json.dumps((source, title, kind), ensure_ascii=False).encode()).hexdigest()
+        # SQLite JSON may contain escaped lone surrogates. Preserve every valid
+        # pre-existing key while hashing malformed provenance deterministically.
+        return "legacy:" + hashlib.sha256(json.dumps((source, title, kind), ensure_ascii=False).encode("utf-8","surrogatepass")).hexdigest()
     return "ungrouped"
 
 

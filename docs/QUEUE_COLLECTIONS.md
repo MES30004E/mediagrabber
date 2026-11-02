@@ -31,8 +31,10 @@ per-job widget, worker, SQL or network request is added for aggregate presentati
 
 The bar explicitly shows **equal-weighted reported job progress**, not bytes or
 a success rate. Completed (including warnings) counts100; invalid/nonfinite
-progress is unknown and excluded from the known-value mean. With no known values
-the bar says Unknown. During a batch, actual operation completed/failed/pending
+progress is unknown and excluded from the known-value mean. If ANY values are
+unknown the bar is hidden; explicit completed/total and known/total/unknown counts
+replace it. When all values are known the bar says Avg. item; its tooltip explains
+equal weighting/the denominator/not bytes/not success. During a batch, actual operation completed/failed/pending
 counts replace the stale aggregate and say that totals refresh afterward.
 Collection choices/totals synchronize at batch completion, not on every32-ID
 slice. Normal transfer callbacks update incrementally. Filter changes do not
@@ -42,10 +44,12 @@ resynchronize the collection index; changing kind still reformats queue columns.
 
 Choose a collection to Pause, Resume or Cancel it with one count/scope confirmation
 and the existing32-ID QueueBatch executor. Completed/Completed-with-warnings jobs
-remain completed even if they finish while confirmation is open. Ordinary selected
-cancellation has the same completion protection.
+remain completed even if they finish while confirmation is open or while their
+actual owner exits. Every slice rechecks collection membership. Ordinary selected
+pause/cancellation has the same completion protection.
 
-Clear entries offers Completed (including warnings), Cancelled and Failed, plus
+The visible **Clear Completed** primary face clears completed entries (including
+warnings); its arrow offers Completed, Cancelled and Failed, plus
 the entire current collection. With All collections selected, status clearing
 addresses the **entire queue**. These explicit scope actions intentionally ignore
 per-job kind/status/search filters; the one confirmation names the actual scope
@@ -53,7 +57,9 @@ and count. Queue-entry removal keeping files is the safe default. Optional
 verified owned-file deletion retains existing owner-drain/32-snapshot/one-worker
 and file-ownership/Trash boundaries; no destination wildcard deletion.
 
-Targets are frozen UUIDs before the modal. Status/group eligibility is checked
+ALL scoped clears, even one item, use the transactional bounded executor, rather
+than per-item small-clear deletion. Deferred-owner failures settle truthfully and
+retain entries. Targets are frozen UUIDs before the modal. Status/group eligibility is checked
 again afterward, before each admitted slice and after owners stop before file
 cleanup. A job that no longer matches is retained with truthful skipped/failure
 reporting, rather than deleting newly completed/other-collection work. Generic
@@ -67,14 +73,28 @@ action targets. Unknown/deleted collections are refused.
 Before this checkpoint, exact034efad/run41289264510 passed Linux841, macOS60
 backend tests, Swift25/actual workers, protocol9, the frozen four-size/two-cycle
 matrix, replacement and strict extracted-archive launch. That qualification is
-not evidence for new uncommitted collection code.
+not evidence for the newer collection checkpoint.
 
 Connected new/old tests:135passed56.41s. The pre-diagnostic full local suite:
 870passed88.80s. Native probe/packaged verifier tests:76passed4.23s, including
 18 observed RED→GREEN missing/misleading group-report cases and a broken real
 clear control that the old probe failed to detect. Final pre-review full local
 suite:889passed119.48s, no skips/warnings reported. Extension10/protocol9 and
-pip dependency check pass. Fresh review and exact hosted qualification remain.
+pip dependency check pass.
+
+The single fresh review found five Important issues: Pause downgraded completed
+jobs while owners exited; group actions failed to recheck membership; small
+clears could partially commit and leave stale UI; mixed unknown progress could
+show100%; escaped malformed legacy Unicode could abort hashing. Each was observed
+RED→GREEN, including real TaskManager owners and SQLite trigger/reopen tests.
+Valid legacy hashes remain unchanged. Connected66passed12.22s; full post-fix
+900passed121.98s. The further native-gate extension now requires the actual
+primary Clear Completed control and rejects a disconnected button/false evidence;
+native probe/verifier78passed5.19s. Exact hosted qualification is still required.
+Final full local suite including those primary gates:902passed124.31s, no skips
+or warnings reported. Extension10/protocol9/pipcheck/shellsyntax pass.
+Minor deferred: name-only changes retain the aggregate's first label until its
+group is removed; no user rename feature is claimed.
 
 The guarded source matrix adds a **separate** second N-job admission after the
 original nine stages; all prior18records/two cycles, selection/restart, worker,
@@ -90,6 +110,11 @@ syncs. Extra fixture work is not a paired performance improvement:
 | 800 | 1.445s | 1.357s | 0.241s |
 | 1,000 | 1.820s | 1.711s | 0.309s |
 | 5,000 | 9.840s | 9.313s | 1.652s |
+
+The post-review rerun also passed all four sizes, with primary Clear Completed
+and zero final owners. Extra sequence wall/gap:100=.208/.029s,800=1.489/.244s,
+1000=1.850/.309s,5000=10.087/1.670s. Early cases shared brief probe-test load;
+neither run is a calibrated/paired speed improvement.
 
 These are single local offscreen Python3.12.13/PySide6 6.11.2 observations, not
 Cocoa latency acceptance or leak evidence. The5,000 gap remains material. Modal

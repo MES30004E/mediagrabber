@@ -225,3 +225,102 @@ def test_progress_callback_cannot_erase_frozen_collection_name(window):
     window._job_changed(changed)
     persisted={value.id:value for value in window.database.load_jobs()}
     assert persisted[changed.id].collection_id=="a" and persisted[changed.id].collection_name=="Collection A"
+
+
+@pytest.mark.parametrize("status",[JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS])
+@pytest.mark.parametrize("action",["collection","selected"])
+def test_pause_preserves_completed_download_while_real_owner_is_draining(window,monkeypatch,status,action):
+    import threading
+    values=populate(window,4); choose(window,"a"); target=values[0]; release=threading.Event()
+    def transfer(cancel,progress):
+        completed=copy.deepcopy(target); completed.status=status; completed.progress=100
+        progress(completed); assert release.wait(5)
+    key="job-"+target.id
+    window.active[target.id]=window.task_manager.start("download-media",transfer,task_id=key,
+        on_progress=window._job_changed,on_finished=window._job_finished)
+    deadline=time.monotonic()+3
+    try:
+        while window.jobs[target.id].status!=status and time.monotonic()<deadline: _APP.processEvents()
+        assert window.jobs[target.id].status==status and target.id in window.active
+        monkeypatch.setattr(window,"_confirm_collection_action",lambda *_args:True)
+        if action=="collection": window.act_on_collection("Pause"); finish(window)
+        else: window._pause([window.jobs[target.id]])
+        assert window.jobs[target.id].status==status
+    finally:
+        release.set(); deadline=time.monotonic()+3
+        while window.task_manager.active_count and time.monotonic()<deadline: _APP.processEvents(); time.sleep(.001)
+    assert target.id not in window.active and {value.id:value for value in window.database.load_jobs()}[target.id].status==status
+
+
+@pytest.mark.parametrize("when",["modal","later_slice"])
+def test_collection_cancel_rechecks_membership_before_each_admission(window,monkeypatch,when):
+    values=populate(window,800); choose(window,"a"); target=values[399]
+    waiting=copy.deepcopy(target); waiting.status=JobStatus.WAITING; window._job_changed(waiting)
+    def move():
+        changed=copy.deepcopy(window.jobs[target.id]); changed.collection_id="b"; changed.collection_name="Collection B"
+        window._job_changed(changed)
+    def confirm(*_args):
+        if when=="modal": move()
+        return True
+    monkeypatch.setattr(window,"_confirm_collection_action",confirm)
+    window.act_on_collection("Cancel")
+    if when=="later_slice": move()
+    finish(window)
+    assert window.jobs[target.id].collection_id=="b" and window.jobs[target.id].status==JobStatus.WAITING
+    assert {value.id:value for value in window.database.load_jobs()}[target.id].status==JobStatus.WAITING
+
+
+def test_small_completed_clear_is_atomic_and_reconciles_a_second_delete_failure(window,monkeypatch):
+    values=populate(window,8); expected={value.id for value in values}
+    for value in values: value.status=JobStatus.COMPLETED
+    window.database.save_jobs(values); window._refresh_queue()
+    window.database._connection.execute("CREATE TRIGGER reject_second BEFORE DELETE ON jobs WHEN OLD.id='1' BEGIN SELECT RAISE(ABORT,'synthetic clear failure'); END")
+    monkeypatch.setattr(window,"_confirm_clear",lambda *_args:"list")
+    try: window.clear_completed()
+    except Exception: pass  # Inspect real committed/UI state even on the broken path.
+    finish(window)
+    assert {value.id for value in window.database.load_jobs()}==set(window.jobs)==expected
+    assert window.queue_model.rowCount()==window.collections.model.summary("").total==8
+    info=window.queue_batch.describe(); assert info["failed"]==8 and info["completed"]==0 and info["pending"]==0
+
+
+def test_small_clear_deferred_owner_delete_failure_is_settled_and_retained(window,monkeypatch):
+    import threading
+    values=populate(window,4); target=values[1]; stopped=threading.Event(); release=threading.Event()
+    window.database._connection.execute("CREATE TRIGGER reject_owned BEFORE DELETE ON jobs WHEN OLD.id='1' BEGIN SELECT RAISE(ABORT,'synthetic owned clear failure'); END")
+    def transfer(cancel,_progress):
+        assert cancel.wait(5); stopped.set(); assert release.wait(5)
+    key="job-"+target.id
+    window.active[target.id]=window.task_manager.start("download-media",transfer,task_id=key,on_finished=window._job_finished)
+    monkeypatch.setattr(window,"_confirm_clear",lambda *_args:"list")
+    window.clear_completed(); deadline=time.monotonic()+3
+    try:
+        while not stopped.is_set() and time.monotonic()<deadline: _APP.processEvents()
+        assert stopped.is_set()
+    finally: release.set()
+    finish(window)
+    assert target.id in window.jobs and window.task_manager.active_count==0
+    assert window.jobs[target.id].status==JobStatus.COMPLETED_WARNINGS
+    info=window.queue_batch.describe(); assert info["failed"]==1 and info["completed"]==0 and info["pending"]==0
+
+
+def test_mixed_unknown_progress_does_not_show_a_whole_collection_percentage(window):
+    values=populate(window,4)
+    for value in values[:2]: value.status=JobStatus.DOWNLOADING
+    values[0].progress=100; values[1].progress=float("nan")
+    window._refresh_queue(); choose(window,"a")
+    assert window.collections.progress.isHidden()
+    text=window.collections.summary_label.text().lower()
+    assert "unknown" in text and "1/2" in text and "0/2" in text
+
+
+def test_direct_clear_completed_button_uses_current_scope_once_and_keeps_other_states(window,monkeypatch):
+    from PySide6.QtWidgets import QToolButton
+    values=populate(window,800); choose(window,"a"); expected={value.id for value in values[:400] if value.status==JobStatus.COMPLETED_WARNINGS}
+    prompts=[]; monkeypatch.setattr(window,"_confirm_clear",lambda jobs,scope:prompts.append(({value.id for value in jobs},scope)) or "list")
+    button=window.collections.clear_button
+    assert button.text()=="Clear Completed" and button.isVisible()
+    assert button.popupMode()==QToolButton.ToolButtonPopupMode.MenuButtonPopup
+    button.click(); finish(window)
+    assert len(prompts)==1 and prompts[0][0]==expected and "Collection A" in prompts[0][1]
+    assert set(window.jobs)=={value.id for value in values}-expected

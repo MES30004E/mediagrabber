@@ -74,7 +74,7 @@ def queue_payload(count=100):
                 "action_confirmations": 3, "clear_confirmations": 4, "completed_retained": 1,
                 "cancelled": count//2-1, "cleared_completed": 1, "cleared_cancelled": count//2-1,
                 "cleared_failed": 1, "cleared_collection": count//2-1, "remaining": 0, "active_tasks": 0,
-                "other_group_unchanged": True, "persisted_membership": True,
+                "other_group_unchanged": True, "persisted_membership": True, "primary_completed_clear": True,
                 "wall_seconds": .1, "cpu_seconds": .1, "max_heartbeat_gap_seconds": .01}})
         for stage in stages:
             queue["measurements"].append({"cycle": cycle, "operation": stage, "wall_seconds": .01, "cpu_seconds": .01,
@@ -220,7 +220,7 @@ def test_packaged_queue_requires_bounded_restart_evidence(tmp_path, defect):
 
 
 @pytest.mark.parametrize("defect", ["missing", "merged", "broadened", "rescan", "notifications", "actions", "clears",
-    "completed", "cancelled", "failed_clear", "collection_clear", "retained", "owner", "other_group", "persistence", "nan", "boolean", "restart_membership"])
+    "completed", "cancelled", "failed_clear", "collection_clear", "retained", "owner", "other_group", "persistence", "nan", "boolean", "restart_membership", "primary"])
 def test_packaged_queue_requires_actual_scoped_collection_evidence(defect):
     from scripts.check_packaged_app import validate_queue
     queue=queue_payload()["queue"]; cycle=queue["cycles"][0]; checks=cycle["collection_checks"]
@@ -242,4 +242,5 @@ def test_packaged_queue_requires_actual_scoped_collection_evidence(defect):
     elif defect=="nan": checks["wall_seconds"]=float("nan")
     elif defect=="boolean": checks["hidden_rows"]=False
     elif defect=="restart_membership": cycle["restart_checks"]["membership_preserved"]=False
+    elif defect=="primary": checks["primary_completed_clear"]=False
     with pytest.raises(RuntimeError): validate_queue(queue,100)

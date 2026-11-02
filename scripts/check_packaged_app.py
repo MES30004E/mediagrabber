@@ -60,7 +60,8 @@ def validate_queue(data: object, count: int) -> None:
             completed_retained=1,cancelled=count//2-1,cleared_completed=1,cleared_cancelled=count//2-1,
             cleared_failed=1,cleared_collection=count//2-1,remaining=0,active_tasks=0)
         require(all(integer(groups.get(key),value) for key,value in expected_groups.items()))
-        require(groups.get("other_group_unchanged") is True and groups.get("persisted_membership") is True)
+        require(groups.get("other_group_unchanged") is True and groups.get("persisted_membership") is True and
+                groups.get("primary_completed_clear") is True)
         require(all(finite(groups.get(key)) for key in ("wall_seconds","cpu_seconds","max_heartbeat_gap_seconds")))
     measurements = data.get("measurements")
     require(isinstance(measurements, list) and len(measurements) == 18)

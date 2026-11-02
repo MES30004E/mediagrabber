@@ -62,6 +62,23 @@ Zero targets, Cancel and failed admission/DB writes must not invent success or
 touch unrelated jobs/files. Restart preserves collection identity. Legacy/new
 groups survive DB reopen. No dedup/archive/batch-format/recovery completion claim.
 
+## Explicit 2 November steering corrections
+
+Restore a visible Clear Completed primary action without adding another dense
+toolbar control: change the existing clear button to native MenuButtonPopup;
+the primary face clears completed in the named scope, the arrow retains other
+clear actions. A separate extra primary button would use more compact space;
+a menu-only Completed action is explicitly rejected by the user. This is the
+executor's narrow implementation choice, not substantial-redesign approval.
+
+Never show a determinate collection-average bar if some item progress is unknown.
+Display known/total, unknown count and completed/total explicitly instead. When
+all values are known, label the bar as average item progress and explain equal
+weighting/not bytes/not success rate. Completed work stays protected during Pause,
+including while its actual owner exits; group membership is rechecked per status
+action slice. All scoped clears, even one item, use transactional QueueBatch
+removal and truthful deferred-owner settlement.
+
 ## Qualification and constraints
 
 TDD pure/randomized aggregates, real Qt roles/model/proxy, legacy/new persistence,

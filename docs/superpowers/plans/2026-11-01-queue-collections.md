@@ -54,6 +54,8 @@ Consumes Task1; existing QueueBatch/FileRemoval/QueueRestart unchanged in purpos
   status actions; guard completed states on Cancel; GREEN old/new tests.
 - [x] Capture/inspect900x650/1180x820actual frames; new controls fit; existing
   compact113px queue viewport/narrow cells and standard gap remain P1 work.
+- [x] Explicit2Nov steering: restore direct Clear Completed on existing split
+  button; make unknown progress counts visible without uncertain full bar.
 
 ### Task3: Native qualification and evidence
 
@@ -64,7 +66,7 @@ new docs/QUEUE_COLLECTIONS.md.
   selection/restart/worker/persistence/archive gates; GREEN.
 - [x] Measure O(1) aggregate progress/filter observations and large-scope action responsiveness;
   document legacy grouping/average semantics and bulk summary deferral limits.
-- [ ] Full Python/JS/drift/pipcheck; one fresh read-only review, one Critical/
+- [x] Full Python/JS/drift/pipcheck; one fresh read-only review, one Critical/
   Important RED→GREEN fix pass/full suite; defer minors; retain full backlog.
 - [ ] Exact audit/coherent commits/nonforce development push, remote SHA and exact
   actual hosted macOS/Linux/frozen matrix/archive logs. No release or installation.

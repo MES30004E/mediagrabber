@@ -150,6 +150,12 @@ Status/whole-collection clearing shares selected removal's safe executor; row
 filters intentionally do not narrow this explicitly named scope. Open-menu scope
 cannot broaden into All after group deletion. During a batch the summary shows
 actual batch outcomes and explicitly defers aggregate synchronization until finish.
+Every scoped clear uses atomic QueueBatch transactions, including small sets;
+deferred-owner errors settle while retaining entries. Status actions also recheck
+collection membership and protect completed work during owner exit. Mixed-unknown
+progress hides the average bar and exposes completed/total plus known/unknown
+counts. Clear Completed is again directly available, with other clears on its
+split-button arrow. Malformed legacy Unicode hashing preserves valid prior keys.
 See QUEUE_COLLECTIONS.md for legacy/progress semantics and qualification limits.
 
 These are incremental prerequisites, not completed scale/crash qualification.

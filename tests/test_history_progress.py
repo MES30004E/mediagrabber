@@ -229,6 +229,12 @@ def test_clear_completed_remains_dirty_if_queue_render_fails_before_history(wind
     def fail(*_args, **_kw): raise RuntimeError("synthetic queue render failure")
     monkeypatch.setattr(window, "_refresh_queue", fail)
     monkeypatch.setattr(window,"_confirm_clear",lambda _jobs,_scope:"list")
+    # Small clears now use the same atomic bounded executor. Run real apply and
+    # finish inline so this test observes a render exception directly, rather
+    # than at the Qt signal boundary; persistence/invalidation stay real.
+    def inline(ids,apply,_label,**_kwargs):
+        apply(list(ids)); window._queue_batch_finished(window.queue_batch.describe()); return True
+    monkeypatch.setattr(window.queue_batch,"start",inline)
     with pytest.raises(RuntimeError, match="synthetic queue render failure"): window.clear_completed()
     monkeypatch.setattr(window, "_refresh_queue", refresh)
     calls = watch_queries(window, monkeypatch); other.progress = 25; window._job_changed(other)

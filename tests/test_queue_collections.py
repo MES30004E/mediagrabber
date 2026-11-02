@@ -1,4 +1,5 @@
 import copy
+import json
 import math
 import random
 
@@ -77,3 +78,21 @@ def test_randomized_updates_match_independent_group_counts_and_progress():
             if expected:
                 progress = sum(100 if value.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS} else value.progress for value in expected)/len(expected)
                 assert math.isclose(summary.progress, progress, abs_tol=1e-8)
+
+
+def test_escaped_malformed_legacy_provenance_reopens_without_breaking_valid_history(tmp_path):
+    database=Database(tmp_path/"queue.sqlite3"); values=[job(0,group=""),job(1,group="")]
+    database.save_jobs(values)
+    payload=values[0].to_dict(); payload.pop("collection_id"); payload.pop("collection_name")
+    payload["item"].update(original_url="https://example.test/list/\ud800",collection_title="Old playlist")
+    database._connection.execute("UPDATE jobs SET payload=? WHERE id='0'",(json.dumps(payload),)); database._connection.commit(); database.close()
+    reopened=Database(database.path)
+    try: loaded=reopened.load_jobs()
+    finally: reopened.close()
+    index=CollectionIndex(); index.sync(loaded)
+    assert index.summary("").total==2 and len(index.group_ids)==2
+    legacy=next(value for value in loaded if value.id=="0")
+    assert collection_key(legacy).startswith("legacy:") and collection_key(legacy)==collection_key(copy.deepcopy(legacy))
+    valid=job(2,group=""); valid.item.original_url="https://example.test/list/日本語"
+    valid.item.collection_title="Café"; valid.item.collection_type="Playlist"
+    assert collection_key(valid)=="legacy:9758271387c39cecd9770d93e3d7e0a03a1a85a7127fc895350895bd1ce550d3"

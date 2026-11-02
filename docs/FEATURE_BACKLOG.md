@@ -5,6 +5,48 @@ Better UX and Public Releases master goal. The Critical UX, Scalability and
 Architecture Addendum changes the implementation order below. An existing helper,
 passing unit test or metadata inspector is not evidence of a finished feature.
 
+## Product steering — 2 November 2026
+
+Definitive vision: **MediaGrabber — simple by default, powerful when needed**,
+combining approachable paste/select/download with capable queue/library/auth/media
+controls. The Product Quality/UI/UX steering directive extends every row below;
+it does not reset this project or authorize a speculative rewrite.
+
+Execution order after safely finishing/qualifying the current collection work:
+
+1. **A: UI correctness/usability.** Real child/table/menu/dialog/splitter/dynamic
+   theme propagation (Light/Dark/System), contrast/focus/disabled states, responsive
+   layout and persisted geometry/panels/sidebar. Restore direct **Clear Completed**,
+   discoverable clear cancelled/failed/selected/current collection, cancel group,
+   retry failed/restart selected; one concise confirmation/keep-files default.
+   Prioritize titles/filenames, useful queue space, contextual details and human
+   wording. No misleading progress when totals are uncertain.
+2. **B: design-first native redesign.** Research Stacher/ClipGrab and official
+   macOS/Qt guidance; create UI_DESIGN_SYSTEM.md plus coherent Download/Queue/
+   Library/History/Settings visual proposals, alternatives/rationale, then approved
+   incremental reusable components. No generic decorative dashboard, no web rewrite.
+3. **C: public rebrand.** Visible **MediaGrabber** in window/sidebar/About/menus/
+   notifications/help/extension/archive/release names, original icon retained.
+   Preserve internal package/data/preferences/history/Keychain/native host/extension
+   identity and sessions. Test compatibility, never silently create an empty profile.
+4. **D: actual viewer/media UX.** Browsable local thumbnails/video/audio playback,
+   timeline/seek/volume/mute/fullscreen/tracks/search/sort/filter/Finder/fallback;
+   distinct from playlist thumbnail/duration and Inspect Video metadata.
+5. **E: all remaining functionality/release readiness.** Auth/Watch Later, Companion
+   first run, multi-site sessions/Tor/privacy, formats/languages/subtitles/QuickTime,
+   dedup/archive, recovery, components/self-update/rollback/controlled releases.
+
+Each screen/major interaction needs actual behavior, keyboard/states/themes,
+900x650/1180x820/1440x900/native fullscreen screenshots inspected, focused/full
+tests, performance/RSS/workers/SQL/thumbnail/scroll/shutdown/relaunch evidence and
+relevant hosted frozen qualification. Offscreen renders are not native acceptance.
+Long-running retention and UI stalls remain release blockers. Every checkpoint
+report must list unfinished work, not replace the roadmap with an activity log.
+Preferred eventual dist/MediaGrabber.app on exFAT remains unresolved/untested;
+no install, Desktop launcher, protected merge, release or personal credential
+changes approved. Existing public-push security gates and no-local-Apple/admin
+restrictions remain. Live account/media tests need explicit user participation.
+
 ## Current checkpoint and restrictions
 
 - Development branch: `improvement/download-reliability`. Latest hosted-tested
@@ -111,11 +153,15 @@ passing unit test or metadata inspector is not evidence of a finished feature.
   compatibility, incremental counts/reported-progress and native scope controls.
   Completed/cancelled/failed/whole-collection clear uses one keep-default dialog,
   shared bounded removal and post-modal/admission/owner-exit eligibility guards.
-  Full local889passed119.48s after diagnostic extension; native probe/verifier76
-  passed4.23s; JS10/protocol9/pipcheck pass. Separate source four-size group fixture passes but5,000 max gap
-  remains1.652s. Actual compact/standard offscreen controls/menu inspected;
+  Single fresh review's five Important completion/scope/partial-clear/unknown-
+  progress/Unicode findings are fixed RED→GREEN; full post-fix900passed121.98s,
+  native probe/verifier78passed5.19s; JS10/protocol9/pipcheck pass. Direct Clear
+  Completed restored on primary split-button face, every scoped clear transactional,
+  uncertain progress explicitly counted with no bar. Separate source four-size
+  rerun passes but5,000 max gap remains1.670s. Compact/standard/unknown offscreen controls/menu inspected;
   compact113px queue viewport/layout limitations are not P1 acceptance. Final
-  review/exact hosted qualification pending; see QUEUE_COLLECTIONS.md.
+  final primary-gate full suite902passed124.31s; exact hosted qualification
+  pending; see QUEUE_COLLECTIONS.md.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
@@ -148,8 +194,8 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
 | Q04 Hosted-tested narrow scopes | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Exact72fd947/run41210675065 frozen gates pass. Details-dialog caption minor remains; no professional visual/live-media acceptance. Not analysed-playlist checkbox selection |
 | Q05 Hosted-tested narrow restart; collections in progress | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart tests | Exact034/run41289264510: one restart dialog/default Keep,32 snapshots/one worker, owner drain/prepare/commit gates pass. New collection controls, real transfers and broad shutdown/freeze qualification remain |
-| Q06 Portable-tested; hosted/review pending | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `collection_controls.py`, `ui.py`, shared QueueBatch/FileRemoval; collection UI/native probe tests; QUEUE_COLLECTIONS.md | Current collection or explicit All, real target counts, post-modal/slice/owner eligibility and800/5000tests pass; final review/full suite/frozen Cocoa/live-file QA pending |
-| Q07 Portable-tested; hosted/review pending | Collection grouping, group progress/status totals and bulk controls remain responsive | `queue_collections.py`, `collection_model.py`, `collection_controls.py`, immutable queue roles; pure/randomized/model/UI tests | Persisted fresh-import/Legacy/Ungrouped identities, O(1) aggregate updates/two notifications, restart compatibility. Bulk totals explicitly defer;5,000maxgap1.652s remains; exact hosted/real transfer/visual qualification pending |
+| Q06 Portable-tested/review fixes; hosted pending | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `collection_controls.py`, `ui.py`, shared QueueBatch/FileRemoval; collection UI/native probe tests; QUEUE_COLLECTIONS.md | Primary Clear Completed/current collection or explicit All, real target counts, post-modal/slice/owner eligibility and800/5000tests pass; small clears now atomic, deferred DB failures settled. Exact frozen Cocoa/live-file QA pending |
+| Q07 Portable-tested/review fixes; hosted pending | Collection grouping, group progress/status totals and bulk controls remain responsive | `queue_collections.py`, `collection_model.py`, `collection_controls.py`, immutable queue roles; pure/randomized/model/UI tests | Fresh-import/Legacy/Ungrouped identities, O(1) aggregate updates/two notifications, restart compatibility; mixed unknown has no misleading bar. Bulk totals defer;5,000maxgap1.670s remains; exact hosted/real transfer/visual qualification pending. Minor name-only label refresh deferred |
 | Q08 Open | Stable extractor/media identity deduplicates queue/download archive; completed outputs are not accidentally redownloaded or destroyed | `models.py`, `downloader.py`, `database.py`, `organisation.py` | Explicit duplicate/archive policy, cross-URL identities, missing outputs, retries and deliberate restart tests; no assumed guarantee from UUID job IDs |
 | Q09 Partial | Interrupted jobs restore accurately; resume preserves compatible partials and completed outputs | `Database.load_jobs`, `downloader.py`, `file_ownership.py`; `test_database.py`, `test_downloader_policy.py` | Scale/relaunch tests, transactional bulk persistence and fault injection across cancellation/removal/shutdown |
 | Q10 Partial | Batch quality/container/audio/subtitle defaults plus per-item overrides survive queueing/restart | `models.py`, `media_details.py`, `ui.py`; `test_media_details.py`, `test_media_details_ui.py`, `test_formats.py` | Existing media-selection coverage is not queue-wide batch edit; test mixed sources, unsupported requirements and large selected sets |
@@ -161,6 +207,8 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | --- | --- | --- | --- |
 | U01 Open | `docs/UI_DESIGN_SYSTEM.md` defines navigation, type, spacing/density, light/dark tokens, contrast/focus, controls/tables/progress/menus, states, resizing/fullscreen and destructive patterns | `theme.py`, `ui_components.py`, `ui.py`, `settings_window.py` | Research Stacher 7/ClipGrab interactions and Apple/Qt authoritative guidance; create actual mockups/screenshots before large redesign; user design approval |
 | U02 Open; diagnostic renders only | Real compact/standard/large/fullscreen screenshots in light/dark show readable, aligned unclipped UI; retain icon/native PySide6 | workspace queue-model current/baseline light/dark PNGs; UI/model tests | Offscreen1180x820 diagnostic is not Cocoa/fullscreen/design acceptance. Existing dark switch stale-child palette reproduced against baseline; fix with rendered regression. Title/destination remain narrow; approved design/resize QA still required |
+| U06 Partial; explicit steering priority A | Direct Clear Completed, discoverable advanced bulk actions, concise counted dialogs, precise known/unknown progress and human-readable messages | Current collection controls/confirmation/progress code; collection tests | Primary Clear Completed restored and mixed-unknown denominator fixed in collection work; remaining toolbar/dialog/jargon simplification and full theme/size/keyboard/native QA |
+| RB01 Open; checkpoint C | Visible MediaGrabber name everywhere, original icon retained, no data/session/extension identity loss | Existing branding/constants/specs/native host/companion/archive names | Inventory all user-visible names separately from compatible internal IDs; migration/preservation tests; hosted bundle/Dock/Finder/extension verification; exFAT install unresolved, no launcher/install now |
 | U03 Partial | Large analysed playlist has resizable remembered panels, collapsible options/preview, search, visible/all/none/invert, counts, keyboard/multi-selection | `ui.py`, `settings.py`; `test_playlist_workspace.py`; `docs/PLAYLIST_WORKSPACE.md` | 800–5,000 scale qualification and visual QA; current playlist table is still item-based |
 | U04 Partial | Lazy playlist thumbnails and real duration reflect current selected video, avoid N requests and route fallback | `thumbnail_cache.py`, `ui.py`; `test_thumbnail_cache.py`, `test_playlist_workspace.py` | Distinct from viewer: real rendered thumbnail/duration QA, scrolling/large-list responsiveness, missing/slow/cancelled responses |
 | U05 Partial | On-demand per-video format/audio/language and manual/automatic subtitle metadata; only available controls; safe overrides | `media_details.py`, `media_details_dialog.py`, `formats.py`, `subtitle_mux.py`; media-details/formats/subtitle tests | Real authorised media and batch language/subtitle outputs with explicit user participation; no invented Original/default identity or 800 automatic inspections |

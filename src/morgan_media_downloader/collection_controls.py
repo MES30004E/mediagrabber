@@ -20,7 +20,7 @@ class CollectionControls(QWidget):
         self.selector.setMinimumContentsLength(18); self.selector.setMinimumWidth(180); self.selector.setMaximumWidth(260)
         self.selector.currentIndexChanged.connect(lambda *_:self.filter_changed.emit()); row.addWidget(self.selector,1)
         self.progress=QProgressBar(); self.progress.setMaximumWidth(165); self.progress.setMinimumWidth(110)
-        self.progress.setAccessibleName("Collection average reported job progress")
+        self.progress.setAccessibleName("Collection average item progress")
         self.progress.setToolTip("Equal-weighted reported job progress; not bytes or a success rate."); row.addWidget(self.progress)
         self.actions_button=QToolButton(); self.actions_button.setText("Collection actions")
         self.actions_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -34,8 +34,10 @@ class CollectionControls(QWidget):
         self.summary_label=QLabel(); self.summary_label.setTextFormat(Qt.TextFormat.PlainText)
         self.summary_label.setWordWrap(True); self.summary_label.setMinimumWidth(0); self.summary_label.setMaximumHeight(42)
         layout.addWidget(self.summary_label)
-        self.clear_button=QToolButton(); self.clear_button.setText("Clear entries")
-        self.clear_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.clear_button=QToolButton(); self.clear_button.setText("Clear Completed")
+        self.clear_button.setToolTip("Clear completed queue entries. Use the arrow for other clear actions.")
+        self.clear_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.clear_button.clicked.connect(lambda _checked=False:self.clear_requested.emit("Completed",self.scope()))
         self.clear_menu=QMenu(self.clear_button); self.clear_button.setMenu(self.clear_menu); self.clear_actions={}
         self.clear_heading=self.clear_menu.addSection("Scope")
         for status in ("Completed","Cancelled","Failed","Collection"):
@@ -66,16 +68,23 @@ class CollectionControls(QWidget):
         key,_name=self.scope(); summary=self.model.summary(key)
         self.actions_button.setEnabled(bool(key and summary.total and bulk is None))
         self.clear_button.setEnabled(summary.total>0 and bulk is None)
-        self.progress.setRange(0,100); self.progress.setEnabled(bulk is None)
+        self.progress.setVisible(True); self.progress.setRange(0,100); self.progress.setEnabled(bulk is None)
         if bulk is not None:
             label=" ".join(str(bulk["label"]).split())[:80]
             self.summary_label.setText(f'Queue batch: {label} — {bulk["completed"]} completed; {bulk["failed"]} failed; {bulk["pending"]} pending. Totals refresh afterward.')
             self.progress.setValue(0); self.progress.setFormat("Totals updating")
         else:
             counts=" · ".join(f"{name}: {count}" for name,count in summary.counts if count)
-            self.summary_label.setText(f"{summary.total:,} jobs · {counts}" if counts else f"{summary.total:,} jobs")
+            text=f"{summary.total:,} jobs · {counts}" if counts else f"{summary.total:,} jobs"
+            completed=dict(summary.counts)["Completed"]; unknown=summary.total-summary.known_progress
+            if unknown:
+                text+=f" · Completed {completed}/{summary.total}; progress known for {summary.known_progress}/{summary.total} items ({unknown} unknown)"
+                self.progress.hide()
+            self.summary_label.setText(text)
             self.progress.setValue(round(summary.progress) if summary.progress is not None else 0)
-            self.progress.setFormat(f"Reported {summary.progress:.1f}%" if summary.progress is not None else "Unknown")
+            self.progress.setFormat(f"Avg. item {summary.progress:.1f}%" if summary.progress is not None and not unknown else "Unknown")
+            self.progress.setToolTip(f"Equal-weighted average of {summary.known_progress}/{summary.total} item progress values, not bytes or a success rate. "
+                f"{completed}/{summary.total} items completed. Unknown values do not establish whole-collection progress.")
 
     def _capture_actions(self):
         scope=self.scope()

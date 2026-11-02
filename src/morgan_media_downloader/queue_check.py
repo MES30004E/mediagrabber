@@ -256,7 +256,9 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
             require(window.jobs[a[0].id].status==JobStatus.COMPLETED_WARNINGS)
             require(all(window.jobs[key].status==JobStatus.CANCELLED for key in a_ids-{a[0].id})); intact()
             expected_clear.append({a[0].id})
-            trigger(window.collections.clear_menu,window.collections.clear_actions["Completed"])
+            button=window.collections.clear_button
+            require(button.isVisible() and button.isEnabled() and button.text()=="Clear Completed")
+            button.click(); spin_until(lambda:not window.queue_batch.busy); application.processEvents()
             require(set(window.jobs)==(a_ids|b_ids)-{a[0].id}); intact()
             expected_clear.append(a_ids-{a[0].id})
             trigger(window.collections.clear_menu,window.collections.clear_actions["Cancelled"])
@@ -278,7 +280,8 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
             clear_confirmations=len(clear_prompts),completed_retained=1,cancelled=count//2-1,
             cleared_completed=1,cleared_cancelled=count//2-1,cleared_failed=1,cleared_collection=count//2-1,
             remaining=len(window.jobs),active_tasks=window.task_manager.active_count,other_group_unchanged=True,
-            persisted_membership=True,wall_seconds=round(time.monotonic()-begin,6),cpu_seconds=round(time.process_time()-cpu,6),
+            persisted_membership=True,primary_completed_clear=True,
+            wall_seconds=round(time.monotonic()-begin,6),cpu_seconds=round(time.process_time()-cpu,6),
             max_heartbeat_gap_seconds=round(max(gaps,default=0),6))
     def fake_cleanup(_job):
         cleanup["gui_thread_calls"] += threading.get_ident() == gui_thread

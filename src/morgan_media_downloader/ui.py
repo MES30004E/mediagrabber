@@ -1412,6 +1412,7 @@ class MainWindow(QMainWindow):
         if self._start_large_queue_action(jobs, "Pause"): return
         saved = False
         for job in jobs:
+            if job.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS}: continue
             if job.id in self.active:
                 job.status = JobStatus.PAUSED; self.task_manager.cancel(self.active[job.id])
             elif job.status == JobStatus.WAITING: job.status = JobStatus.PAUSED
@@ -1465,11 +1466,13 @@ class MainWindow(QMainWindow):
             return True
         return False
 
-    def _apply_queue_slice(self, ids, action, settings):
+    def _apply_queue_slice(self, ids, action, settings, eligible=None):
         changed = []; cancel_tasks = []
         for job_id in ids:
             current = self.jobs.get(job_id)
             if current is None: continue
+            if eligible is not None and not eligible(current): continue
+            if current.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS}: continue
             job = copy.deepcopy(current)
             if action == "Pause":
                 if job.id not in self.active and job.status != JobStatus.WAITING: continue
@@ -1549,7 +1552,7 @@ class MainWindow(QMainWindow):
         # snapshot, including owners that finish before their slice is admitted.
         for job_id in selected_ids: self.pending_restarts.pop(job_id, None)
         delete_files = choice == "delete"
-        if delete_files or len(selected_ids) > 32:
+        if eligible is not None or delete_files or len(selected_ids) > 32:
             self.queue_batch.start(selected_ids, lambda ids: self._remove_queue_slice(ids, delete_files),
                 ("Remove entries and owned files" if delete_files else "Remove entries (keep files)")+
                 (f"; {omitted} no longer match" if omitted else ""), wait_each_slice=delete_files)
@@ -1886,7 +1889,8 @@ class MainWindow(QMainWindow):
         label=self.collections.scope_label(scope)
         if not self._confirm_collection_action(action,jobs,label) or self._queue_action_blocked(): return
         settings=copy.deepcopy(self.settings)
-        self.queue_batch.start(ids,lambda keys:self._apply_queue_slice(keys,action,settings),action+" "+label)
+        eligible=lambda job:collection_key(job)==scope[0]
+        self.queue_batch.start(ids,lambda keys:self._apply_queue_slice(keys,action,settings,eligible),action+" "+label)
 
     def _confirm_collection_action(self, action, jobs, scope):
         completed=sum(job.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS} for job in jobs)

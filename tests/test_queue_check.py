@@ -54,7 +54,7 @@ def test_real_queue_diagnostic_completes_two_cycles_with_owned_workers_and_persi
             "incremental_full_syncs":0,"incremental_summary_rows":2,"action_confirmations":3,"clear_confirmations":4,
             "completed_retained":1,"cancelled":49,"cleared_completed":1,"cleared_cancelled":49,
             "cleared_failed":1,"cleared_collection":49,"remaining":0,"active_tasks":0,
-            "other_group_unchanged":True,"persisted_membership":True}
+            "other_group_unchanged":True,"persisted_membership":True,"primary_completed_clear":True}
         assert groups["wall_seconds"]>0 and groups["max_heartbeat_gap_seconds"]>=0
         assert {key: value for key, value in result.items() if key not in {"selection_checks", "restart_checks", "collection_checks"}} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
             "acknowledged_workers": 2, "cancelled": 100, "restored": 100, "removed": 100, "remaining": 0, "active_tasks": 0,
@@ -143,5 +143,11 @@ def test_diagnostic_rejects_nonworking_restart_control(isolated_window, tmp_path
 
 def test_diagnostic_rejects_nonworking_scoped_clear_control(isolated_window,tmp_path,monkeypatch):
     monkeypatch.setattr(isolated_window,"clear_queue_status",lambda *_args:None)
+    with pytest.raises(RuntimeError,match="collection"):
+        exercise_queue(isolated_window,APP,100,tmp_path)
+
+
+def test_diagnostic_rejects_nonworking_primary_completed_clear(isolated_window,tmp_path):
+    isolated_window.collections.clear_button.clicked.disconnect()
     with pytest.raises(RuntimeError,match="collection"):
         exercise_queue(isolated_window,APP,100,tmp_path)
