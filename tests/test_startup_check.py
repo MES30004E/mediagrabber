@@ -83,8 +83,11 @@ ui.MainWindow = broken
 def test_actual_gui_queue_diagnostic_exercises_two_real_cycles_in_isolated_state(tmp_path, count):
     report = tmp_path / "queue.json"
     result = launch(tmp_path, report, queue_items=count)
-    assert result.returncode == 0, result.stderr
-    evidence = json.loads(report.read_text())
+    evidence = json.loads(report.read_text()) if report.is_file() else {}
+    # The child deliberately returns2 and writes its safe classification rather
+    # than dumping arbitrary logs. Preserve that evidence in hosted failures.
+    failure={key:evidence.get(key) for key in ("error_type","error","closed_cleanly")}
+    assert result.returncode == 0, result.stderr+"\nQUEUE_CHECK_FAILURE "+json.dumps(failure)
     assert evidence["result"] == "passed" and evidence["closed_cleanly"] is True
     queue = evidence["queue"]
     assert queue["items"] == count and len(queue["cycles"]) == 2

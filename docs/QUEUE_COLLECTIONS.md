@@ -93,6 +93,16 @@ primary Clear Completed control and rejects a disconnected button/false evidence
 native probe/verifier78passed5.19s. Exact hosted qualification is still required.
 Final full local suite including those primary gates:902passed124.31s, no skips
 or warnings reported. Extension10/protocol9/pipcheck/shellsyntax pass.
+
+First exact hosted attempt35cedea/run41383648798 **failed**: macOS build/backend60/
+Swift25 (actual workers)/drift9 passed; Linux901passed/1failed262.38s, with one
+existing QDragEnterEvent deprecation. The5,000 two-cycle startup child returned2
+after all18 original stage breadcrumbs and during its second collection sequence;
+the original test assertion omitted the child report's actual error. Packaging
+was skipped, so no frozen/native qualification exists for this checkpoint yet.
+The assertion now includes only the report's bounded error classification, not
+arbitrary private state. No test is skipped, budget increased or failure dismissed
+as flaky; inspect the next exact hosted classification before deciding the fix.
 Minor deferred: name-only changes retain the aggregate's first label until its
 group is removed; no user rename feature is claimed.
 

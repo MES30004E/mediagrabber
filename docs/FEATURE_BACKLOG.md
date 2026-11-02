@@ -161,7 +161,11 @@ restrictions remain. Live account/media tests need explicit user participation.
   rerun passes but5,000 max gap remains1.670s. Compact/standard/unknown offscreen controls/menu inspected;
   compact113px queue viewport/layout limitations are not P1 acceptance. Final
   final primary-gate full suite902passed124.31s; exact hosted qualification
-  pending; see QUEUE_COLLECTIONS.md.
+  failed at35cedea/run41383648798: actual macOS backend60/Swift25/build/drift9
+  passed, Linux901passed/1failed at the5,000 startup diagnostic; packaged job
+  skipped. Failure occurs in the second extra collection sequence after all18
+  original measured stages. Investigate child report/classification before
+  changing budgets or claiming flakiness; see QUEUE_COLLECTIONS.md.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
