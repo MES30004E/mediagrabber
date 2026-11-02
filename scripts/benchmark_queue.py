@@ -65,7 +65,7 @@ def main():
             if args.profile: command.append("--profile")
             if args.synthetic_cleanup: command.append("--synthetic-cleanup")
             result = subprocess.run(command,
-                capture_output=True, text=True, timeout=120, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONFAULTHANDLER="1"))
+                capture_output=True, text=True, timeout=210, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONFAULTHANDLER="1"))
             if result.returncode:
                 failed = True
                 print(json.dumps({"items": count, "result": "failed", "returncode": result.returncode,
@@ -75,7 +75,7 @@ def main():
             detail = error.stderr or b""
             if isinstance(detail, bytes): detail = detail.decode("utf-8", errors="replace")
             failed = True
-            print(json.dumps({"items": count, "result": "timeout", "limit_seconds": 120,
+            print(json.dumps({"items": count, "result": "timeout", "limit_seconds": 210,
                               "stderr": detail[-6000:]}, sort_keys=True), flush=True)
     if failed: raise SystemExit(1)
 

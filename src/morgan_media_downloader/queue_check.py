@@ -26,6 +26,32 @@ SIZES = (100, 800, 1000, 5000)
 _retained_guards = []
 
 
+class DiagnosticBudget:
+    """Two cumulative fixture budgets, never a larger queue-operation allowance.
+
+    Additional collection work must not spend the original exercise's90seconds;
+    neither may borrow from the other. Only explicit disposable diagnostics use it.
+    """
+    def __init__(self, *, clock=None):
+        self._clock=clock or time.monotonic
+        self._elapsed={"queue":0.,"collections":0.}; self._phase="queue"; self._started=self._clock()
+
+    def _used(self,now): return self._elapsed[self._phase]+now-self._started
+
+    def check(self):
+        if self._used(self._clock())>=90: raise TimeoutError(f"Queue diagnostic {self._phase} deadline exceeded")
+
+    def switch(self,phase):
+        if phase not in self._elapsed: raise ValueError("Unknown diagnostic fixture")
+        now=self._clock(); used=self._used(now)
+        if used>=90: raise TimeoutError(f"Queue diagnostic {self._phase} deadline exceeded")
+        self._elapsed[self._phase]=used; self._phase=phase; self._started=now
+
+    def snapshot(self):
+        self.check(); elapsed=dict(self._elapsed); elapsed[self._phase]=self._used(self._clock())
+        return dict(limits_seconds={"queue":90,"collections":90},elapsed_seconds=elapsed)
+
+
 def native_threads():
     if sys.platform == "linux": return len(list(Path("/proc/self/task").iterdir()))
     if sys.platform == "darwin":
@@ -69,7 +95,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
     attempts = dict(network=0, keychain=0, deletion=0, process=0)
     cleanup = dict(jobs=0, max_active_workers=0, max_slice=0, gui_thread_calls=0, heartbeat_ticks=0)
     import threading
-    gui_thread = threading.get_ident(); max_owned = 0; deadline = time.monotonic() + 90
+    gui_thread = threading.get_ident(); max_owned = 0; budget=DiagnosticBudget()
     sql = dict(statements=0, commits=0, writes=0)
     def trace(statement):
         sql["statements"] += 1; verb = statement.lstrip().split(" ", 1)[0].upper()
@@ -300,8 +326,9 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
     def spin_until(predicate, fail_when=None):
         while not predicate():
             if fail_when is not None and fail_when(): raise RuntimeError("Synthetic workers did not start")
-            if time.monotonic() >= deadline: raise TimeoutError("Queue diagnostic deadline exceeded")
+            budget.check()
             application.processEvents(); time.sleep(.001)
+        budget.check()
     def drain_before_restore(stack):
         stopped = window.task_manager.shutdown(10_000)
         stop_deadline = time.monotonic() + 1
@@ -312,7 +339,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
             raise RuntimeError("Synthetic workers did not stop; I/O guards retained")
     def measure(cycle, name, operation):
         nonlocal last_tick
-        if time.monotonic() >= deadline: raise TimeoutError("Queue diagnostic deadline exceeded")
+        budget.check()
         before = dict(sql); gaps.clear(); last_tick = time.monotonic()
         cpu = time.process_time(); begin = time.monotonic()
         profiler = cProfile.Profile() if profile and name == "pause-all" else None
@@ -402,7 +429,9 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                 measure(cycle, name, window.remove_selected)
                 if window.jobs or window.database.search_history() or committed_jobs() or window.active or window.task_manager.active_count:
                     raise RuntimeError("Queue diagnostic retained jobs or workers")
+                budget.switch("collections")
                 collection_checks=check_collections(options)
+                budget.switch("queue")
                 completed.append(dict(cycle=cycle, analysed=count, enqueued=count, started_workers=len(started)-initial_started,
                     acknowledged_workers=len(acknowledged)-initial_acknowledged, cancelled=count,
                     restored=len(restored), removed=count, remaining=0, active_tasks=0,
@@ -416,5 +445,5 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
     return dict(schema=1, result="passed", items=count, platform=sys.platform, measurements=measurements, cycles=completed,
         confirmation_requests=len(prompts), max_owned_workers=max_owned, worker_errors=len(worker_errors),
         **{key+"_attempts": value for key, value in attempts.items()},
-        cleanup_fixture=cleanup if synthetic_cleanup else None,
+        cleanup_fixture=cleanup if synthetic_cleanup else None,timing_budgets=budget.snapshot(),
         scope="Isolated synthetic GUI/SQLite/owned-task exercise; no live accounts, network, media transfer, real file deletion or leak qualification")

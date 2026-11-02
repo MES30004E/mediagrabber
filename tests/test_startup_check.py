@@ -21,7 +21,7 @@ def launch(tmp_path, report, *, setup="", queue_items=None):
     if setup:
         command = [sys.executable, "-B", "-c", setup + "\nimport sys\nfrom morgan_media_downloader.app import main\nsys.argv=['app',*sys.argv[1:]]\nraise SystemExit(main())", *arguments]
     result = subprocess.run(command,
-        cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=120 if queue_items else 30)
+        cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=210 if queue_items else 30)
     assert marker.read_text() == settings
     assert not (home / "Downloads").exists()
     return result

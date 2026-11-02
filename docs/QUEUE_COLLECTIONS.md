@@ -103,6 +103,27 @@ was skipped, so no frozen/native qualification exists for this checkpoint yet.
 The assertion now includes only the report's bounded error classification, not
 arbitrary private state. No test is skipped, budget increased or failure dismissed
 as flaky; inspect the next exact hosted classification before deciding the fix.
+
+The diagnostic-onlyc2f71fb/run41384694181 exposed the actual same failure:
+`TimeoutError: Queue diagnostic deadline exceeded` (Linux901passed/1failed257.21s;
+macOS bridge passed; package skipped). The original two-cycle exercise and the
+new additional N-job collection fixture were both charged to the old shared90s.
+This is a diagnostic accounting defect, not proof the product froze or the tests
+were flaky.
+
+`queue_check.DiagnosticBudget` now enforces **two independent cumulative90-second
+budgets across both cycles**: the original queue exercise retains its original90s;
+the added collection exercise gets its own90s. Neither can borrow from the other.
+The strict frozen verifier requires both limits to remain90 and both actual
+elapsed totals below90; missing, enlarged, overrun, NaN/boolean evidence fails.
+Source controller/test process limits210s and frozen wrapper240s only accommodate
+the two bounded exercises plus startup/drain overhead, not longer original action
+limits. All18 stage/worker/selection/restart/persistence/collection gates remain.
+Eleven observed RED budget cases now pass; focused probe/verifier89passed7.41s,
+including real two-cycle GUI/SQLite/owner paths with injected virtual-clock costs.
+These are accounting regressions, not invented real-world performance results.
+Full local suite:913passed127.90s, no skips/warnings; extension10/protocol9/
+pipcheck/shellsyntax pass. Exact hosted requalification still required for this fix.
 Minor deferred: name-only changes retain the aggregate's first label until its
 group is removed; no user rename feature is claimed.
 

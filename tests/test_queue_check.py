@@ -151,3 +151,50 @@ def test_diagnostic_rejects_nonworking_primary_completed_clear(isolated_window,t
     isolated_window.collections.clear_button.clicked.disconnect()
     with pytest.raises(RuntimeError,match="collection"):
         exercise_queue(isolated_window,APP,100,tmp_path)
+
+
+def test_diagnostic_budgets_are_cumulative_and_cannot_borrow_from_other_fixture():
+    from morgan_media_downloader.queue_check import DiagnosticBudget
+    clock=[0.]; budget=DiagnosticBudget(clock=lambda:clock[0])
+    clock[0]=30.; budget.switch("collections")
+    clock[0]=90.; budget.switch("queue")
+    clock[0]=149.9; budget.check()  # queue89.9 + collections60 is valid, not one149.9 limit.
+    clock[0]=150.01
+    with pytest.raises(TimeoutError,match="queue"): budget.switch("collections")
+    clock=[0.]; budget=DiagnosticBudget(clock=lambda:clock[0])
+    budget.switch("collections"); clock[0]=60.; budget.switch("queue")
+    clock[0]=61.; budget.switch("collections"); clock[0]=92.
+    with pytest.raises(TimeoutError,match="collections"): budget.check()  #60+31, despite queue only1.
+
+
+def test_actual_two_cycle_probe_accounts_extra_collection_time_separately(isolated_window,tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    import time
+    from morgan_media_downloader import queue_check
+    offset=[0.]; advanced=[]
+    monkeypatch.setattr(queue_check,"time",SimpleNamespace(monotonic=lambda:time.monotonic()+offset[0],
+        process_time=time.process_time,sleep=time.sleep))
+    def original_cost(stage):
+        if stage["cycle"]==1 and stage["operation"]=="enqueue": offset[0]+=40
+    def collection_cost():
+        if not advanced: offset[0]+=60; advanced.append(True)
+    isolated_window.collections.actions_menu.aboutToShow.connect(collection_cost)
+    report=exercise_queue(isolated_window,APP,100,tmp_path,cycles=2,on_measurement=original_cost)
+    elapsed=report["timing_budgets"]["elapsed_seconds"]
+    assert 40<=elapsed["queue"]<=90 and 60<=elapsed["collections"]<=90 and sum(elapsed.values())>=100
+    assert len(report["measurements"])==18 and all(cycle["removed"]==100 for cycle in report["cycles"])
+
+
+@pytest.mark.parametrize("phase",["queue","collections"])
+def test_actual_probe_still_fails_when_either_fixture_exceeds_original_limit(isolated_window,tmp_path,monkeypatch,phase):
+    from types import SimpleNamespace
+    import time
+    from morgan_media_downloader import queue_check
+    offset=[0.]
+    monkeypatch.setattr(queue_check,"time",SimpleNamespace(monotonic=lambda:time.monotonic()+offset[0],
+        process_time=time.process_time,sleep=time.sleep))
+    def cost(stage):
+        if phase=="queue" and stage["operation"]=="enqueue": offset[0]+=91
+    if phase=="collections": isolated_window.collections.actions_menu.aboutToShow.connect(lambda:offset.__setitem__(0,91.))
+    with pytest.raises(TimeoutError,match=phase): exercise_queue(isolated_window,APP,100,tmp_path,on_measurement=cost)
+    assert isolated_window.task_manager.active_count==0

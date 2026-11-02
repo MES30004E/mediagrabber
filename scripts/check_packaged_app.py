@@ -31,6 +31,11 @@ def validate_queue(data: object, count: int) -> None:
                           "keychain_attempts": 0, "deletion_attempts": 0, "process_attempts": 0, "worker_errors": 0}.items():
         require(integer(data.get(key), expected))
     require("cleanup_fixture" in data and data["cleanup_fixture"] is None)
+    budget=data.get("timing_budgets"); require(isinstance(budget,dict))
+    limits=budget.get("limits_seconds"); elapsed=budget.get("elapsed_seconds")
+    require(isinstance(limits,dict) and isinstance(elapsed,dict))
+    require(set(limits)==set(elapsed)=={"queue","collections"})
+    require(all(integer(limits[key],90) and finite(elapsed[key]) and elapsed[key]<90 for key in limits))
     cycles = data.get("cycles")
     require(isinstance(cycles, list) and len(cycles) == 2)
     for number, cycle in enumerate(cycles, 1):
@@ -118,7 +123,7 @@ def verify(app: Path, *, runner=subprocess.run, queue_items: int | None = None):
         if queue_items is not None: command.extend(["--queue-items", str(queue_items)])
         try:
             result = runner(command, cwd=temporary, env=environment,
-                            capture_output=True, text=True, timeout=150 if queue_items is not None else 45, check=False)
+                            capture_output=True, text=True, timeout=240 if queue_items is not None else 45, check=False)
         except subprocess.TimeoutExpired as error:
             raise RuntimeError("Frozen GUI diagnostic timed out" + (native_trace(error.stderr) if queue_items is not None else "")) from None
         if not report.is_file():

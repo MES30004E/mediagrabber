@@ -57,7 +57,8 @@ def queue_payload(count=100):
     stages = ("analyse", "enqueue", "start", "progress-two-active", "pause-all", "resume-all", "cancel-selected", "reload", "remove-selected-keep-files")
     queue = {"schema": 1, "result": "passed", "items": count, "platform": "darwin", "cycles": [], "measurements": [],
         "max_owned_workers": 2, "confirmation_requests": 2, "cleanup_fixture": None, "worker_errors": 0,
-        "network_attempts": 0, "keychain_attempts": 0, "deletion_attempts": 0, "process_attempts": 0}
+        "network_attempts": 0, "keychain_attempts": 0, "deletion_attempts": 0, "process_attempts": 0,
+        "timing_budgets":{"limits_seconds":{"queue":90,"collections":90},"elapsed_seconds":{"queue":1.,"collections":1.}}}
     writes = {"analyse": 0, "enqueue": count, "start": 2, "progress-two-active": 2, "pause-all": count,
         "resume-all": count, "cancel-selected": count, "reload": 0, "remove-selected-keep-files": count}
     for cycle in (1, 2):
@@ -243,4 +244,18 @@ def test_packaged_queue_requires_actual_scoped_collection_evidence(defect):
     elif defect=="boolean": checks["hidden_rows"]=False
     elif defect=="restart_membership": cycle["restart_checks"]["membership_preserved"]=False
     elif defect=="primary": checks["primary_completed_clear"]=False
+    with pytest.raises(RuntimeError): validate_queue(queue,100)
+
+
+@pytest.mark.parametrize("defect",["missing","original_limit","collection_limit","original_elapsed","collection_elapsed","nan","boolean"])
+def test_packaged_queue_requires_separate_but_unweakened_fixture_budgets(defect):
+    from scripts.check_packaged_app import validate_queue
+    queue=queue_payload()["queue"]; budget=queue["timing_budgets"]
+    if defect=="missing": queue.pop("timing_budgets")
+    elif defect=="original_limit": budget["limits_seconds"]["queue"]=180
+    elif defect=="collection_limit": budget["limits_seconds"]["collections"]=180
+    elif defect=="original_elapsed": budget["elapsed_seconds"]["queue"]=90.1
+    elif defect=="collection_elapsed": budget["elapsed_seconds"]["collections"]=90.1
+    elif defect=="nan": budget["elapsed_seconds"]["queue"]=float("nan")
+    elif defect=="boolean": budget["elapsed_seconds"]["collections"]=True
     with pytest.raises(RuntimeError): validate_queue(queue,100)

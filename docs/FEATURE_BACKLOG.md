@@ -166,6 +166,13 @@ restrictions remain. Live account/media tests need explicit user participation.
   skipped. Failure occurs in the second extra collection sequence after all18
   original measured stages. Investigate child report/classification before
   changing budgets or claiming flakiness; see QUEUE_COLLECTIONS.md.
+- Actualc2f71fb/run41384694181 classified that failure as the shared diagnostic
+  deadline (901passed/1failed); no product crash was established. Harness now
+  accounts original queue and added collection work in independent cumulative90s
+  budgets, with strict reported limits/elapsed validation. Original action allowance
+  is not enlarged;11RED→GREEN cases/89focused tests pass. Full913passed127.90s,
+  extension10/protocol9/pipcheck pass; hosted qualification pending. Next A
+  implementation remains held until safe checkpoint.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.

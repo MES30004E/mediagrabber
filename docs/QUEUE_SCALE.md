@@ -19,7 +19,10 @@ PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B \
 ```
 
 The probe runs each size in a separate child with faulthandler enabled and a
-120-second limit. It builds the real offscreen PySide6 MainWindow using synthetic
+210-second process limit. The original queue exercise and the added collection
+fixture each retain independent cumulative90-second budgets; neither borrows
+the other's allowance. Older baseline results below used the then120-second
+controller limit. It builds the real offscreen PySide6 MainWindow using synthetic
 flat analysis items, real queue/persistence/actions and two bounded synthetic
 download workers. It drives analyse/enqueue/start/progress/pause/resume/cancel/
 reload/remove, counts SQL commits/writes and intercepted confirmation requests,
