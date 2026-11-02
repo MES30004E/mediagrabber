@@ -11,12 +11,14 @@ from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleO
 from .display_format import human_bytes, human_duration
 from .job_diagnostics import status_summary
 from .models import DownloadJob, JobStatus
+from .queue_collections import collection_key
 
 JOB_ID_ROLE = int(Qt.ItemDataRole.UserRole)
 KIND_ROLE = JOB_ID_ROLE + 1
 PROGRESS_ROLE = JOB_ID_ROLE + 2
 STATUS_ROLE = JOB_ID_ROLE + 3
 SEARCH_ROLE = JOB_ID_ROLE + 4
+COLLECTION_ROLE = JOB_ID_ROLE + 5
 
 COLUMNS = {
     "Media": ("Title", "Source", "Status", "Progress", "Downloaded / Total", "Speed", "ETA", "Format", "Destination"),
@@ -25,7 +27,7 @@ COLUMNS = {
 }
 FIELDS = ("Title", "Source", "Type", "Status", "Progress", "Downloaded / Total", "Speed", "Down", "Up", "Connected peers", "Connected seeders", "ETA", "Format", "Destination")
 FIELD_INDEX = {name: index for index, name in enumerate(FIELDS)}
-CHANGE_ROLES = [int(Qt.ItemDataRole.DisplayRole), int(Qt.ItemDataRole.ToolTipRole), KIND_ROLE, PROGRESS_ROLE, STATUS_ROLE, SEARCH_ROLE]
+CHANGE_ROLES = [int(Qt.ItemDataRole.DisplayRole), int(Qt.ItemDataRole.ToolTipRole), KIND_ROLE, PROGRESS_ROLE, STATUS_ROLE, SEARCH_ROLE, COLLECTION_ROLE]
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ class QueueRow:
     tooltip: str
     status: str
     search: str
+    collection_id: str
 
 
 def presentation_row(job: DownloadJob, connection_mode: str) -> QueueRow:
@@ -70,7 +73,7 @@ def presentation_row(job: DownloadJob, connection_mode: str) -> QueueRow:
             f"\nThumbnail: {'Embed' if job.options.embed_thumbnail else 'Off'}\nSubtitles: {subtitle}{verification}")
     search = "\n".join(str(value or "") for value in (job.item.title, job.item.source, job.item.source_url,
                          job.item.original_url, job.output_file, job.options.download_dir)).casefold()
-    return QueueRow(job.id, "torrent" if job.kind == "torrent" else "media", cells, progress, tooltip, job.status.value, search)
+    return QueueRow(job.id, "torrent" if job.kind == "torrent" else "media", cells, progress, tooltip, job.status.value, search, collection_key(job))
 
 
 def contiguous_ranges(rows: Iterable[int]) -> list[tuple[int, int]]:
@@ -114,6 +117,7 @@ class QueueTableModel(QAbstractTableModel):
         if role == KIND_ROLE: return row.kind
         if role == STATUS_ROLE: return row.status
         if role == SEARCH_ROLE: return row.search
+        if role == COLLECTION_ROLE: return row.collection_id
         if role == PROGRESS_ROLE and column == "Progress": return row.progress
         if role == Qt.ItemDataRole.ToolTipRole and index.column() == 0: return row.tooltip
         return None

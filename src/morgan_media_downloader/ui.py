@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from .database import Database
+from .collection_controls import CollectionControls
+from .queue_collections import assign_collections, collection_key
 from .queue_batch import BatchOutcome, QueueBatch
 from .queue_restart import QueueRestart
 from .file_removal import FileRemovalResult, FileRemovalService
@@ -257,6 +259,7 @@ class MainWindow(QMainWindow):
         self.analysis_stale = False
         self._closing = False
         self.pending_removals: dict[str, bool] = {}
+        self._removal_eligibility: dict[str, Callable[[DownloadJob], bool]] = {}
         self.queue_restart = QueueRestart(self.task_manager, self.queue_batch, self.database,
             lambda: self.jobs, lambda: self.active, lambda: self.pending_removals, self)
         self.queue_restart.persisted.connect(self._history_refresh_state.invalidate)
@@ -454,9 +457,14 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(22, 18, 22, 16); layout.setSpacing(10)
         page_heading(layout, "Queue", "Track transfers, review warnings and manage retained downloads.")
         self.queue_empty = QLabel("No downloads yet. Add a URL on Download to get started."); self.queue_empty.setObjectName("muted"); self.queue_empty.setWordWrap(True); layout.addWidget(self.queue_empty)
+        self.collections=CollectionControls(self)
+        self.collections.filter_changed.connect(lambda:self._refresh_queue(filters_only=True))
+        self.collections.clear_requested.connect(self._collection_clear_requested)
+        self.collections.action_requested.connect(self.act_on_collection)
+        layout.addWidget(self.collections)
         filter_row = QHBoxLayout(); filter_row.addWidget(QLabel("View:"))
         self.queue_filter = QComboBox(); self.queue_filter.addItems(["Media", "Torrents", "All"])
-        self.queue_filter.currentTextChanged.connect(self._refresh_queue); filter_row.addWidget(self.queue_filter)
+        self.queue_filter.currentTextChanged.connect(lambda *_:self._refresh_queue(filters_only=True)); filter_row.addWidget(self.queue_filter)
         filter_row.addWidget(QLabel("Status:"))
         self.queue_status_filter = QComboBox(); self.queue_status_filter.addItems(list(STATUS_GROUPS))
         self.queue_status_filter.setAccessibleName("Queue status filter")
@@ -510,8 +518,9 @@ class MainWindow(QMainWindow):
         self.job_details = QPlainTextEdit(); self.job_details.setReadOnly(True); self.job_details.setMaximumHeight(155)
         self.job_details.setPlaceholderText("Select a job to view details"); layout.addWidget(self.job_details)
         actions = QHBoxLayout()
-        for text, callback in [("Pause", self.pause_selected), ("Resume", self.resume_selected), ("Cancel", self.cancel_selected), ("Retry", self.retry_selected), ("Clear Completed", self.clear_completed)]:
+        for text, callback in [("Pause", self.pause_selected), ("Resume", self.resume_selected), ("Cancel", self.cancel_selected), ("Retry", self.retry_selected)]:
             button = QPushButton(text); button.clicked.connect(callback); actions.addWidget(button)
+        actions.addWidget(self.collections.clear_button)
         self.stop_queue_batch = QPushButton("Stop batch action"); self.stop_queue_batch.setEnabled(False)
         self.stop_queue_batch.clicked.connect(self.queue_batch.cancel); actions.addWidget(self.stop_queue_batch)
         actions.addStretch(); layout.addLayout(actions); return widget
@@ -1234,19 +1243,20 @@ class MainWindow(QMainWindow):
                               torrent_file_paths=[str(Path(media.uploader) / media.title) if media.uploader else media.title for media in selected],
                               torrent_trackers=list(torrent_context.trackers))
             job.options = torrent_options
+            job.collection_id="import:"+uuid4().hex; job.collection_name=torrent_context.name
             self.database.save_job(job); self._history_refresh_state.invalidate(); self.jobs[job.id] = job
             self._refresh_queue(); self._refresh_history(); self.tabs.setCurrentIndex(1); return
         organised = organised_folder(options.download_dir, selected, self.settings.create_subfolders)
         created_directory = organised if Path(organised) != Path(options.download_dir) and not Path(organised).exists() else ""
         queued = []
-        for item in selected:
+        for item,(collection_id,collection_name) in zip(selected,assign_collections(selected)):
             item_options = copy.deepcopy(options)
             for key, value in self._item_overrides.get(id(item), {}).items(): setattr(item_options, key, value)
             item_options.download_dir = organised
             if len(selected) > 1 and "playlist_index" not in item_options.filename_template and item.playlist_index:
                 item_options.filename_template = "%(playlist_index)03d - " + item_options.filename_template
             job = DownloadJob(item=item, options=item_options, created_job_directory=created_directory,
-                              effective_connection=self.settings.connection_mode)
+                              effective_connection=self.settings.connection_mode, collection_id=collection_id,collection_name=collection_name)
             queued.append(job)
         # The visible queue is published only after the entire admission commits.
         # A failed SQL write/serialization cannot leave phantom runnable entries.
@@ -1314,6 +1324,10 @@ class MainWindow(QMainWindow):
 
     def _job_changed(self, job: DownloadJob):
         current = self.jobs.get(job.id)
+        if current and current.collection_id and not job.collection_id:
+            job.collection_id=current.collection_id; job.collection_name=current.collection_name
+        elif current and current.collection_id==job.collection_id and not job.collection_name:
+            job.collection_name=current.collection_name
         if current and current.status == JobStatus.CANCELLED and job.status == JobStatus.PAUSED:
             job.status = JobStatus.CANCELLED
         if job.effective_connection == "Managed Tor" and not job.tor_current_exit_ip:
@@ -1360,6 +1374,10 @@ class MainWindow(QMainWindow):
             return
         if job_id in self.pending_removals:
             delete_files = self.pending_removals.pop(job_id)
+            if job_id not in self._delete_slice_ids and not self._removal_allowed(job_id):
+                self._removal_eligibility.pop(job_id,None)
+                if self.queue_batch.is_waiting(job_id): self.queue_batch.settle(job_id,"Clear scope changed; entry retained")
+                self._refresh_queue(); self._refresh_history(); self._refresh_activity(); return
             if self.queue_batch.is_waiting(job_id):
                 if job_id in self._delete_slice_ids:
                     self._start_file_slice_if_ready()
@@ -1419,12 +1437,15 @@ class MainWindow(QMainWindow):
     def cancel_selected(self):
         selected = self._selected_jobs()
         if self._start_large_queue_action(selected, "Cancel"): return
+        saved=False
         for job in selected:
+            if job.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS,JobStatus.CANCELLED}: continue
             job.status = JobStatus.CANCELLED
             if job.id in self.active: self.task_manager.cancel(self.active[job.id])
             self.database.save_job(job); self._history_refresh_state.invalidate()
+            saved=True
         self._refresh_queue()
-        if selected: self._refresh_history()
+        if saved: self._refresh_history()
     def retry_selected(self): self._resume(self._selected_jobs())
 
     def _start_large_queue_action(self, jobs, action):
@@ -1460,7 +1481,9 @@ class MainWindow(QMainWindow):
                     for name in ("authentication_mode", "cookies_browser", "browser_profile", "cookies_file"):
                         setattr(job.options, name, getattr(settings, name))
                 prepare_resumable_job(job)
-            elif action == "Cancel": job.status = JobStatus.CANCELLED
+            elif action == "Cancel":
+                if job.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS,JobStatus.CANCELLED}: continue
+                job.status = JobStatus.CANCELLED
             else: raise ValueError("Unsupported queue batch action")
             changed.append(job)
             if action != "Resume" and job.id in self.active: cancel_tasks.append(self.active[job.id])
@@ -1472,6 +1495,7 @@ class MainWindow(QMainWindow):
 
     def _queue_batch_progress(self, info):
         self.stop_queue_batch.setEnabled(self.queue_batch.busy)
+        self.collections.refresh(info if self.queue_batch.busy else None)
         self.statusBar().showMessage(("Stopped — " if info['cancelled'] else "") + f"{info['label']}: {info['completed']} completed; {info['failed']} failed; "
             f"{info.get('skipped', 0)} unchanged; {info['pending']} pending. " + info['error'])
 
@@ -1504,19 +1528,31 @@ class MainWindow(QMainWindow):
         return "keep" if box.clickedButton() is keep else "replace" if box.clickedButton() is replace else "cancel"
 
     def remove_selected(self):
+        self._remove_jobs(self._selected_jobs(),self._confirm_remove)
+
+    def _remove_jobs(self, selected, confirm, eligible=None):
         if self._queue_action_blocked(): return
-        selected = self._selected_jobs()
         if not selected: return
         selected_ids = [job.id for job in selected]
-        choice = self._confirm_remove(selected)
+        choice = confirm(selected)
         if choice == "cancel" or self._queue_action_blocked(): return
+        before=len(selected_ids)
+        if eligible is not None:
+            selected_ids=[key for key in selected_ids if key in self.jobs and eligible(self.jobs[key])]
+        omitted=before-len(selected_ids)
+        if not selected_ids:
+            self.statusBar().showMessage("Nothing removed; jobs no longer match the confirmed clear scope.",5000); return
+        for key in selected_ids:
+            if eligible is None: self._removal_eligibility.pop(key,None)
+            else: self._removal_eligibility[key]=eligible
         # A confirmed removal supersedes earlier restarts for the entire ID
         # snapshot, including owners that finish before their slice is admitted.
         for job_id in selected_ids: self.pending_restarts.pop(job_id, None)
         delete_files = choice == "delete"
         if delete_files or len(selected_ids) > 32:
             self.queue_batch.start(selected_ids, lambda ids: self._remove_queue_slice(ids, delete_files),
-                "Remove entries and owned files" if delete_files else "Remove entries (keep files)", wait_each_slice=delete_files)
+                ("Remove entries and owned files" if delete_files else "Remove entries (keep files)")+
+                (f"; {omitted} no longer match" if omitted else ""), wait_each_slice=delete_files)
             return
         removed = pending = 0
         for job_id in selected_ids:
@@ -1531,14 +1567,19 @@ class MainWindow(QMainWindow):
                 self._remove_job(job, delete_files); removed += 1
         self._refresh_queue(); self._refresh_history()
         self.statusBar().showMessage(f"Removed {removed} queue entries; {pending} waiting for active tasks to stop. "
-            + ("Verified job-owned files selected for removal." if delete_files else "Downloaded files kept."), 10000)
+            + ("Verified job-owned files selected for removal." if delete_files else "Downloaded files kept.")
+            + (f" {omitted} no longer matched the clear scope." if omitted else ""), 10000)
 
     def _confirm_remove(self, jobs: list[DownloadJob]) -> str:
+        return self._confirm_clear(jobs,"selected jobs")
+
+    def _confirm_clear(self, jobs, scope) -> str:
         active = sum(job.id in self.active for job in jobs)
         completed = sum(job.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS} for job in jobs)
         box = QMessageBox(QMessageBox.Icon.Question, "Remove selected jobs",
-            f"Remove {len(jobs)} selected jobs?\n\n{active} active; {completed} completed.\n"
+            f"Remove {len(jobs)} {scope}?\n\n{active} active; {completed} completed.\n"
             "Active tasks must stop before their entries or files are removed.", parent=self)
+        box.setTextFormat(Qt.TextFormat.PlainText)
         keep = box.addButton("Remove queue entries only, keep files", QMessageBox.ButtonRole.AcceptRole)
         delete = box.addButton("Remove entries and verified job-owned files", QMessageBox.ButtonRole.DestructiveRole)
         box.addButton(QMessageBox.StandardButton.Cancel)
@@ -1548,9 +1589,16 @@ class MainWindow(QMainWindow):
     def _remove_job(self, job: DownloadJob, delete_files: bool):
         if delete_files: delete_owned_files(job)
         self.database.remove_job(job.id); self._history_refresh_state.invalidate(); self.jobs.pop(job.id, None)
+        self._removal_eligibility.pop(job.id,None)
+
+    def _removal_allowed(self, key):
+        job=self.jobs.get(key); predicate=self._removal_eligibility.get(key)
+        return job is not None and (predicate is None or predicate(job))
 
     def _remove_queue_slice(self, ids, delete_files=False):
-        current = [self.jobs[key] for key in ids if key in self.jobs]
+        current = [self.jobs[key] for key in ids if self._removal_allowed(key)]
+        for key in ids:
+            if not self._removal_allowed(key): self._removal_eligibility.pop(key,None)
         inactive = [job for job in current if job.id not in self.active]
         active = [job for job in current if job.id in self.active]
         if delete_files:
@@ -1564,7 +1612,7 @@ class MainWindow(QMainWindow):
                 error="Could not request active task stop; files and entries retained" if failed else "")
         self.database.remove_jobs(job.id for job in inactive)
         if inactive: self._history_refresh_state.invalidate()
-        for job in inactive: self.jobs.pop(job.id, None)
+        for job in inactive: self.jobs.pop(job.id, None); self._removal_eligibility.pop(job.id,None)
         waiting = []; failed = 0
         for job in active:
             if self.task_manager.cancel(self.active[job.id]):
@@ -1576,6 +1624,12 @@ class MainWindow(QMainWindow):
     def _start_file_slice_if_ready(self):
         if self._closing or not self._delete_slice_ids or self.file_removal.busy: return
         if any(key in self.active for key in self._delete_slice_ids): return
+        retained=[key for key in self._delete_slice_ids if not self._removal_allowed(key)]
+        self._delete_slice_ids=tuple(key for key in self._delete_slice_ids if key not in retained)
+        for key in retained:
+            self.pending_removals.pop(key,None); self._removal_eligibility.pop(key,None)
+            self.queue_batch.settle(key,"Clear scope changed; entry retained")
+        if not self._delete_slice_ids: return
         values = [self.jobs[key] for key in self._delete_slice_ids if key in self.jobs]
         if values:
             try: self.file_removal.start(values)
@@ -1603,6 +1657,7 @@ class MainWindow(QMainWindow):
             for key in successful: self.jobs.pop(key, None)
         for key in ids:
             self.pending_removals.pop(key, None)
+            self._removal_eligibility.pop(key,None)
             detail = errors.get(key, "Cleanup result missing")
             if detail and (job := self.jobs.get(key)) and job.status in {
                     JobStatus.ANALYSING, JobStatus.DOWNLOADING, JobStatus.CONVERTING, JobStatus.FETCHING_METADATA, JobStatus.SEEDING}:
@@ -1686,8 +1741,9 @@ class MainWindow(QMainWindow):
         self._update_queue_counts(len(visible))
 
     def clear_queue_filters(self):
-        blockers = [QSignalBlocker(widget) for widget in (self.queue_filter, self.queue_status_filter, self.queue_search)]
+        blockers = [QSignalBlocker(widget) for widget in (self.queue_filter, self.queue_status_filter, self.queue_search,self.collections.selector)]
         self.queue_filter.setCurrentText("All"); self.queue_status_filter.setCurrentText("All"); self.queue_search.clear()
+        self.collections.selector.setCurrentIndex(0)
         del blockers
         self._refresh_queue(filters_only=True)
 
@@ -1791,9 +1847,55 @@ class MainWindow(QMainWindow):
         self._refresh_queue()
         if saved: self._refresh_history()
     def clear_completed(self):
+        self.clear_queue_status("Completed")
+
+    def _collection_scope(self, scope=None, *, require_group=False):
+        scope=self.collections.scope() if scope is None else scope
+        if not isinstance(scope,(tuple,list)) or len(scope)!=2 or not all(isinstance(value,str) for value in scope):
+            raise ValueError("Invalid collection scope")
+        if (require_group and not scope[0]) or self.collections.model.row_for_id(scope[0]) is None:
+            self.statusBar().showMessage("Choose an available collection first.",5000); return None
+        return tuple(scope)
+
+    def _collection_clear_requested(self, status, scope):
+        if status=="Collection": self.clear_collection(scope)
+        else: self.clear_queue_status(status,scope)
+
+    def clear_queue_status(self, status, scope=None):
+        if status not in {"Completed","Cancelled","Failed"}: raise ValueError("Unsupported clear status")
+        self._clear_collection_scope(status,scope)
+
+    def clear_collection(self, scope=None): self._clear_collection_scope("All",scope,require_group=True)
+
+    def _clear_collection_scope(self, status, scope, *, require_group=False):
         if self._queue_action_blocked(): return
-        self.database.clear_completed(); self._history_refresh_state.invalidate()
-        self.jobs = {key: job for key, job in self.jobs.items() if job.status not in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS}}; self._refresh_queue(); self._refresh_history()
+        scope=self._collection_scope(scope,require_group=require_group)
+        if scope is None: return
+        eligible=lambda job:(not scope[0] or collection_key(job)==scope[0]) and status_matches(job.status.value,status)
+        jobs=[job for job in self.jobs.values() if eligible(job)]
+        label=f'{status.lower()+" entries" if status!="All" else "jobs"} in {self.collections.scope_label(scope)}'
+        self._remove_jobs(jobs,lambda values:self._confirm_clear(values,label),eligible)
+
+    def act_on_collection(self, action, scope=None):
+        if action not in {"Pause","Resume","Cancel"}: raise ValueError("Unsupported collection action")
+        if self._queue_action_blocked(): return
+        scope=self._collection_scope(scope,require_group=True)
+        if scope is None: return
+        jobs=[job for job in self.jobs.values() if collection_key(job)==scope[0]]; ids=tuple(job.id for job in jobs)
+        if not jobs: return
+        label=self.collections.scope_label(scope)
+        if not self._confirm_collection_action(action,jobs,label) or self._queue_action_blocked(): return
+        settings=copy.deepcopy(self.settings)
+        self.queue_batch.start(ids,lambda keys:self._apply_queue_slice(keys,action,settings),action+" "+label)
+
+    def _confirm_collection_action(self, action, jobs, scope):
+        completed=sum(job.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS} for job in jobs)
+        active=sum(job.id in self.active for job in jobs)
+        box=QMessageBox(QMessageBox.Icon.Question,action+" collection",
+            f"{action} {len(jobs):,} jobs in {scope}?\n\n{active} active; {completed} completed.\nOnly eligible jobs change; completed jobs remain completed.",parent=self)
+        box.setTextFormat(Qt.TextFormat.PlainText); box.setStandardButtons(QMessageBox.StandardButton.Ok|QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel); box.setEscapeButton(QMessageBox.StandardButton.Cancel)
+        return box.exec()==QMessageBox.StandardButton.Ok
 
     def convert_selected_for_macos(self):
         job = self._selected_or_banner_job()
@@ -2020,6 +2122,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "queue_table"): return
         view = self.queue_filter.currentText()
         if job_id is not None and view == self.queue_model.view and self.queue_model.rowCount() == len(self.jobs) and (job := self.jobs.get(job_id)):
+            collection_fallback=self.collections.sync(job=job)
             selection = self.queue_table.selectionModel(); blocker = QSignalBlocker(selection)
             try:
                 before = self.queue_proxy.mapFromSource(self.queue_model.index_for_id(job_id)).isValid()
@@ -2028,6 +2131,8 @@ class MainWindow(QMainWindow):
                 if updated and before != after: self._restore_queue_selection()
             finally: del blocker
             if updated:
+                if collection_fallback: self._refresh_queue(filters_only=True); return
+                self.collections.refresh(self.queue_batch.describe() if self.queue_batch.busy else None)
                 self._refresh_selected_job_details(); return
         vertical = self.queue_table.verticalScrollBar().value()
         horizontal = self.queue_table.horizontalScrollBar().value()
@@ -2041,8 +2146,10 @@ class MainWindow(QMainWindow):
             structural = False
             if not filters_only or view != self.queue_model.view or self.queue_model.rowCount() != len(self.jobs):
                 structural = self.queue_model.sync(self.jobs.values(), view, self.settings.connection_mode)
+            if not filters_only or self.collections.model.summary("").total!=len(self.jobs):
+                self.collections.sync(jobs=self.jobs.values())
             self.queue_proxy.set_filters({"Media": "media", "Torrents": "torrent", "All": ""}[view],
-                                         self.queue_status_filter.currentText(), self.queue_search.text())
+                                         self.queue_status_filter.currentText(), self.queue_search.text(),self.collections.scope()[0])
             self._restore_queue_selection()
             if self._queue_header_view != view or (not self._queue_header_populated and self.queue_proxy.rowCount() > 0):
                 header = self.queue_table.horizontalHeader()
@@ -2057,6 +2164,7 @@ class MainWindow(QMainWindow):
         self.queue_table.verticalScrollBar().setValue(vertical)
         self.queue_table.horizontalScrollBar().setValue(horizontal)
         if focus is not None and structural: focus.setFocus()
+        self.collections.refresh(self.queue_batch.describe() if self.queue_batch.busy else None)
         self._refresh_selected_job_details()
 
     def _refresh_history(self, *_):

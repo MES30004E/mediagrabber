@@ -6,39 +6,25 @@ from collections.abc import Iterable
 from PySide6.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, QSortFilterProxyModel, QThread
 from PySide6.QtWidgets import QTableView
 
-from .models import JobStatus
-from .queue_model import JOB_ID_ROLE, KIND_ROLE, SEARCH_ROLE, STATUS_ROLE, QueueTableModel, contiguous_ranges
-
-STATUS_GROUPS = {
-    "All": frozenset(status.value for status in JobStatus),
-    "Waiting": frozenset({"Waiting"}),
-    "Running": frozenset({"Analysing", "Downloading", "Converting", "Fetching metadata", "Seeding"}),
-    "Completed": frozenset({"Completed", "Completed with warnings"}),
-    "Failed": frozenset({"Failed"}), "Paused": frozenset({"Paused"}),
-    "Cancelled": frozenset({"Cancelled"}), "Interrupted": frozenset({"Interrupted"}),
-}
-
-
-def status_matches(value: str, group: str) -> bool:
-    if group not in STATUS_GROUPS: raise ValueError("Unknown queue status category")
-    return group == "All" or value in STATUS_GROUPS[group]
+from .queue_collections import STATUS_GROUPS, status_matches
+from .queue_model import COLLECTION_ROLE, JOB_ID_ROLE, KIND_ROLE, SEARCH_ROLE, STATUS_ROLE, QueueTableModel, contiguous_ranges
 
 
 class QueueFilterProxyModel(QSortFilterProxyModel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.kind = "media"; self.status = "All"; self.query = ""
+        self.kind = "media"; self.status = "All"; self.query = ""; self.collection_id = ""
         self.setDynamicSortFilter(True)
 
-    def set_filters(self, kind: str, status: str, query: str) -> None:
+    def set_filters(self, kind: str, status: str, query: str, collection_id: str = "") -> None:
         if QThread.currentThread() != self.thread(): raise RuntimeError("Queue filters require their GUI thread")
-        if not all(isinstance(value, str) for value in (kind, status, query)) or kind not in {"", "media", "torrent"} or status not in STATUS_GROUPS:
+        if not all(isinstance(value, str) for value in (kind, status, query, collection_id)) or kind not in {"", "media", "torrent"} or status not in STATUS_GROUPS:
             raise ValueError("Invalid queue filter")
         query = query.strip().casefold()
-        if (kind, status, query) == (self.kind, self.status, self.query): return
+        if (kind, status, query, collection_id) == (self.kind, self.status, self.query, self.collection_id): return
         modern = hasattr(self, "beginFilterChange") and hasattr(self, "endFilterChange")
         if modern: self.beginFilterChange()
-        self.kind, self.status, self.query = kind, status, query
+        self.kind, self.status, self.query, self.collection_id = kind, status, query, collection_id
         if modern: self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
         else: self.invalidateFilter()  # Qt6.7–6.9 compatibility, before deprecation.
 
@@ -47,6 +33,7 @@ class QueueFilterProxyModel(QSortFilterProxyModel):
         if source is None: return False
         index = source.index(source_row, 0, source_parent)
         return ((not self.kind or index.data(KIND_ROLE) == self.kind) and
+                (not self.collection_id or index.data(COLLECTION_ROLE) == self.collection_id) and
                 status_matches(index.data(STATUS_ROLE), self.status) and
                 (not self.query or self.query in (index.data(SEARCH_ROLE) or "")))
 

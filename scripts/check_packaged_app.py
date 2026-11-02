@@ -51,7 +51,17 @@ def validate_queue(data: object, count: int) -> None:
         expected_restart = dict(restarted=count, confirmation_requests=1, prepared_rows=count, committed_rows=count,
                                 max_owned_workers=1, max_slice=32, gui_cleanup_calls=0, worker_errors=0)
         require(all(integer(restart.get(key), value) for key, value in expected_restart.items()))
+        require(restart.get("membership_preserved") is True)
         require(all(finite(restart.get(key)) for key in ("wall_seconds", "cpu_seconds", "max_heartbeat_gap_seconds")))
+        groups=cycle.get("collection_checks")
+        require(isinstance(groups,dict))
+        expected_groups=dict(admitted=count,groups=2,group_size=count//2,filtered_rows=count//2,
+            hidden_rows=0,incremental_full_syncs=0,incremental_summary_rows=2,action_confirmations=3,clear_confirmations=4,
+            completed_retained=1,cancelled=count//2-1,cleared_completed=1,cleared_cancelled=count//2-1,
+            cleared_failed=1,cleared_collection=count//2-1,remaining=0,active_tasks=0)
+        require(all(integer(groups.get(key),value) for key,value in expected_groups.items()))
+        require(groups.get("other_group_unchanged") is True and groups.get("persisted_membership") is True)
+        require(all(finite(groups.get(key)) for key in ("wall_seconds","cpu_seconds","max_heartbeat_gap_seconds")))
     measurements = data.get("measurements")
     require(isinstance(measurements, list) and len(measurements) == 18)
     for measurement, (cycle, stage) in zip(measurements, ((n, s) for n in (1, 2) for s in QUEUE_STAGES)):

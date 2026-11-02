@@ -2,8 +2,9 @@
 
 This records reproduction, narrow stall/removal fixes and remaining scale gaps,
 **not complete crash/scale acceptance**. The diagnostic itself does not change
-application behavior; the production corrections below do. The native crash
-reported by real QA has not yet been reproduced/classified. No personal playlist,
+application behavior; the production corrections below do. The user clarified
+the reported window stayed open but froze; no native crash is confirmed. The
+specific live incident has not been reproduced/classified. No personal playlist,
 cookies, network download, media output or normal application state was used.
 
 ## Reproduce
@@ -580,3 +581,22 @@ in addition to all older gates; added work changes timings, not prior acceptance
 Final review's template-escape/late-final-promotion/close-persistence findings are
 fixed RED→GREEN. Keep now retains ALL old paths; no deletion is inferred from stale
 temporary categories. Full local841passed82.04s; exact hosted still pending.
+
+That restart checkpoint subsequently passed exact034efad/run41289264510: Linux841
+(one existing Qt deprecation), macOSbackend60/Swift25/actual workers/drift9 and
+all native/provider/media/frozen two-cycle/replacement/strict-archive gates.
+Archive141922225bytes SHA256
+`6918deca4aade3bf97de6d7f5ffcb017855e1c16cd02c8b3c6e87f1ef3f0459e`, not uploaded
+or installed. Restart5,000 max gaps0.632/0.667s; other stages reached1.235s.
+Peak385.5MiB/post-removal354.16→360.67MiB still do not establish leak freedom.
+
+## Collection/scoped-clear worktree
+
+QUEUE_COLLECTIONS.md records persisted identity/legacy rules, incremental native
+aggregates, actual scoped controls, race eligibility and separate new fixture
+costs. The added source100/800/1000/5000matrix passed with all original stages
+retained. Extra collection sequence maximum gaps0.028/0.241/0.309/1.652s show
+remaining large-scope GUI work, not complete responsiveness. New source tests and
+diagnostic negative cases pass, but final full-suite/review/exact hosted evidence
+is still required for this worktree. No personal media/accounts or local Apple
+build tools were used; the full feature/release backlog remains open.

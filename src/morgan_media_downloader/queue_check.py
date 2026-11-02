@@ -168,6 +168,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
     def check_restart():
         nonlocal last_tick
         restart_stats.update(prepared=set(), processed=set(), max_slice=0, max_owned_workers=0, gui_cleanup_calls=0)
+        membership={key:(job.collection_id,job.collection_name) for key,job in window.jobs.items()}
         window.queue_selection_actions["all"].trigger()
         initial_prompts = len(restart_prompts); before = dict(sql); gaps.clear(); last_tick = time.monotonic()
         cpu = time.process_time(); begin = time.monotonic()
@@ -177,6 +178,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
         if (info["completed"] != count or info["failed"] or info["skipped"] or info["pending"] or
                 len(restart_prompts)-initial_prompts != 1 or len(committed) != count or
                 any(job.status != JobStatus.WAITING for job in committed) or
+                any(not job.collection_id or (job.collection_id,job.collection_name)!=membership[job.id] for job in committed) or
                 {job.id: job.to_dict() for job in committed} != {key: job.to_dict() for key, job in window.jobs.items()} or
                 restart_stats["prepared"] != set(window.jobs) or restart_stats["processed"] != set(window.jobs) or
                 restart_stats["max_owned_workers"] != 1 or not 0 < restart_stats["max_slice"] <= 32 or
@@ -186,10 +188,98 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
         result = dict(restarted=count, confirmation_requests=1, prepared_rows=len(restart_stats["prepared"]),
             committed_rows=len(committed), max_owned_workers=restart_stats["max_owned_workers"], max_slice=restart_stats["max_slice"],
             gui_cleanup_calls=restart_stats["gui_cleanup_calls"], worker_errors=info["failed"],
+            membership_preserved=True,
             wall_seconds=round(time.monotonic()-begin, 6), cpu_seconds=round(time.process_time()-cpu, 6),
             max_heartbeat_gap_seconds=round(max(gaps, default=0), 6))
         window.queue_selection_actions["none"].trigger(); window.queue_filter.setCurrentText("Media")
         return result
+    def check_collections(options):
+        """Extra disposable admission after the original nine stages, not a
+        substitute for their counts, workers, persistence or keep-removal gate.
+        """
+        from PySide6.QtCore import QPoint
+        nonlocal last_tick
+        begin=time.monotonic(); cpu=time.process_time(); gaps.clear(); last_tick=begin
+        def require(condition):
+            if not condition: raise RuntimeError("Queue collection diagnostic failed")
+        items=[MediaItem(f"https://example.test/collections/video/{i}",f"Collection video{i}",
+            original_url=f"https://example.test/collections/{i//(count//2)}",collection_title="Same synthetic title",
+            collection_type="Playlist") for i in range(count)]
+        window._enqueue_payload(items,None,options)
+        values=list(window.jobs.values()); a=values[:count//2]; b=values[count//2:]
+        a_ids={job.id for job in a}; b_ids={job.id for job in b}
+        a_key=a[0].collection_id; b_key=b[0].collection_id
+        require(len(values)==count and bool(a_key) and bool(b_key) and a_key!=b_key)
+        require(all(job.collection_id==a_key for job in a) and all(job.collection_id==b_key for job in b))
+        persisted=verified_reload()
+        require({job.id:(job.collection_id,job.collection_name) for job in persisted}==
+                {job.id:(job.collection_id,job.collection_name) for job in values})
+        require(window.collections.model.rowCount()==3)
+        untouched={job.id:job.to_dict() for job in b}
+        def choose(key):
+            row=window.collections.model.row_for_id(key); require(row is not None)
+            window.collections.selector.setCurrentIndex(row); application.processEvents()
+        choose(a_key); require(window.queue_proxy.rowCount()==count//2)
+        rows=[]; scans=[]
+        def changed(first,last,_roles): rows.append(last.row()-first.row()+1)
+        original_sync=window.collections.model.index_state.sync
+        def sync(*args,**kwargs): scans.append(True); return original_sync(*args,**kwargs)
+        window.collections.model.dataChanged.connect(changed)
+        try:
+            with patch.object(window.collections.model.index_state,"sync",sync):
+                value=copy.deepcopy(a[0]); value.progress=12.5; window._job_changed(value)
+                window.queue_search.setText("NO MATCH"); window.queue_status_filter.setCurrentText("Completed")
+        finally: window.collections.model.dataChanged.disconnect(changed)
+        require(not scans and sum(rows)==2 and window.queue_proxy.rowCount()==0)
+        require(window.collections.model.summary(a_key).progress==12.5/(count//2))
+        action_prompts=[]; clear_prompts=[]; expected_clear=[]
+        def action_confirm(action,jobs,scope):
+            require(action in {"Pause","Resume","Cancel"} and {job.id for job in jobs}==a_ids and a_key[-6:] in scope)
+            action_prompts.append(action); return True
+        def clear_confirm(jobs,scope):
+            require(bool(expected_clear) and {job.id for job in jobs}==expected_clear.pop(0) and "collection" in scope)
+            clear_prompts.append(True); return "list"
+        def trigger(menu,action):
+            menu.popup(window.mapToGlobal(QPoint(200,200))); application.processEvents()
+            require(menu.isVisible() and action.isEnabled()); action.trigger(); menu.hide()
+            spin_until(lambda:not window.queue_batch.busy); application.processEvents()
+        def intact():
+            committed=verified_reload()
+            require({job.id:job.to_dict() for job in committed if job.id in b_ids}==untouched)
+        with patch.object(window,"_confirm_collection_action",action_confirm), patch.object(window,"_confirm_clear",clear_confirm):
+            for action,status in (("Pause",JobStatus.PAUSED),("Resume",JobStatus.WAITING)):
+                trigger(window.collections.actions_menu,window.collections.group_actions[action])
+                require(all(job.status==status for job in verified_reload() if job.id in a_ids)); intact()
+            completed=copy.deepcopy(window.jobs[a[0].id]); completed.status=JobStatus.COMPLETED_WARNINGS
+            window._job_changed(completed)
+            trigger(window.collections.actions_menu,window.collections.group_actions["Cancel"])
+            require(window.jobs[a[0].id].status==JobStatus.COMPLETED_WARNINGS)
+            require(all(window.jobs[key].status==JobStatus.CANCELLED for key in a_ids-{a[0].id})); intact()
+            expected_clear.append({a[0].id})
+            trigger(window.collections.clear_menu,window.collections.clear_actions["Completed"])
+            require(set(window.jobs)==(a_ids|b_ids)-{a[0].id}); intact()
+            expected_clear.append(a_ids-{a[0].id})
+            trigger(window.collections.clear_menu,window.collections.clear_actions["Cancelled"])
+            require(set(window.jobs)==b_ids); intact()
+            choose(b_key)
+            failed=copy.deepcopy(window.jobs[b[0].id]); failed.status=JobStatus.FAILED; window._job_changed(failed)
+            expected_clear.append({b[0].id})
+            trigger(window.collections.clear_menu,window.collections.clear_actions["Failed"])
+            require(set(window.jobs)==b_ids-{b[0].id})
+            require({job.id for job in verified_reload()}==b_ids-{b[0].id})
+            expected_clear.append(b_ids-{b[0].id})
+            trigger(window.collections.clear_menu,window.collections.clear_actions["Collection"])
+        require(not expected_clear and action_prompts==["Pause","Resume","Cancel"] and len(clear_prompts)==4)
+        require(not window.jobs and not verified_reload() and not window.database.search_history() and
+                not window.task_manager.active_count and window.collections.model.summary("").total==0)
+        window.clear_queue_filters(); tick()
+        return dict(admitted=count,groups=2,group_size=count//2,filtered_rows=count//2,hidden_rows=0,
+            incremental_full_syncs=len(scans),incremental_summary_rows=sum(rows),action_confirmations=len(action_prompts),
+            clear_confirmations=len(clear_prompts),completed_retained=1,cancelled=count//2-1,
+            cleared_completed=1,cleared_cancelled=count//2-1,cleared_failed=1,cleared_collection=count//2-1,
+            remaining=len(window.jobs),active_tasks=window.task_manager.active_count,other_group_unchanged=True,
+            persisted_membership=True,wall_seconds=round(time.monotonic()-begin,6),cpu_seconds=round(time.process_time()-cpu,6),
+            max_heartbeat_gap_seconds=round(max(gaps,default=0),6))
     def fake_cleanup(_job):
         cleanup["gui_thread_calls"] += threading.get_ident() == gui_thread
         time.sleep(.001); cleanup["jobs"] += 1
@@ -309,10 +399,12 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                 measure(cycle, name, window.remove_selected)
                 if window.jobs or window.database.search_history() or committed_jobs() or window.active or window.task_manager.active_count:
                     raise RuntimeError("Queue diagnostic retained jobs or workers")
+                collection_checks=check_collections(options)
                 completed.append(dict(cycle=cycle, analysed=count, enqueued=count, started_workers=len(started)-initial_started,
                     acknowledged_workers=len(acknowledged)-initial_acknowledged, cancelled=count,
                     restored=len(restored), removed=count, remaining=0, active_tasks=0,
-                    confirmation_requests=len(prompts)-initial_prompts, queue_rendered=True, selection_checks=selection_checks, restart_checks=restart_checks))
+                    confirmation_requests=len(prompts)-initial_prompts, queue_rendered=True, selection_checks=selection_checks,
+                    restart_checks=restart_checks,collection_checks=collection_checks))
             if max_owned > 2 or any(attempts.values()): raise RuntimeError("Queue diagnostic escaped its I/O/worker bounds")
     finally:
         heartbeat.stop(); heartbeat.deleteLater()

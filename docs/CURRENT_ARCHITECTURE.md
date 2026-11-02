@@ -76,6 +76,9 @@ currently applies a proxy only to Managed Tor; normal download routing is separa
 `models.py`: MediaItem, DownloadOptions, DownloadJob, JobStatus. Jobs have stable
 IDs, options, progress, warnings, diagnostics, Tor/torrent fields, and exact file
 inventories. `DownloadJob.to_dict` excludes preview request headers from history.
+Optional collection_id/name JSON fields identify admission groups. New imports
+get source/title/type-partitioned UUIDs; old source+title jobs derive Legacy keys,
+others remain Ungrouped. No SQL schema or Python/Swift wire change is required.
 
 `database.Database` stores indexed job fields plus JSON snapshots in SQLite WAL.
 History queries the same jobs, not a second independent history store. Active
@@ -136,9 +139,23 @@ filter/reset/live membership changes; hidden memory never supplies action target
 Explicit replacement/None clears hidden memory. No queue execution, database,
 authentication or networking is performed by these controls. See QUEUE_SELECTION.
 
+`queue_collections.CollectionIndex` incrementally projects per-group/global status
+counts and equal-weighted reported progress (not bytes/success). A one-job update
+touches one group/global aggregate. `collection_model.CollectionListModel` adapts
+this cache to `collection_controls.CollectionControls` (native selector/summary/
+menus; no execution/I/O). The queue proxy also filters the immutable collection
+role. The UI freezes scoped action UUIDs before confirmation, then rechecks clear
+eligibility after the modal, on admission and after owner drain before cleanup.
+Status/whole-collection clearing shares selected removal's safe executor; row
+filters intentionally do not narrow this explicitly named scope. Open-menu scope
+cannot broaden into All after group deletion. During a batch the summary shows
+actual batch outcomes and explicitly defers aggregate synchronization until finish.
+See QUEUE_COLLECTIONS.md for legacy/progress semantics and qualification limits.
+
 These are incremental prerequisites, not completed scale/crash qualification.
 History/analysed playlists still use item tables, full history refresh is
-expensive, and collection/dedup/broad restart qualification remains incomplete. See
+expensive despite unchanged-progress suppression, and new collection/native plus
+dedup/broad restart/recovery qualification remains incomplete. See
 `docs/QUEUE_SCALE.md` and `docs/FEATURE_BACKLOG.md` for measured limits and QA.
 
 `queue_check.exercise_queue` is an explicit disposable-state diagnostic, never a

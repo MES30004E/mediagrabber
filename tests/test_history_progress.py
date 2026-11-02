@@ -228,6 +228,7 @@ def test_clear_completed_remains_dirty_if_queue_render_fails_before_history(wind
     refresh = window._refresh_queue
     def fail(*_args, **_kw): raise RuntimeError("synthetic queue render failure")
     monkeypatch.setattr(window, "_refresh_queue", fail)
+    monkeypatch.setattr(window,"_confirm_clear",lambda _jobs,_scope:"list")
     with pytest.raises(RuntimeError, match="synthetic queue render failure"): window.clear_completed()
     monkeypatch.setattr(window, "_refresh_queue", refresh)
     calls = watch_queries(window, monkeypatch); other.progress = 25; window._job_changed(other)

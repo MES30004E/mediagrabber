@@ -68,6 +68,13 @@ def queue_payload(count=100):
                 "cleared_hidden": True, "viewport_matched": True, "sql_writes": 0, "sql_commits": 0, "sql_statements": 0, "owned_tasks": 0, "wall_seconds": .01},
             "restart_checks": {"restarted": count, "confirmation_requests": 1, "prepared_rows": count, "committed_rows": count,
                 "max_owned_workers": 1, "max_slice": 32, "gui_cleanup_calls": 0, "worker_errors": 0,
+                "membership_preserved": True, "wall_seconds": .1, "cpu_seconds": .1, "max_heartbeat_gap_seconds": .01},
+            "collection_checks": {"admitted": count, "groups": 2, "group_size": count//2, "filtered_rows": count//2,
+                "hidden_rows": 0, "incremental_full_syncs": 0, "incremental_summary_rows": 2,
+                "action_confirmations": 3, "clear_confirmations": 4, "completed_retained": 1,
+                "cancelled": count//2-1, "cleared_completed": 1, "cleared_cancelled": count//2-1,
+                "cleared_failed": 1, "cleared_collection": count//2-1, "remaining": 0, "active_tasks": 0,
+                "other_group_unchanged": True, "persisted_membership": True,
                 "wall_seconds": .1, "cpu_seconds": .1, "max_heartbeat_gap_seconds": .01}})
         for stage in stages:
             queue["measurements"].append({"cycle": cycle, "operation": stage, "wall_seconds": .01, "cpu_seconds": .01,
@@ -210,3 +217,29 @@ def test_packaged_queue_requires_bounded_restart_evidence(tmp_path, defect):
         Path(command[command.index("--startup-check")+1]).write_text(json.dumps(data))
         return SimpleNamespace(returncode=0, stdout="", stderr="")
     with pytest.raises(RuntimeError): verify(bundle(tmp_path), runner=run, queue_items=100)
+
+
+@pytest.mark.parametrize("defect", ["missing", "merged", "broadened", "rescan", "notifications", "actions", "clears",
+    "completed", "cancelled", "failed_clear", "collection_clear", "retained", "owner", "other_group", "persistence", "nan", "boolean", "restart_membership"])
+def test_packaged_queue_requires_actual_scoped_collection_evidence(defect):
+    from scripts.check_packaged_app import validate_queue
+    queue=queue_payload()["queue"]; cycle=queue["cycles"][0]; checks=cycle["collection_checks"]
+    if defect=="missing": cycle.pop("collection_checks")
+    elif defect=="merged": checks["groups"]=1
+    elif defect=="broadened": checks["filtered_rows"]=100
+    elif defect=="rescan": checks["incremental_full_syncs"]=1
+    elif defect=="notifications": checks["incremental_summary_rows"]=100
+    elif defect=="actions": checks["action_confirmations"]=50
+    elif defect=="clears": checks["clear_confirmations"]=100
+    elif defect=="completed": checks["completed_retained"]=0
+    elif defect=="cancelled": checks["cancelled"]=50
+    elif defect=="failed_clear": checks["cleared_failed"]=0
+    elif defect=="collection_clear": checks["cleared_collection"]=50
+    elif defect=="retained": checks["remaining"]=1
+    elif defect=="owner": checks["active_tasks"]=1
+    elif defect=="other_group": checks["other_group_unchanged"]=False
+    elif defect=="persistence": checks["persisted_membership"]=False
+    elif defect=="nan": checks["wall_seconds"]=float("nan")
+    elif defect=="boolean": checks["hidden_rows"]=False
+    elif defect=="restart_membership": cycle["restart_checks"]["membership_preserved"]=False
+    with pytest.raises(RuntimeError): validate_queue(queue,100)

@@ -142,6 +142,8 @@ class DownloadJob:
     tor_circuit_retry_limit: int = 3
     tor_target_result: str = "Unknown"
     tor_last_circuit_change: str = ""
+    collection_id: str = ""
+    collection_name: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)

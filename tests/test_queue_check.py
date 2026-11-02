@@ -47,7 +47,16 @@ def test_real_queue_diagnostic_completes_two_cycles_with_owned_workers_and_persi
             "prepared_rows": 100, "committed_rows": 100, "max_owned_workers": 1, "max_slice": 32,
             "gui_cleanup_calls": 0, "worker_errors": 0}.items())
         assert restart["wall_seconds"] > 0 and restart["max_heartbeat_gap_seconds"] >= 0
-        assert {key: value for key, value in result.items() if key not in {"selection_checks", "restart_checks"}} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
+        assert restart["membership_preserved"] is True
+        groups=result["collection_checks"]
+        assert {key:value for key,value in groups.items() if key not in {"wall_seconds","cpu_seconds","max_heartbeat_gap_seconds"}}=={
+            "admitted":100,"groups":2,"group_size":50,"filtered_rows":50,"hidden_rows":0,
+            "incremental_full_syncs":0,"incremental_summary_rows":2,"action_confirmations":3,"clear_confirmations":4,
+            "completed_retained":1,"cancelled":49,"cleared_completed":1,"cleared_cancelled":49,
+            "cleared_failed":1,"cleared_collection":49,"remaining":0,"active_tasks":0,
+            "other_group_unchanged":True,"persisted_membership":True}
+        assert groups["wall_seconds"]>0 and groups["max_heartbeat_gap_seconds"]>=0
+        assert {key: value for key, value in result.items() if key not in {"selection_checks", "restart_checks", "collection_checks"}} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
             "acknowledged_workers": 2, "cancelled": 100, "restored": 100, "removed": 100, "remaining": 0, "active_tasks": 0,
             "confirmation_requests": 1, "queue_rendered": True}
     assert report["network_attempts"] == report["keychain_attempts"] == report["deletion_attempts"] == report["process_attempts"] == 0
@@ -130,3 +139,9 @@ def test_diagnostic_rejects_nonworking_restart_control(isolated_window, tmp_path
     monkeypatch.setattr(isolated_window, "restart_selected", lambda: None)
     with pytest.raises(RuntimeError, match="restart"):
         exercise_queue(isolated_window, APP, 100, tmp_path)
+
+
+def test_diagnostic_rejects_nonworking_scoped_clear_control(isolated_window,tmp_path,monkeypatch):
+    monkeypatch.setattr(isolated_window,"clear_queue_status",lambda *_args:None)
+    with pytest.raises(RuntimeError,match="collection"):
+        exercise_queue(isolated_window,APP,100,tmp_path)
