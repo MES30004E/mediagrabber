@@ -203,6 +203,15 @@ restrictions remain. Live account/media tests need explicit user participation.
   Actual pixel checks now required by the shared frozen diagnostic/verifier;
   deliberate missing-origin/label mutations were rejected. Full948Python and
   29Cocoa tests pass locally; exact whole-A hosted/layout/performance QA remains.
+- Checkpoint A responsive presentation/actions locally tested: collapsible sidebar,
+  folded details, per-view custom columns/widths, useful destination names/safe
+  full tooltips, readable running rates/long ETAs, wrapped connection status and
+  explicit More actions with captured scope. Failed retry reuses the bounded
+  service/auth policy and excludes owners;800/5000 late eligibility tests pass.
+  Full978passed145.56s before final native menu-scope regression; final task/full-A
+  qualification pending. No claim of solved stalls/retention or B/C/D/E completion.
+  Final Task3 local precommit988passed142.97s/native45passed9.79s, zero skips;
+  dialogs/performance/final review/exact hosted acceptance still outstanding.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.

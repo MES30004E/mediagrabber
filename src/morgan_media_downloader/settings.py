@@ -10,6 +10,7 @@ from typing import Any
 from .paths import application_support_dir, default_download_dir
 
 DEFAULT_TOR_BROWSER = "/Applications/Tor Browser.app"
+PRESENTATION_SETTINGS = ("sidebar_collapsed", "queue_details_expanded", "queue_visible_columns", "queue_column_widths")
 
 
 def _default_tor_browser() -> str:
@@ -33,6 +34,10 @@ class AppSettings:
     playlist_panel_sizes: list[int] = field(default_factory=lambda: [650, 170])
     playlist_options_expanded: bool = False
     playlist_preview_expanded: bool = False
+    sidebar_collapsed: bool = False
+    queue_details_expanded: bool = False
+    queue_visible_columns: dict[str, list[str]] = field(default_factory=dict)
+    queue_column_widths: dict[str, dict[str, int]] = field(default_factory=dict)
 
     download_dir: str = str(default_download_dir())
     filename_template: str = "%(title)s.%(ext)s"
@@ -137,6 +142,24 @@ class SettingsStore:
         allowed = AppSettings.__dataclass_fields__.keys()
         aliases = {"first_run_complete": "first_run_complete"}
         clean = {aliases.get(key, key): value for key, value in data.items() if aliases.get(key, key) in allowed}
+        # Optional UI preferences must not make an otherwise valid account/runtime
+        # configuration fail to load. Keep this validation Qt-free and bounded.
+        for name in ("sidebar_collapsed", "queue_details_expanded"):
+            if name in clean and type(clean[name]) is not bool:
+                clean[name] = False
+        visible = clean.get("queue_visible_columns", {})
+        widths = clean.get("queue_column_widths", {})
+        clean["queue_visible_columns"] = {}
+        clean["queue_column_widths"] = {}
+        for view in ("Media", "Torrents", "All"):
+            fields = visible.get(view) if isinstance(visible, dict) else None
+            if isinstance(fields, list):
+                clean["queue_visible_columns"][view] = list(dict.fromkeys(
+                    name for name in fields[:32] if isinstance(name, str) and 0 < len(name) <= 48))
+            values = widths.get(view) if isinstance(widths, dict) else None
+            if isinstance(values, dict):
+                clean["queue_column_widths"][view] = {name: size for name, size in values.items()
+                    if isinstance(name, str) and 0 < len(name) <= 48 and type(size) is int and 40 <= size <= 2000}
         # Migrate the former single Tor mode without silently starting a process.
         if clean.get("connection_mode") == "Tor":
             clean["connection_mode"] = "External Tor"

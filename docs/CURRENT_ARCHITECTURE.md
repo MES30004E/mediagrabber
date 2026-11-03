@@ -25,6 +25,11 @@ theme/native evidence and outstanding layout/progress work: `UI_CORRECTNESS.md`.
 native track local coordinates; an explicit RTL-aware percentage label preserves
 DisplayRole visibility where QMacStyle omits native bar text. The source/frozen
 queue diagnostic requires real in-cell track and label pixel changes.
+`queue_presentation.QueuePresentation` owns bounded header/viewport sizing and
+per-view optional columns, not queue execution or persistence. Sidebar/details/
+column preferences use existing settings Apply/close boundaries; the settings
+form merges only those four current presentation fields. Scoped More actions
+reuse the existing captured-ID batch/removal/restart paths and auth retry policy.
 
 ## Analysis and downloads
 

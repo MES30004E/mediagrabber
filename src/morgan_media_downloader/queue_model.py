@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from html import escape
 import math
+from pathlib import PurePath
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPoint, QRect, QThread, Qt
 from PySide6.QtGui import QFontMetrics, QPalette
@@ -42,6 +44,7 @@ class QueueRow:
     status: str
     search: str
     collection_id: str
+    location: str = ""
 
 
 def presentation_row(job: DownloadJob, connection_mode: str) -> QueueRow:
@@ -56,10 +59,12 @@ def presentation_row(job: DownloadJob, connection_mode: str) -> QueueRow:
     elif job.status in {JobStatus.DOWNLOADING, JobStatus.CONVERTING} and job.postprocessing_stage: status = job.postprocessing_stage
     else: status = job.status.value
     speed = f"{human_bytes(job.speed)}/s" if job.speed else "—"
+    location = str(job.output_file or job.options.download_dir or "")
+    destination = (PurePath(location).name or location) if location else "—"
     cells = (job.item.title, job.item.source, "Torrent" if job.kind == "torrent" else "Media", status,
         f"{progress:.1f}%" if progress is not None else "—", size, speed, speed,
         f"{human_bytes(job.upload_speed)}/s" if job.upload_speed else "—", str(job.peers), str(job.seeds),
-        human_duration(job.eta), format_name, job.output_file or job.options.download_dir)
+        human_duration(job.eta), format_name, destination)
     if job.kind == "torrent":
         tooltip = (f"Peer Discovery\nTrackers: {job.original_tracker_count} original + {job.additional_tracker_count} additional\n"
             f"DHT/PEX/Local Discovery: {'Disabled (private torrent)' if job.torrent_private else 'Configured in Settings'}")
@@ -75,7 +80,7 @@ def presentation_row(job: DownloadJob, connection_mode: str) -> QueueRow:
             f"\nThumbnail: {'Embed' if job.options.embed_thumbnail else 'Off'}\nSubtitles: {subtitle}{verification}")
     search = "\n".join(str(value or "") for value in (job.item.title, job.item.source, job.item.source_url,
                          job.item.original_url, job.output_file, job.options.download_dir)).casefold()
-    return QueueRow(job.id, "torrent" if job.kind == "torrent" else "media", cells, progress, tooltip, job.status.value, search, collection_key(job))
+    return QueueRow(job.id, "torrent" if job.kind == "torrent" else "media", cells, progress, tooltip, job.status.value, search, collection_key(job), location)
 
 
 def contiguous_ranges(rows: Iterable[int]) -> list[tuple[int, int]]:
@@ -121,7 +126,11 @@ class QueueTableModel(QAbstractTableModel):
         if role == SEARCH_ROLE: return row.search
         if role == COLLECTION_ROLE: return row.collection_id
         if role == PROGRESS_ROLE and column == "Progress": return row.progress
-        if role == Qt.ItemDataRole.ToolTipRole and index.column() == 0: return row.tooltip
+        if role == Qt.ItemDataRole.ToolTipRole:
+            text = row.tooltip if index.column() == 0 else row.location if column == "Destination" else row.cells[FIELD_INDEX[column]]
+            # QToolTip accepts rich text. Escape every source/path/status value so
+            # metadata cannot become markup or an external image resource.
+            return "<qt>" + escape(text).replace("\n", "<br/>") + "</qt>" if text else None
         return None
 
     def index_for_id(self, job_id: str) -> QModelIndex:

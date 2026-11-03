@@ -61,11 +61,13 @@ class MediaSelectionTable(QTableWidget):
 class NavigationShell(QWidget):
     """Sidebar navigation retaining the small tab API used by existing actions."""
     currentChanged = Signal(int)
+    collapsedChanged = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
-        sidebar = QWidget(); sidebar.setObjectName("sidebar"); sidebar.setFixedWidth(164)
+        sidebar = self.sidebar = QWidget(); sidebar.setObjectName("sidebar"); sidebar.setFixedWidth(164)
+        self._collapsed = False
         side = QVBoxLayout(sidebar); side.setContentsMargins(12, 24, 12, 16); side.setSpacing(16)
         brand = QLabel("MORGAN"); brand.setObjectName("brand")
         subtitle = QLabel("Media Downloader"); subtitle.setWordWrap(True); subtitle.setObjectName("muted")
@@ -73,10 +75,35 @@ class NavigationShell(QWidget):
         self.navigation = QListWidget(); self.navigation.setObjectName("navigation"); self.navigation.setAccessibleName("Main sections")
         self.navigation.setFrameShape(QFrame.Shape.NoFrame); side.addWidget(self.navigation, 1)
         hint = QLabel("⌘1–5  Navigate"); hint.setObjectName("muted"); side.addWidget(hint)
+        self._captions = (brand, subtitle, hint)
+        self.sidebar_toggle = QToolButton(); self.sidebar_toggle.setText("‹")
+        self.sidebar_toggle.setAccessibleName("Collapse sidebar"); self.sidebar_toggle.setToolTip("Collapse sidebar")
+        self.sidebar_toggle.clicked.connect(lambda: self.setCollapsed(not self._collapsed))
+        side.addWidget(self.sidebar_toggle)
         self.stack = QStackedWidget(); self._labels = []; self._shortcuts = []
         layout.addWidget(sidebar); layout.addWidget(self.stack, 1)
         self.navigation.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.stack.currentChanged.connect(self._changed)
+
+    def isCollapsed(self):
+        return self._collapsed
+
+    def setCollapsed(self, collapsed):
+        collapsed = bool(collapsed)
+        if collapsed == self._collapsed:
+            return
+        self._collapsed = collapsed
+        self.sidebar.setFixedWidth(64 if collapsed else 164)
+        for caption in self._captions:
+            caption.setVisible(not collapsed)
+        for index, label in enumerate(self._labels):
+            item = self.navigation.item(index)
+            item.setText("" if collapsed else label)
+            item.setSizeHint(QSize(28 if collapsed else 132, 40))
+        label = "Expand sidebar" if collapsed else "Collapse sidebar"
+        self.sidebar_toggle.setText("›" if collapsed else "‹")
+        self.sidebar_toggle.setAccessibleName(label); self.sidebar_toggle.setToolTip(label)
+        self.collapsedChanged.emit(collapsed)
 
     def _changed(self, index):
         self.navigation.setCurrentRow(index); self.currentChanged.emit(index)
@@ -106,8 +133,9 @@ class NavigationShell(QWidget):
                  QStyle.StandardPixmap.SP_FileDialogDetailedView, QStyle.StandardPixmap.SP_ComputerIcon,
                  QStyle.StandardPixmap.SP_FileDialogContentsView]
         icon=self._download_icon() if index==0 else self.style().standardIcon(icons[min(index,4)])
-        item = QListWidgetItem(icon, label)
-        item.setSizeHint(QSize(132, 40)); self.navigation.addItem(item)
+        item = QListWidgetItem(icon, "" if self._collapsed else label)
+        item.setData(Qt.ItemDataRole.AccessibleTextRole, label); item.setToolTip(label)
+        item.setSizeHint(QSize(28 if self._collapsed else 132, 40)); self.navigation.addItem(item)
         shortcut = QShortcut(QKeySequence(f"Meta+{index + 1}"), self)
         shortcut.activated.connect(lambda i=index: self.setCurrentIndex(i)); self._shortcuts.append(shortcut)
         if index == 0: self.navigation.setCurrentRow(0)

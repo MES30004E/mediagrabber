@@ -52,9 +52,9 @@ hardware-keyboard focus or grant permission to control another application.
 
 - Native progress repair is locally tested below; exact hosted frozen validation
   remains outstanding with the rest of Checkpoint A.
-- Compact clipping, narrow titles, horizontal scrolling, oversized details,
-  collection-row alignment and persisted responsive preferences.
-- Discoverable remaining bulk actions and concise counted confirmation dialogs.
+- Layout/preferences and discoverable actions are locally tested below; final
+  whole-checkpoint visual/performance/hosted acceptance remains outstanding.
+- Concise counted confirmation dialogs and expandable technical details.
 - Whole-checkpoint fresh review, full final tests/performance comparisons and
   exact-commit hosted packaged/macOS/Linux qualification.
 - Full B/C/D/E roadmap in FEATURE_BACKLOG, including actual Library playback,
@@ -114,3 +114,50 @@ show the correct progress column and visible percentages, with no title overpain
 Synthetic fixture percentages reflect their stored fields, not live media tests.
 Compact clipping, column allocation/details, dialogs and final hosted acceptance
 remain unfinished; no release/install or Swift work was performed.
+
+## Responsive presentation and discoverable actions
+
+`queue_presentation.QueuePresentation` configures a bounded number of interactive
+header sections on view, font and viewport changes, without job scans, SQL or
+settings writes. Defaults show Title, Status, Progress, transfer speed, ETA and
+Destination. Type, upload speed and other technical fields remain available under
+Columns; explicit extra columns/custom widths may intentionally require scrolling.
+Actual running-rate and long-ETA cell pixels are compared against wider cells:
+dash-only idle fixtures had missed clipped units. Warning status width also has
+a real native cell-image regression, not just a font-width assertion.
+
+The queue uses smaller horizontal margins, useful remaining table height and a
+collapsed-by-default Download details disclosure. Collection selectors stay next
+to their labels. Sidebar collapse preserves accessible names and Meta1–5 routes.
+Per-view visibility/widths and sidebar/details preferences are optional schema6
+fields, sanitised without resetting authentication/runtime state. Ordinary Apply
+merges only those four presentation fields from current UI state; Cancel and
+explicit Reset retain their separate semantics. Preferences persist at existing
+Apply/close boundaries, not on resize. Reset columns affects only the current view.
+
+Destination shows the useful filename/folder, with the unchanged full path in
+search, details and escaped tooltips. No filesystem lookup or domain path rewrite.
+The Download connection result is a separate wrapped plain-text line, leaving
+Test and Account controls accessible when a result is long.
+
+Direct Clear Completed and its existing split-button menu remain. A named More
+actions menu exposes failed retry, clear cancelled/failed/selected/current group,
+cancel group and restart selected. Its collection actions capture scope when the
+menu opens; a visible disabled heading is used because Cocoa omits menu sections.
+Retry failed freezes UUIDs, confirms once, excludes live owners and rechecks
+failure/membership per existing32-ID batch slice. Existing Resume authentication
+policy alone refreshes account fields for recognized media auth failures; all
+other captured options remain. Modal completion/moves are skipped, never broadened.
+
+Local source full suite before the final scope-heading regression: **978 passed,
+5 test-only Qt activation deprecations in145.56s**, zero skips; focused81passed
+15.61s/native35passed8.71s. Additional all-view percentage characterization9passed
+2.03s (no new paint fix). Companion10passed, protocol9/pipcheck/shell syntax pass.
+Final task-boundary/full-checkpoint runs will supersede this intermediate count.
+Final Task3 precommit suite: **988 passed,5 warnings in142.97s**, zero skips;
+native layout/action/paint **45 passed,2 warnings in9.79s**. Scope heading was
+observed RED at actual native0height and is now visibly present in a fresh popup.
+Fresh source captures include nonzero transfers/long ETAs, all3queue views and
+Light/Dark/System at requested sizes/fullscreen, with zero external I/O/final owners.
+Reviewed compact Dark queue/Download and System menu; final all-page evidence and
+same-fixture performance/hosted packaged qualification are still Task4 work.

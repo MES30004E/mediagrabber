@@ -65,6 +65,7 @@ from .torrent import (TORRENT_TOR_ERROR, TorrentMetadata, analyse_torrent, downl
 from .yt_runtime import RuntimeSnapshot, YtDlpRuntimeManager, get_runtime_manager
 from .ui_components import NavigationShell, page_heading, polish_table, DisclosureSection, MediaSelectionTable, StatusLabel
 from .theme import apply_theme
+from .queue_presentation import QueuePresentation
 from .auth import connection_failure, requires_authentication
 
 
@@ -297,6 +298,8 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         self.tabs = NavigationShell(); self.setCentralWidget(self.tabs)
+        self.tabs.collapsedChanged.connect(lambda collapsed: setattr(self.settings, "sidebar_collapsed", collapsed))
+        self.tabs.setCollapsed(self.settings.sidebar_collapsed)
         download_tab = QWidget(); outer = QVBoxLayout(download_tab)
         outer.setContentsMargins(22, 14, 22, 12); outer.setSpacing(6)
         self.banner = QWidget(); banner_row = QHBoxLayout(self.banner); banner_row.setContentsMargins(8, 4, 8, 4)
@@ -323,7 +326,9 @@ class MainWindow(QMainWindow):
         self.connection_selector.currentTextChanged.connect(self._connection_changed)
         self.connection_status = StatusLabel("● Ready"); self.connection_test = QPushButton("Test"); self.connection_test.clicked.connect(self._test_connection)
         self.account_button = QPushButton("YouTube Account…"); self.account_button.clicked.connect(self.show_youtube_account)
-        connection_row.addWidget(self.connection_selector); connection_row.addWidget(self.connection_status); connection_row.addWidget(self.connection_test); connection_row.addStretch(); connection_row.addWidget(self.account_button); outer.addLayout(connection_row)
+        connection_row.addWidget(self.connection_selector); connection_row.addWidget(self.connection_test); connection_row.addStretch(); connection_row.addWidget(self.account_button); outer.addLayout(connection_row)
+        self.connection_status.setTextFormat(Qt.TextFormat.PlainText); self.connection_status.setWordWrap(True)
+        self.connection_status.setMinimumWidth(0); outer.addWidget(self.connection_status)
         self.analysis_progress = QProgressBar(); self.analysis_progress.setRange(0, 0); self.analysis_progress.hide(); outer.addWidget(self.analysis_progress)
         self.summary = QLabel("Enter a supported URL or search terms."); self.summary.setWordWrap(True); outer.addWidget(self.summary)
         self.analysis_diagnostics = QPushButton("View diagnostic details…"); self.analysis_diagnostics.clicked.connect(self._show_analysis_diagnostics)
@@ -443,7 +448,8 @@ class MainWindow(QMainWindow):
         self.console_tab = self._console_tab(); self.tabs.addTab(self.console_tab, "Console")
         self.settings_panel = SettingsWindow(self.settings, self.managed_tor, self._apply_settings, self,
                                              self.runtime_manager, self.task_manager, embedded=True,
-                                             account_callback=self._apply_account_choice)
+                                             account_callback=self._apply_account_choice,
+                                             presentation_settings=lambda:self.settings)
         self.tabs.addTab(self.settings_panel, "Settings")
         self.provider_label = StatusLabel(); self.runtime_label = QLabel(); self.connection_bar_label = QLabel()
         self.statusBar().addPermanentWidget(self.provider_label); self.statusBar().addPermanentWidget(self.runtime_label); self.statusBar().addPermanentWidget(self.connection_bar_label)
@@ -454,7 +460,7 @@ class MainWindow(QMainWindow):
 
     def _queue_tab(self):
         widget = QWidget(); layout = QVBoxLayout(widget)
-        layout.setContentsMargins(22, 18, 22, 16); layout.setSpacing(10)
+        layout.setContentsMargins(12, 18, 12, 16); layout.setSpacing(10)
         page_heading(layout, "Queue", "Track transfers, review warnings and manage retained downloads.")
         self.queue_empty = QLabel("No downloads yet. Add a URL on Download to get started."); self.queue_empty.setObjectName("muted"); self.queue_empty.setWordWrap(True); layout.addWidget(self.queue_empty)
         self.collections=CollectionControls(self)
@@ -508,6 +514,8 @@ class MainWindow(QMainWindow):
         self.queue_table.setItemDelegate(QueueProgressDelegate(self.queue_table))
         polish_table(self.queue_table)
         self.queue_table.horizontalHeader().setResizeContentsPrecision(100)
+        self.queue_presentation=QueuePresentation(self.queue_table,self.queue_model,lambda:self.settings)
+        filter_row.addWidget(self.queue_presentation.columns_button)
         self._queue_header_view = None
         self._queue_header_populated = False
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -516,11 +524,39 @@ class MainWindow(QMainWindow):
         self.queue_table.selectionModel().selectionChanged.connect(self._queue_selection_changed)
         layout.addWidget(self.queue_table)
         self.job_details = QPlainTextEdit(); self.job_details.setReadOnly(True); self.job_details.setMaximumHeight(155)
-        self.job_details.setPlaceholderText("Select a job to view details"); layout.addWidget(self.job_details)
+        self.job_details.setPlaceholderText("Select a job to view details")
+        self.queue_details_section = DisclosureSection("Download details", self.settings.queue_details_expanded)
+        details_layout = QVBoxLayout(self.queue_details_section.content); details_layout.setContentsMargins(0,0,0,0)
+        details_layout.addWidget(self.job_details); layout.addWidget(self.queue_details_section)
+        self.queue_details_section.toggle.toggled.connect(lambda expanded: setattr(self.settings, "queue_details_expanded", expanded))
         actions = QHBoxLayout()
         for text, callback in [("Pause", self.pause_selected), ("Resume", self.resume_selected), ("Cancel", self.cancel_selected), ("Retry", self.retry_selected)]:
             button = QPushButton(text); button.clicked.connect(callback); actions.addWidget(button)
         actions.addWidget(self.collections.clear_button)
+        self.queue_more_button = QToolButton(); self.queue_more_button.setText("More actions")
+        self.queue_more_button.setAccessibleName("More queue actions")
+        self.queue_more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.queue_more_menu = QMenu(self.queue_more_button); self.queue_more_button.setMenu(self.queue_more_menu)
+        # Cocoa may omit QMenu sections entirely. The captured target must remain
+        # visible before an action, rather than exist only as hidden metadata.
+        self.queue_more_heading = self.queue_more_menu.addAction("Current collection")
+        self.queue_more_heading.setEnabled(False)
+        self.queue_more_actions = {}
+        for key, text, callback in [
+            ("retry_failed", "Retry failed", self.retry_failed),
+            ("clear_cancelled", "Clear cancelled", lambda scope:self.clear_queue_status("Cancelled",scope)),
+            ("clear_failed", "Clear failed", lambda scope:self.clear_queue_status("Failed",scope)),
+            ("clear_collection", "Clear current collection", self.clear_collection),
+            ("cancel_collection", "Cancel current collection", lambda scope:self.act_on_collection("Cancel",scope)),
+        ]:
+            item = self.queue_more_menu.addAction(text+"…"); self.queue_more_actions[key] = item
+            item.triggered.connect(lambda _checked=False, item=item, callback=callback:callback(item.data()))
+        self.queue_more_menu.addSeparator()
+        for key, text, callback in [("restart_selected", "Restart selected…", self.restart_selected),
+                                    ("clear_selected", "Clear selected…", self.remove_selected)]:
+            item = self.queue_more_menu.addAction(text,callback); self.queue_more_actions[key] = item
+        self.queue_more_menu.aboutToShow.connect(self._capture_queue_more_actions)
+        actions.addWidget(self.queue_more_button)
         self.stop_queue_batch = QPushButton("Stop batch action"); self.stop_queue_batch.setEnabled(False)
         self.stop_queue_batch.clicked.connect(self.queue_batch.cancel); actions.addWidget(self.stop_queue_batch)
         actions.addStretch(); layout.addLayout(actions); return widget
@@ -1498,6 +1534,7 @@ class MainWindow(QMainWindow):
 
     def _queue_batch_progress(self, info):
         self.stop_queue_batch.setEnabled(self.queue_batch.busy)
+        self.queue_more_button.setEnabled(not self.queue_batch.busy and not self._closing)
         self.collections.refresh(info if self.queue_batch.busy else None)
         self.statusBar().showMessage(("Stopped — " if info['cancelled'] else "") + f"{info['label']}: {info['completed']} completed; {info['failed']} failed; "
             f"{info.get('skipped', 0)} unchanged; {info['pending']} pending. " + info['error'])
@@ -1852,6 +1889,41 @@ class MainWindow(QMainWindow):
     def clear_completed(self):
         self.clear_queue_status("Completed")
 
+    def _capture_queue_more_actions(self):
+        scope = self.collections.scope(); key = scope[0]
+        summary = self.collections.model.summary(key); counts = dict(summary.counts)
+        # Counts are cached; subtract only the bounded set of actual task owners.
+        owned_failed = sum(job.status == JobStatus.FAILED and (not key or collection_key(job) == key)
+                           for job_id in self.active if (job := self.jobs.get(job_id)) is not None)
+        entries = [
+            ("retry_failed", "Retry failed", max(0,counts["Failed"]-owned_failed)),
+            ("clear_cancelled", "Clear cancelled", counts["Cancelled"]),
+            ("clear_failed", "Clear failed", counts["Failed"]),
+            ("clear_collection", "Clear current collection", summary.total if key else 0),
+            ("cancel_collection", "Cancel current collection", summary.total if key else 0),
+        ]
+        self.queue_more_heading.setText("Scope: "+self.collections.scope_label(scope))
+        available = not self.queue_batch.busy and not self._closing
+        for name, label, count in entries:
+            item = self.queue_more_actions[name]; item.setData(scope)
+            item.setText(f"{label} ({count:,})…"); item.setEnabled(available and count > 0)
+        selected = bool(self.queue_table.selectionModel().selectedRows())
+        for name in ("restart_selected","clear_selected"):
+            self.queue_more_actions[name].setEnabled(available and selected)
+
+    def retry_failed(self, scope=None):
+        if self._queue_action_blocked(): return
+        scope = self._collection_scope(scope)
+        if scope is None: return
+        eligible = lambda job:(not scope[0] or collection_key(job)==scope[0]) and job.status==JobStatus.FAILED and job.id not in self.active
+        jobs = [job for job in self.jobs.values() if eligible(job)]
+        ids = tuple(job.id for job in jobs)
+        if not ids: return
+        label = self.collections.scope_label(scope)
+        if not self._confirm_collection_action("Retry failed",jobs,label) or self._queue_action_blocked(): return
+        settings = copy.deepcopy(self.settings)
+        self.queue_batch.start(ids,lambda keys:self._apply_queue_slice(keys,"Resume",settings,eligible),"Retry failed "+label)
+
     def _collection_scope(self, scope=None, *, require_group=False):
         scope=self.collections.scope() if scope is None else scope
         if not isinstance(scope,(tuple,list)) or len(scope)!=2 or not all(isinstance(value,str) for value in scope):
@@ -2155,15 +2227,9 @@ class MainWindow(QMainWindow):
             self.queue_proxy.set_filters({"Media": "media", "Torrents": "torrent", "All": ""}[view],
                                          self.queue_status_filter.currentText(), self.queue_search.text(),self.collections.scope()[0])
             self._restore_queue_selection()
-            if self._queue_header_view != view or (not self._queue_header_populated and self.queue_proxy.rowCount() > 0):
-                header = self.queue_table.horizontalHeader()
-                header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-                for column, name in enumerate(self.queue_model.columns):
-                    if name in {"Title", "Destination"}: header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
-                    elif name == "Progress": self.queue_table.setColumnWidth(column, 140)
-                    else: self.queue_table.resizeColumnToContents(column)
-                self._queue_header_view = view
-                self._queue_header_populated = self.queue_proxy.rowCount() > 0
+            self.queue_presentation.configure(view)
+            self._queue_header_view = view
+            self._queue_header_populated = self.queue_proxy.rowCount() > 0
         finally: del blocker
         self.queue_table.verticalScrollBar().setValue(vertical)
         self.queue_table.horizontalScrollBar().setValue(horizontal)
@@ -2216,6 +2282,9 @@ class MainWindow(QMainWindow):
     def _apply_settings(self, settings: AppSettings, proxy_passwords: object):
         self._inspection_generation += 1
         self.settings = settings
+        self.tabs.setCollapsed(settings.sidebar_collapsed)
+        self.queue_details_section.setExpanded(settings.queue_details_expanded)
+        self.queue_presentation.configure(self.queue_model.view,force=True)
         supplied = proxy_passwords if isinstance(proxy_passwords, dict) else {"legacy": str(proxy_passwords or "")}
         for kind, username in (("http", settings.http_proxy_username), ("socks", settings.socks_proxy_username)):
             password = str(supplied.get(kind) or "")

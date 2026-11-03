@@ -40,13 +40,15 @@ class SettingsWindow(QDialog):
     def __init__(self, settings: AppSettings, tor: ManagedTor, apply_callback: Callable[[AppSettings, object], None],
                  parent=None, runtime_manager: YtDlpRuntimeManager | None = None,
                  task_manager: TaskManager | None = None, embedded: bool = False, companion_controller=None,
-                 account_callback: Callable[[str], AppSettings] | None = None, component_catalog=None, app_update_manager=None):
+                 account_callback: Callable[[str], AppSettings] | None = None, component_catalog=None, app_update_manager=None,
+                 presentation_settings: Callable[[], AppSettings] | None = None):
         super().__init__(parent)
         self.original = settings; self.working = copy.deepcopy(settings); self.tor = tor; self.apply_callback = apply_callback
         self.runtime_manager = runtime_manager or get_runtime_manager()
         self.task_manager = task_manager or TaskManager(self)
         self.embedded = embedded
         self.account_callback = account_callback
+        self.presentation_settings = presentation_settings
         from .youtube_companion.bridge import CompanionController
         self.companion = companion_controller or CompanionController()
         self._pending_companion = None
@@ -741,6 +743,11 @@ class SettingsWindow(QDialog):
 
     def _collect(self) -> AppSettings:
         s = copy.deepcopy(self.working)
+        if self.presentation_settings is not None:
+            from .settings import PRESENTATION_SETTINGS
+            current=self.presentation_settings()
+            for name in PRESENTATION_SETTINGS:
+                setattr(s,name,copy.deepcopy(getattr(current,name)))
         s.theme = self.theme.currentText(); s.clipboard_url_detection = self.clipboard_detection.isChecked(); s.remember_window_size = self.remember_size.isChecked(); s.remember_window_position = self.remember_position.isChecked(); s.show_first_run_diagnostics = self.show_diagnostics.isChecked()
         s.download_dir = self.download_dir.text().strip(); s.create_subfolders = self.subfolders.currentText(); s.filename_template = self.filename.text(); s.compatibility = self.compatibility.currentText(); s.quality = self.quality.currentText(); s.container = self.container.currentText(); s.audio_format = self.audio_format.currentText(); s.audio_bitrate = self.audio_bitrate.currentText(); s.concurrent_downloads = self.concurrency.value()
         s.embed_thumbnail = self.embed_thumbnail.isChecked(); s.embed_metadata = self.embed_metadata.isChecked(); s.embed_chapters = self.embed_chapters.isChecked(); s.embed_subtitles = self.embed_subtitles.isChecked(); s.write_subtitles = self.write_subtitles.isChecked(); s.keep_original = self.keep_original.isChecked(); s.subtitle_languages = self.languages.text().strip(); s.subtitle_source = self.subtitle_source.currentText(); s.verify_postprocessing = self.verify_postprocessing.isChecked()

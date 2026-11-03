@@ -83,6 +83,33 @@ def test_proxy_filters_kind_without_turning_visible_row_into_source_row_identity
     assert proxy.mapFromSource(model.index_for_id(media.id)).isValid() is False
 
 
+def test_destination_shows_useful_name_but_keeps_full_path_search_and_safe_tooltip():
+    from morgan_media_downloader.queue_model import SEARCH_ROLE
+    model=QueueTableModel(); job=make_job()
+    job.output_file="/synthetic/album/Useful clip<1>.mp4"
+    model.sync([job],"Media","Direct")
+    destination=model.index(0,8)
+    assert destination.data()=="Useful clip<1>.mp4"
+    assert "/synthetic/album/useful clip<1>.mp4" in destination.data(SEARCH_ROLE)
+    tooltip=destination.data(Qt.ItemDataRole.ToolTipRole)
+    assert "/synthetic/album/Useful clip&lt;1&gt;.mp4" in tooltip and "<1>" not in tooltip
+    assert job.output_file=="/synthetic/album/Useful clip<1>.mp4"
+    job.output_file=""; model.update_job(job,"Direct")
+    assert destination.data()=="downloads"
+    assert "/synthetic/downloads" in destination.data(Qt.ItemDataRole.ToolTipRole)
+
+
+def test_elided_status_exposes_full_plain_meaning_without_interpreting_remote_markup():
+    model=QueueTableModel(); job=make_job()
+    job.status=JobStatus.CONVERTING
+    job.postprocessing_stage='Writing <img src="https://example.test/unwanted"> metadata'
+    model.sync([job],"Media","Direct")
+    status=model.index(0,2)
+    assert status.data()=='Writing <img src="https://example.test/unwanted"> metadata'
+    tooltip=status.data(Qt.ItemDataRole.ToolTipRole)
+    assert "&lt;img" in tooltip and "<img" not in tooltip
+
+
 def test_mutation_from_background_thread_is_refused_before_any_model_change():
     import threading
     model = QueueTableModel(); errors = []

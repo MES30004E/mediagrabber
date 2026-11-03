@@ -1,6 +1,6 @@
 """Small native collection presentation; no execution, database or filesystem."""
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMenu, QProgressBar, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMenu, QProgressBar, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 from .collection_model import CollectionListModel
 
@@ -14,10 +14,10 @@ class CollectionControls(QWidget):
         super().__init__(parent)
         self.model=CollectionListModel(self)
         layout=QVBoxLayout(self); layout.setContentsMargins(0,0,0,0)
-        row=QHBoxLayout(); row.addWidget(QLabel("Collection:"))
+        row=QHBoxLayout(); label=QLabel("Collection:"); label.setSizePolicy(QSizePolicy.Policy.Fixed,QSizePolicy.Policy.Preferred); row.addWidget(label)
         self.selector=QComboBox(); self.selector.setModel(self.model); self.selector.setAccessibleName("Queue collection")
         self.selector.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.selector.setMinimumContentsLength(18); self.selector.setMinimumWidth(180); self.selector.setMaximumWidth(260)
+        self.selector.setMinimumContentsLength(18); self.selector.setMaximumWidth(260)
         self.selector.currentIndexChanged.connect(lambda *_:self.filter_changed.emit()); row.addWidget(self.selector,1)
         self.progress=QProgressBar(); self.progress.setMaximumWidth(165); self.progress.setMinimumWidth(110)
         self.progress.setAccessibleName("Collection average item progress")
@@ -29,7 +29,7 @@ class CollectionControls(QWidget):
         for action in ("Pause","Resume","Cancel"):
             item=self.actions_menu.addAction(action+" collection…"); self.group_actions[action]=item
             item.triggered.connect(lambda _checked=False,a=action,item=item:self.action_requested.emit(a,item.data() or self.scope()))
-        self.actions_menu.aboutToShow.connect(self._capture_actions); row.addWidget(self.actions_button)
+        self.actions_menu.aboutToShow.connect(self._capture_actions); row.addWidget(self.actions_button); row.addStretch(1)
         layout.addLayout(row)
         self.summary_label=QLabel(); self.summary_label.setTextFormat(Qt.TextFormat.PlainText)
         self.summary_label.setWordWrap(True); self.summary_label.setMinimumWidth(0); self.summary_label.setMaximumHeight(42)

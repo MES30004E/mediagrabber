@@ -57,17 +57,18 @@ Consumes current PROGRESS_ROLE/DisplayRole, exposes same delegate interface.
 
 ### Task 3: Responsive presentation and discoverable actions
 
-Files: ui.py/ui_components.py/collection_controls.py/settings.py; new focused
-queue presentation helper if needed; queue/selection/settings/layout tests.
+Files: ui.py/ui_components.py/collection_controls.py/settings.py/settings_window.py;
+focused queue presentation helper and conservative native reflow; queue_model.py cached
+destination/status presentation; queue/selection/settings/layout tests.
 Consumes stable UUID proxy, QueueBatch and captured scope APIs unchanged.
 Interface: controller reflows on viewport/view/user preference, not progress;
 defaults/backward-compatible saved detail/sidebar/column preferences.
-- [ ] RED900/1180/1440 bounds, useful table space, left-aligned collection
+- [x] RED900/1180/1440 bounds, useful table space, left-aligned collection
   controls, title priority, optional technical columns, collapsed details,
   sidebar/Meta1–5 and state roundtrip/ApplyCancel tests.
-- [ ] Implement conservative native reflow/details/column/sidebar helpers;
+- [x] Implement conservative native reflow/details/column/sidebar helpers;
   preserve all data/actions and no model rescan/SQL/settings write on resize.
-- [ ] RED direct/common versus More actions, retry-failed scope/one confirmation/
+- [x] RED direct/common versus More actions, retry-failed scope/one confirmation/
   auth policy, moved/completed targets and hidden selection. Reuse services;
   GREEN800/5000/existing selection/restart/clear tests.
 
