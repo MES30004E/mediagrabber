@@ -1,10 +1,41 @@
 """Small reusable presentation widgets; no downloader or persistence policy."""
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtCore import QEvent,Qt, Signal, QSize
+from PySide6.QtGui import QIcon,QPainter,QPalette,QPixmap,QShortcut, QKeySequence
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, QListWidget,
                                QListWidgetItem, QStackedWidget, QToolButton, QStyle,
-                               QScrollArea, QFrame, QFormLayout)
+                               QScrollArea, QFrame, QFormLayout, QApplication)
 from PySide6.QtWidgets import QTableWidget
+from .theme import status_foreground
+
+
+class StatusLabel(QLabel):
+    """Semantic status on a window surface; no backend or persistence policy."""
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._tone = "neutral"
+        self._updating_color = False
+        self._refresh_color()
+
+    def set_tone(self, tone: str) -> None:
+        self._tone = tone
+        self._refresh_color()
+
+    def _refresh_color(self) -> None:
+        if getattr(self, "_updating_color", True):
+            return
+        self._updating_color = True
+        try:
+            color = status_foreground(self._tone, QApplication.palette())
+            stylesheet = f"color: {color.name()}"
+            if self.styleSheet() != stylesheet:
+                self.setStyleSheet(stylesheet)
+        finally:
+            self._updating_color = False
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.PaletteChange:
+            self._refresh_color()
 
 
 class MediaSelectionTable(QTableWidget):
@@ -50,12 +81,32 @@ class NavigationShell(QWidget):
     def _changed(self, index):
         self.navigation.setCurrentRow(index); self.currentChanged.emit(index)
 
+    def _download_icon(self):
+        # Keep the existing standard arrow's shape, but supply explicit readable
+        # modes. The Cocoa standard pixmap can stay black after palette changes.
+        source=self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown).pixmap(QSize(20,20),self.devicePixelRatioF())
+        palette=self.palette(); icon=QIcon()
+        for mode,color in ((QIcon.Mode.Normal,palette.color(QPalette.ColorRole.WindowText)),
+                (QIcon.Mode.Active,palette.color(QPalette.ColorRole.WindowText)),
+                (QIcon.Mode.Selected,palette.color(QPalette.ColorRole.HighlightedText)),
+                (QIcon.Mode.Disabled,palette.color(QPalette.ColorGroup.Disabled,QPalette.ColorRole.WindowText))):
+            pixmap=QPixmap(source); painter=QPainter(pixmap)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(pixmap.rect(),color); painter.end(); icon.addPixmap(pixmap,mode)
+        return icon
+
+    def changeEvent(self,event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange,QEvent.Type.StyleChange) and hasattr(self,"navigation") and self.navigation.count():
+            self.navigation.item(0).setIcon(self._download_icon())
+
     def addTab(self, widget, label):
         index = self.stack.addWidget(widget); self._labels.append(label)
         icons = [QStyle.StandardPixmap.SP_ArrowDown, QStyle.StandardPixmap.SP_FileDialogListView,
                  QStyle.StandardPixmap.SP_FileDialogDetailedView, QStyle.StandardPixmap.SP_ComputerIcon,
                  QStyle.StandardPixmap.SP_FileDialogContentsView]
-        item = QListWidgetItem(self.style().standardIcon(icons[min(index, 4)]), label)
+        icon=self._download_icon() if index==0 else self.style().standardIcon(icons[min(index,4)])
+        item = QListWidgetItem(icon, label)
         item.setSizeHint(QSize(132, 40)); self.navigation.addItem(item)
         shortcut = QShortcut(QKeySequence(f"Meta+{index + 1}"), self)
         shortcut.activated.connect(lambda i=index: self.setCurrentIndex(i)); self._shortcuts.append(shortcut)

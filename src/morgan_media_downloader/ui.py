@@ -63,7 +63,7 @@ from .subtitle_mux import friendly_language
 from .torrent import (TORRENT_TOR_ERROR, TorrentMetadata, analyse_torrent, download_torrent,
                       fetch_magnet_metadata, validate_torrent_connection)
 from .yt_runtime import RuntimeSnapshot, YtDlpRuntimeManager, get_runtime_manager
-from .ui_components import NavigationShell, page_heading, polish_table, DisclosureSection, MediaSelectionTable
+from .ui_components import NavigationShell, page_heading, polish_table, DisclosureSection, MediaSelectionTable, StatusLabel
 from .theme import apply_theme
 from .auth import connection_failure, requires_authentication
 
@@ -321,7 +321,7 @@ class MainWindow(QMainWindow):
         self.connection_selector = QComboBox(); self.connection_selector.addItems(["Direct / Normal Network", "System / Proton VPN", "Managed Tor", "External Tor", "Custom HTTP Proxy", "Custom SOCKS5 Proxy"]); self.connection_selector.setCurrentText(self.settings.connection_mode)
         self.connection_selector.setToolTip("Use the Mac's normal network connection.")
         self.connection_selector.currentTextChanged.connect(self._connection_changed)
-        self.connection_status = QLabel("● Ready"); self.connection_test = QPushButton("Test"); self.connection_test.clicked.connect(self._test_connection)
+        self.connection_status = StatusLabel("● Ready"); self.connection_test = QPushButton("Test"); self.connection_test.clicked.connect(self._test_connection)
         self.account_button = QPushButton("YouTube Account…"); self.account_button.clicked.connect(self.show_youtube_account)
         connection_row.addWidget(self.connection_selector); connection_row.addWidget(self.connection_status); connection_row.addWidget(self.connection_test); connection_row.addStretch(); connection_row.addWidget(self.account_button); outer.addLayout(connection_row)
         self.analysis_progress = QProgressBar(); self.analysis_progress.setRange(0, 0); self.analysis_progress.hide(); outer.addWidget(self.analysis_progress)
@@ -445,7 +445,7 @@ class MainWindow(QMainWindow):
                                              self.runtime_manager, self.task_manager, embedded=True,
                                              account_callback=self._apply_account_choice)
         self.tabs.addTab(self.settings_panel, "Settings")
-        self.provider_label = QLabel(); self.runtime_label = QLabel(); self.connection_bar_label = QLabel()
+        self.provider_label = StatusLabel(); self.runtime_label = QLabel(); self.connection_bar_label = QLabel()
         self.statusBar().addPermanentWidget(self.provider_label); self.statusBar().addPermanentWidget(self.runtime_label); self.statusBar().addPermanentWidget(self.connection_bar_label)
         self.provider_label.setText("● PO provider: checking"); self.runtime_label.setText(f"● yt-dlp {self.runtime_manager.snapshot().version}"); self._refresh_connection_status()
         self.provider_check_timer = QTimer(self); self.provider_check_timer.setSingleShot(True); self.provider_check_timer.timeout.connect(self._update_provider_status); self.provider_check_timer.start(20)
@@ -699,8 +699,8 @@ class MainWindow(QMainWindow):
                               if mode == "Custom HTTP Proxy" else
                               (self.settings.socks_proxy_host and self.settings.socks_proxy_port))
             text, good, unknown = ("Configured" if configured else "Proxy details required"), configured, not configured
-        color = "#2e9b45" if good else "#c28a00" if unknown else "#c0392b"
-        self.connection_status.setText(f"● {text}"); self.connection_status.setStyleSheet(f"color: {color}")
+        self.connection_status.setText(f"● {text}")
+        self.connection_status.set_tone("success" if good else "warning" if unknown else "error")
         compact = f"Tor {self.managed_tor.port}" if mode == "Managed Tor" and self.managed_tor.port else mode.replace(" / Normal Network", "")
         self.connection_bar_label.setText(f"● {compact}")
         tor_state = f"{mode}:{text}"
@@ -728,7 +728,7 @@ class MainWindow(QMainWindow):
         good = state in {"available", "internet_working"}
         if self.settings.connection_mode == "Managed Tor": self.tor_internet_state = state
         self.connection_status.setText(f"● {'Connected' if good else 'Failed'} — {detail}")
-        self.connection_status.setStyleSheet(f"color: {'#2e9b45' if good else '#c0392b'}")
+        self.connection_status.set_tone("success" if good else "error")
         self.console_store.append("TOR" if self.settings.connection_mode in {"Managed Tor", "External Tor"} else "APP",
                                   detail, level="info" if good else "warning")
 
@@ -783,7 +783,7 @@ class MainWindow(QMainWindow):
         self.external_tor_port = port if available else None
         text = f"External Tor • Connected • {port}" if available else "External Tor • Not running"
         self.connection_status.setText(f"● {text}")
-        self.connection_status.setStyleSheet(f"color: {'#2e9b45' if available else '#c0392b'}")
+        self.connection_status.set_tone("success" if available else "error")
 
     def _use_banner_analyse(self):
         if self.previous_crash and "did not close" in self.banner_text.text():
@@ -2247,8 +2247,8 @@ class MainWindow(QMainWindow):
                                 on_result=self._provider_status_ready)
 
     def _provider_status_ready(self, result):
-        color = {"available": "#2e9b45", "not_running": "#c28a00", "error": "#c0392b"}.get(result.state, "#777")
-        self.provider_label.setText(f"● PO provider: {result.mode or result.state}"); self.provider_label.setStyleSheet(f"color: {color}"); self.provider_label.setToolTip(result.detail)
+        tone = {"available": "success", "not_running": "warning", "error": "error"}.get(result.state, "neutral")
+        self.provider_label.setText(f"● PO provider: {result.mode or result.state}"); self.provider_label.set_tone(tone); self.provider_label.setToolTip(result.detail)
         if hasattr(self, "runtime_label"):
             self.runtime_label.setText(f"● yt-dlp {self.runtime_manager.snapshot().version}")
         self.console_store.append("APP", f"PO-token provider: {result.mode or result.state} — {result.detail}",

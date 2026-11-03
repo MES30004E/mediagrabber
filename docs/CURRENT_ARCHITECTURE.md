@@ -15,6 +15,13 @@ dispatch, and local conversion presentation. `settings_window.SettingsWindow`
 edits a working copy through General/Downloads/Network/Authentication/Torrents/
 Advanced pages, with Apply/OK persistence and Cancel discard.
 
+`theme.apply_theme` owns one application-level palette/QSS observer, including
+late native System palette updates and a capability-gated native scheme hint.
+`ui_components.StatusLabel` is presentation-only semantic text for connection/
+provider state; it does not own status logic, routing or persistence. Navigation
+retains its standard arrow shape and the original application icon. Checkpoint A
+theme/native evidence and outstanding layout/progress work: `UI_CORRECTNESS.md`.
+
 ## Analysis and downloads
 
 ```text

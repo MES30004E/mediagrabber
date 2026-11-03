@@ -40,13 +40,22 @@ def test_theme_switch_restores_light_and_system_palette(tmp_path, monkeypatch):
     finally: window.close(); APP.processEvents()
 
 
-def test_system_theme_refreshes_when_platform_reports_appearance_change(tmp_path, monkeypatch):
+def test_system_theme_waits_for_actual_palette_after_platform_scheme_signal(tmp_path, monkeypatch):
     window = _window(tmp_path, monkeypatch)
     try:
-        window.settings.theme = "System"
+        window.settings.theme = "System"; window._apply_theme()
         stale = APP.palette(); stale.setColor(QPalette.ColorRole.Window, QColor("#010101")); APP.setPalette(stale)
+        # Qt documents colorSchemeChanged as preceding the actual palette update:
+        # https://doc.qt.io/qt-6/qstylehints.html#colorScheme-prop
+        # Replacing it with standardPalette here would pin the wrong appearance.
         APP.styleHints().colorSchemeChanged.emit(Qt.ColorScheme.Dark)
-        assert APP.palette().color(QPalette.ColorRole.Window) == APP.style().standardPalette().color(QPalette.ColorRole.Window)
+        assert APP.palette().color(QPalette.ColorRole.Window) == QColor("#010101")
+        native = QPalette(APP.palette())
+        native.setColor(QPalette.ColorRole.Window, QColor("#102030"))
+        native.setColor(QPalette.ColorRole.Base, QColor("#203040"))
+        APP.setPalette(native); APP.processEvents()
+        assert APP.palette().color(QPalette.ColorRole.Window) == QColor("#102030")
+        assert window.queue_table.palette().color(QPalette.ColorRole.Base) == QColor("#203040")
     finally: window.close(); APP.processEvents()
 
 

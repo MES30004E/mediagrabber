@@ -124,6 +124,30 @@ including real two-cycle GUI/SQLite/owner paths with injected virtual-clock cost
 These are accounting regressions, not invented real-world performance results.
 Full local suite:913passed127.90s, no skips/warnings; extension10/protocol9/
 pipcheck/shellsyntax pass. Exact hosted requalification still required for this fix.
+
+### Exact follow-up qualification:9ed1082/run41385802502
+
+All jobs passed on that exact published commit. Actual logs: Linux913passed
+280.72s/one existing Qt deprecation and JS10/0skips; macOS backend60passed2.39s,
+Swift build/25tests including2actual workers, protocol9. Packaged protocol5,
+provider1.3.1/Node24.22.0/Canvas, media9, Cocoa startup and all four sizes/two
+cycles passed. Complete JSON reports were inspected and revalidated by the shipped
+strict verifier, not inferred from green job metadata. Both budget limits remain90s.
+At5,000 the original exercise used71.394s and added collections57.470s.
+
+Replacement backup/launch/source-unchanged and strict extracted-archive launch/
+signature gates passed; mode differences0. Archive141949706bytes SHA256
+`8186b0f671be82147908faa7c2be34d7912c750c35f60630621824d63b9d4834`.
+Publication approved=false; no upload/release/install.
+
+This qualifies the **narrow functional/synthetic packaging checkpoint**, not
+responsiveness/retention/visual/live-media acceptance. Collection maximum gaps:
+800=.514/.589s;5,000=4.217/4.817s. Original-stage5,000maxgap1.979s;
+peak449.36MiB/post-removal363.28→382.80MiB. Additional fixture work prevents a
+paired improvement/leak claim. These remain release-blocking measurements.
+Current native source captures also confirm dark-theme visibility and layout
+defects; a possible native progress placement issue needs classification. Next
+Checkpoint A addresses those; major redesign/rebrand/viewer/full roadmap remains.
 Minor deferred: name-only changes retain the aggregate's first label until its
 group is removed; no user rename feature is claimed.
 

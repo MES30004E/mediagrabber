@@ -603,3 +603,16 @@ remaining large-scope GUI work, not complete responsiveness. New source tests an
 diagnostic negative cases pass, but final full-suite/review/exact hosted evidence
 is still required for this worktree. No personal media/accounts or local Apple
 build tools were used; the full feature/release backlog remains open.
+
+Exact follow-up9ed1082/run41385802502 passed all jobs and actual frozen4sizes/
+two-cycle/strict-archive gates. Linux913/JS10; macOSbackend60/Swift25/actual workers/
+drift9. Full evidence in QUEUE_COLLECTIONS.md. Original/added fixtures have separate
+cumulative90s limits;5,000 measured71.394/57.470s respectively, not a relaxed
+original allowance. No behavioral gate/test skipped.
+
+Native extra collection gaps800=.514/.589s,5000=4.217/4.817s; old-stage5,000
+maxgap1.979s;peak449.36MiB/post-removal363.28→382.80MiB. These do NOT establish
+acceptable long-queue interactivity or bounded long-running retention. No paired
+comparison against the smaller prior fixture is valid. Source Cocoa screenshots
+also reveal theme/layout and possible progress-paint defects. Checkpoint A must
+fix actual UI behavior; full performance, live-media and release gates remain open.
