@@ -65,6 +65,7 @@ def queue_payload(count=100):
         queue["cycles"].append({"cycle": cycle, "analysed": count, "enqueued": count, "started_workers": 2,
             "acknowledged_workers": 2, "cancelled": count, "restored": count, "removed": count, "remaining": 0, "active_tasks": 0,
             "confirmation_requests": 1, "queue_rendered": True,
+            "progress_checks":{"sampled_rows":2,"track_changes":2,"label_changes":2,"start_percent":0.0,"end_percent":37.5},
             "selection_checks": {"filtered": count, "status": count, "all": count, "none": 0, "visible": 5,
                 "cleared_hidden": True, "viewport_matched": True, "sql_writes": 0, "sql_commits": 0, "sql_statements": 0, "owned_tasks": 0, "wall_seconds": .01},
             "restart_checks": {"restarted": count, "confirmation_requests": 1, "prepared_rows": count, "committed_rows": count,
@@ -95,6 +96,23 @@ def test_packaged_queue_probe_requests_two_real_cycles_and_does_not_inherit_toke
         Path(command[command.index("--startup-check")+1]).write_text(json.dumps(queue_payload()))
         return SimpleNamespace(returncode=0, stdout="", stderr="")
     assert verify(app, runner=run, queue_items=100)["queue"]["items"] == 100
+
+
+@pytest.mark.parametrize("defect",["missing","no_track","no_label","wrong_start","wrong_end","boolean","missing_row"])
+def test_packaged_queue_requires_actual_inside_cell_progress_evidence(defect):
+    from scripts.check_packaged_app import validate_queue
+    queue=queue_payload()["queue"]
+    for cycle in queue["cycles"]:
+        cycle["progress_checks"]={"sampled_rows":2,"track_changes":2,"label_changes":2,"start_percent":0.0,"end_percent":37.5}
+    cycle=queue["cycles"][0]; checks=cycle["progress_checks"]
+    if defect=="missing": cycle.pop("progress_checks")
+    elif defect=="no_track": checks["track_changes"]=0
+    elif defect=="no_label": checks["label_changes"]=0
+    elif defect=="wrong_start": checks["start_percent"]=37.5
+    elif defect=="wrong_end": checks["end_percent"]=0.0
+    elif defect=="boolean": checks["sampled_rows"]=True
+    elif defect=="missing_row": checks["sampled_rows"]=1
+    with pytest.raises(RuntimeError): validate_queue(queue,100)
 
 
 @pytest.mark.parametrize("defect", ["no_queue", "no_cycles", "wrong_count", "boolean_count", "outstanding_owner",

@@ -38,6 +38,7 @@ def test_real_queue_diagnostic_completes_two_cycles_with_owned_workers_and_persi
     assert report["schema"] == 1 and report["result"] == "passed" and report["items"] == 100
     assert len(report["cycles"]) == 2 and report["max_owned_workers"] == 2
     for cycle, result in enumerate(report["cycles"], 1):
+        assert result["progress_checks"]=={"sampled_rows":2,"track_changes":2,"label_changes":2,"start_percent":0.0,"end_percent":37.5}
         checks = result["selection_checks"]
         assert all(checks[key] == value for key, value in {"filtered": 100, "status": 100, "all": 100,
             "none": 0, "sql_writes": 0, "sql_commits": 0, "owned_tasks": 0}.items())
@@ -56,7 +57,7 @@ def test_real_queue_diagnostic_completes_two_cycles_with_owned_workers_and_persi
             "cleared_failed":1,"cleared_collection":49,"remaining":0,"active_tasks":0,
             "other_group_unchanged":True,"persisted_membership":True,"primary_completed_clear":True}
         assert groups["wall_seconds"]>0 and groups["max_heartbeat_gap_seconds"]>=0
-        assert {key: value for key, value in result.items() if key not in {"selection_checks", "restart_checks", "collection_checks"}} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
+        assert {key: value for key, value in result.items() if key not in {"selection_checks", "restart_checks", "collection_checks", "progress_checks"}} == {"cycle": cycle, "analysed": 100, "enqueued": 100, "started_workers": 2,
             "acknowledged_workers": 2, "cancelled": 100, "restored": 100, "removed": 100, "remaining": 0, "active_tasks": 0,
             "confirmation_requests": 1, "queue_rendered": True}
     assert report["network_attempts"] == report["keychain_attempts"] == report["deletion_attempts"] == report["process_attempts"] == 0

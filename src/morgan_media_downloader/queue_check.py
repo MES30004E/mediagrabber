@@ -409,12 +409,37 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                     fail_when=lambda: not window.task_manager.active_count)
                 if len(window.active) != 2: raise RuntimeError("Queue diagnostic worker bound changed")
                 snapshots = [copy.deepcopy(window.jobs[key]) for key in window.active]
+                progress_column = window.queue_model.columns.index("Progress")
+                progress_indices = [window.queue_table.model().index(row, progress_column) for row in range(2)]
+                if any(index.data(PROGRESS_ROLE) != 0.0 for index in progress_indices):
+                    raise RuntimeError("Queue progress fixture did not start at zero")
+                window.queue_table.scrollTo(progress_indices[0])
+                application.processEvents()
+                progress_rects = [window.queue_table.visualRect(index) for index in progress_indices]
+                if any(not window.queue_table.viewport().rect().contains(rect) or rect.width() < 100 for rect in progress_rects):
+                    raise RuntimeError("Queue progress fixture cells are not visible")
+                empty_frame = window.queue_table.viewport().grab().toImage()
                 for job in snapshots: job.progress = 37.5; job.downloaded_bytes = 1536; job.total_bytes = 4096
                 measure(cycle, "progress-two-active", lambda: [window._job_changed(job) for job in snapshots])
-                frame = window.queue_table.viewport().grab()
-                progress_column = window.queue_model.columns.index("Progress")
+                frame = window.queue_table.viewport().grab().toImage()
                 if frame.isNull() or any(window.queue_table.model().index(row, progress_column).data(PROGRESS_ROLE) != 37.5 for row in range(2)):
                     raise RuntimeError("Queue progress did not render")
+                if frame.size() != empty_frame.size() or frame.devicePixelRatio() != empty_frame.devicePixelRatio():
+                    raise RuntimeError("Queue progress capture geometry changed")
+                scale = frame.devicePixelRatio()
+                def changed_at(x, y):
+                    return frame.pixelColor(round(x*scale), round(y*scale)) != empty_frame.pixelColor(round(x*scale), round(y*scale))
+                # Sample the actual native track away from the percentage label.
+                # A non-null grab/model role cannot prove QMacStyle painted inside
+                # the progress column rather than over the title at viewport0,0.
+                track_changes = sum(changed_at(rect.left()+14, rect.center().y()) for rect in progress_rects)
+                label_changes = sum(any(changed_at(x, y)
+                    for x in range(rect.right()-48, rect.right()-4)
+                    for y in range(rect.center().y()-9, rect.center().y()+9)) for rect in progress_rects)
+                progress_checks = dict(sampled_rows=len(progress_rects), track_changes=track_changes,
+                    label_changes=label_changes, start_percent=0.0, end_percent=37.5)
+                if track_changes != 2 or label_changes != 2:
+                    raise RuntimeError("Queue progress track or percentage did not change inside its cells")
                 measure(cycle, "pause-all", window.pause_all); spin_until(lambda: not window.task_manager.active_count)
                 if worker_errors or sorted(acknowledged[initial_acknowledged:]) != sorted(started[initial_started:]):
                     raise RuntimeError("Queue diagnostic cancellation was not acknowledged by both workers")
@@ -436,7 +461,7 @@ def exercise_queue(window, application, count: int, root: Path, *, cycles: int =
                     acknowledged_workers=len(acknowledged)-initial_acknowledged, cancelled=count,
                     restored=len(restored), removed=count, remaining=0, active_tasks=0,
                     confirmation_requests=len(prompts)-initial_prompts, queue_rendered=True, selection_checks=selection_checks,
-                    restart_checks=restart_checks,collection_checks=collection_checks))
+                    restart_checks=restart_checks,collection_checks=collection_checks,progress_checks=progress_checks))
             if max_owned > 2 or any(attempts.values()): raise RuntimeError("Queue diagnostic escaped its I/O/worker bounds")
     finally:
         heartbeat.stop(); heartbeat.deleteLater()

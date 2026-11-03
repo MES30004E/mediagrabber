@@ -21,6 +21,10 @@ late native System palette updates and a capability-gated native scheme hint.
 provider state; it does not own status logic, routing or persistence. Navigation
 retains its standard arrow shape and the original application icon. Checkpoint A
 theme/native evidence and outstanding layout/progress work: `UI_CORRECTNESS.md`.
+`queue_model.QueueProgressDelegate` clips/saves/restores painting and gives the
+native track local coordinates; an explicit RTL-aware percentage label preserves
+DisplayRole visibility where QMacStyle omits native bar text. The source/frozen
+queue diagnostic requires real in-cell track and label pixel changes.
 
 ## Analysis and downloads
 

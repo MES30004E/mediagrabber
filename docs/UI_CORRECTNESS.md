@@ -50,8 +50,8 @@ hardware-keyboard focus or grant permission to control another application.
 
 ## Still unfinished
 
-- Native queue progress appears outside its column; classify and regress before
-  changing the delegate, including unknown/RTL/selected states.
+- Native progress repair is locally tested below; exact hosted frozen validation
+  remains outstanding with the rest of Checkpoint A.
 - Compact clipping, narrow titles, horizontal scrolling, oversized details,
   collection-row alignment and persisted responsive preferences.
 - Discoverable remaining bulk actions and concise counted confirmation dialogs.
@@ -80,3 +80,37 @@ It now verifies Qt's documented two-stage timing and actual table recoloring.
 Two older fixture-accumulation runs were terminated, not counted as passes.
 Test teardown now also delivers already-scheduled DeferredDelete events.
 This qualification is local source/theme-only; whole-A hosted evidence is pending.
+
+## Native progress component
+
+Actual Cocoa QWidget painting reproduced5066pixels entirely outside a literal
+offset progress cell. A bare-QImage probe produced native graphics-context errors
+and was rejected as evidence. The isolated renderer fix saves/intersects the
+painter clip, translates the native track to local coordinates, and restores the
+entire painter state. It retains existing model/UUID/progress roles and no row
+widgets. Unknown progress keeps the normal text delegate.
+
+Percentage text is now explicitly drawn beside the track (mirrored for RTL).
+This is necessary because [Qt documents that QMacStyle ignores progress text](https://doc.qt.io/qt-6/qprogressbar.html#textVisible-prop).
+It is not a new progress estimate or a change to extractor/transfer data.
+Actual known0/25/100, unknown, RTL, selected/disabled states, clip/transform and
+DisplayRole text are exercised through QWidget paint/grab, not just model values.
+
+The shared source/frozen diagnostic now compares actual two-row viewport frames
+at0→37.5%, samples the track inside each progress cell away from its label, and
+separately verifies changing label pixels. Its strict verifier requires both
+actual counts/endpoints. Deliberately omitting either origin correction or label
+caused the actual Cocoa diagnostic to fail; both mutations were restored.
+The original18measurement stages,90s cumulative budgets, worker/SQL/I/O and
+selection/restart/collection gates are unchanged. Extra frame buffers mean this
+fixture is not a paired retention comparison against older reports.
+
+Local results: **948 Python passed in140.52s**, **29 Cocoa theme/paint/actual-
+diagnostic tests passed in16.19s**, focused118passed9.13s, JavaScript10passed/
+0skipped, protocol9/pipcheck/shell syntax passed. The same three test-only Qt
+deprecations remain. Separate new45frame source captures preserve theme-only
+evidence; inspected compact/standard/fullscreen and restored Light selected rows
+show the correct progress column and visible percentages, with no title overpaint.
+Synthetic fixture percentages reflect their stored fields, not live media tests.
+Compact clipping, column allocation/details, dialogs and final hosted acceptance
+remain unfinished; no release/install or Swift work was performed.

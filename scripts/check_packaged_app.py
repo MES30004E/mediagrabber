@@ -43,6 +43,10 @@ def validate_queue(data: object, count: int) -> None:
         expected = dict(cycle=number, analysed=count, enqueued=count, started_workers=2, acknowledged_workers=2, cancelled=count,
                         restored=count, removed=count, remaining=0, active_tasks=0, confirmation_requests=1)
         require(all(integer(cycle.get(key), value) for key, value in expected.items()) and cycle.get("queue_rendered") is True)
+        progress=cycle.get("progress_checks"); require(isinstance(progress,dict))
+        require(all(integer(progress.get(key),2) for key in ("sampled_rows","track_changes","label_changes")))
+        require(finite(progress.get("start_percent")) and progress["start_percent"]==0.0 and
+                finite(progress.get("end_percent")) and progress["end_percent"]==37.5)
         checks = cycle.get("selection_checks")
         require(isinstance(checks, dict))
         expected_selection = dict(filtered=count, status=count, all=count, none=0, sql_writes=0,

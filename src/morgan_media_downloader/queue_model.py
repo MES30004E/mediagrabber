@@ -5,13 +5,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 import math
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QThread, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPoint, QRect, QThread, Qt
+from PySide6.QtGui import QFontMetrics, QPalette
 from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionProgressBar
 
 from .display_format import human_bytes, human_duration
 from .job_diagnostics import status_summary
 from .models import DownloadJob, JobStatus
 from .queue_collections import collection_key
+from .theme import status_foreground
 
 JOB_ID_ROLE = int(Qt.ItemDataRole.UserRole)
 KIND_ROLE = JOB_ID_ROLE + 1
@@ -188,12 +190,47 @@ class QueueProgressDelegate(QStyledItemDelegate):
         if progress is None:
             super().paint(painter, option, index)
             return
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        metrics = QFontMetrics(option.font)
+        content = option.rect.adjusted(4, 0, -4, 0)
+        label_width = min(max(metrics.horizontalAdvance("100.0%"), metrics.horizontalAdvance(text)),
+                          max(0, content.width()))
+        label = QRect(content.right() - label_width + 1, content.top(), label_width, content.height())
+        track = option.rect.adjusted(4, 8, -(label_width + 12), -8)
+        label = QStyle.visualRect(option.direction, option.rect, label)
+        track = QStyle.visualRect(option.direction, option.rect, track)
         bar = QStyleOptionProgressBar()
-        bar.rect = option.rect.adjusted(4, 8, -4, -8)
+        bar.rect = track
         bar.state = option.state | QStyle.StateFlag.State_Horizontal
         bar.direction = option.direction; bar.palette = option.palette
         bar.minimum = 0; bar.maximum = 1000; bar.progress = int(progress * 10)
-        bar.text = index.data(Qt.ItemDataRole.DisplayRole); bar.textVisible = True
-        bar.textAlignment = Qt.AlignmentFlag.AlignCenter
+        # QMacStyle documents that it ignores progress text. Draw the model's
+        # actual DisplayRole separately, without low-contrast text over the fill.
+        bar.textVisible = False
         style = option.widget.style() if option.widget else QApplication.style()
-        style.drawControl(QStyle.ControlElement.CE_ProgressBar, bar, painter, option.widget)
+        painter.save()
+        try:
+            painter.setClipRect(option.rect, Qt.ClipOperation.IntersectClip)
+            # QMacStyle's native view uses the painter origin, ignoring a
+            # nonzero option rect position. Give every style local coordinates.
+            if track.width() >= 8 and track.height() > 0:
+                painter.save()
+                try:
+                    painter.translate(bar.rect.topLeft())
+                    bar.rect.moveTopLeft(QPoint(0, 0))
+                    style.drawControl(QStyle.ControlElement.CE_ProgressBar, bar, painter, option.widget)
+                finally:
+                    painter.restore()
+            selected = bool(option.state & QStyle.StateFlag.State_Selected)
+            group = QPalette.ColorGroup.Active if option.state & QStyle.StateFlag.State_Active else QPalette.ColorGroup.Inactive
+            role = QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text
+            color = option.palette.color(group, role)
+            if not selected and not option.state & QStyle.StateFlag.State_Enabled:
+                surface = QPalette(option.palette)
+                surface.setColor(QPalette.ColorRole.Window, surface.color(group, QPalette.ColorRole.Base))
+                color = status_foreground("disabled", surface)
+            painter.setFont(option.font); painter.setPen(color)
+            alignment = Qt.AlignmentFlag.AlignLeft if option.direction == Qt.LayoutDirection.RightToLeft else Qt.AlignmentFlag.AlignRight
+            painter.drawText(label, int(alignment | Qt.AlignmentFlag.AlignVCenter), text)
+        finally:
+            painter.restore()

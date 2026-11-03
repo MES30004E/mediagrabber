@@ -49,10 +49,10 @@ may be private; any navigation icon refresh is bounded to the shell, not jobs.
 Files: queue_model.py; queue model/paint tests; queue_check.py/check_packaged_app.py
 only if new honest native evidence is needed.
 Consumes current PROGRESS_ROLE/DisplayRole, exposes same delegate interface.
-- [ ] Reproduce suspected Cocoa coordinate issue with independent expected cell
+- [x] Reproduce suspected Cocoa coordinate issue with independent expected cell
   bounds/pixel evidence and zero→25→100/unknown/RTL/selected/disabled states;
   distinguish QWidget capture behavior from onscreen/native renderer limitations.
-- [ ] RED proven defect; smallest paint correction, painter state restored/no
+- [x] RED proven defect; smallest paint correction, painter state restored/no
   per-row QWidget/QObject. GREEN old paint/model tests and Cocoa real captures.
 
 ### Task 3: Responsive presentation and discoverable actions

@@ -198,6 +198,11 @@ restrictions remain. Live account/media tests need explicit user participation.
   and disabled button text; consumer tests and actual source Cocoa captures.
   See `UI_CORRECTNESS.md`. Layout/progress/dialog work and final full-checkpoint
   hosted qualification remain open; this is not a professional redesign/release.
+- Native progress component locally verified: real Cocoa coordinate defect
+  reproduced, track clipped/translated and numeric text rendered explicitly.
+  Actual pixel checks now required by the shared frozen diagnostic/verifier;
+  deliberate missing-origin/label mutations were rejected. Full948Python and
+  29Cocoa tests pass locally; exact whole-A hosted/layout/performance QA remains.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.
