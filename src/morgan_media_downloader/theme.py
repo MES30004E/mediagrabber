@@ -17,9 +17,10 @@ def status_foreground(tone: str, palette: QPalette) -> QColor:
               {"success": "#237a3b", "warning": "#866500", "error": "#b42318", "disabled": "#626c7c"})
     text = palette.color(QPalette.ColorRole.WindowText)
     candidate = QColor(colors[tone]) if tone in colors else text
+    minimum = 3.0 if tone == "disabled" else 4.5
     for color in (candidate, text):
         low, high = sorted((background, _luminance(color)))
-        if (high + .05) / (low + .05) >= 4.5:
+        if (high + .05) / (low + .05) >= minimum:
             return color
     # Unusual custom palettes can make both their own text and semantic colors
     # unreadable. Keep the status wording and choose the safer neutral contrast.
@@ -119,6 +120,7 @@ QPushButton:focus, QToolButton:focus { border: 2px solid palette(highlight); }
 QPushButton:pressed { background: palette(alternate-base); }
 QPushButton[primary="true"] { background: palette(highlight); color: palette(highlighted-text); border-color: palette(highlight); font-weight: 600; }
 QPushButton:disabled { color: @disabled-text@; background: palette(window); }
+QMenu::item:disabled { color: @disabled-text@; }
 QToolButton { padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; }
 QLineEdit, QPlainTextEdit, QComboBox, QSpinBox { padding: 6px; border: 1px solid palette(mid); border-radius: 6px; background: palette(base); selection-background-color: palette(highlight); }
 QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: palette(highlight); }

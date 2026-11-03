@@ -1556,13 +1556,20 @@ class MainWindow(QMainWindow):
         active = sum(job.id in self.active for job in jobs)
         completed = sum(job.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS} for job in jobs)
         box = QMessageBox(QMessageBox.Icon.Question, "Restart selected jobs",
-            f"Restart {len(jobs):,} selected jobs from the beginning?\n\n{active} active; {completed} completed.\n"
-            "Active tasks must stop first. Every restart uses a fresh subfolder to avoid reusing partial data.\n"
-            "Keep retains ALL old files, including partial/temporary state;\n"
-            "Replace permanently deletes only verified job-owned outputs. Unrecorded files are never deleted.\n"
-            "Stop finishes the admitted slice (up to 32 jobs), then stops further restarts.", parent=self)
-        keep = box.addButton("Restart, keep existing outputs", QMessageBox.ButtonRole.AcceptRole)
-        replace = box.addButton("Restart, replace verified job-owned outputs", QMessageBox.ButtonRole.DestructiveRole)
+            f"Restart {len(jobs):,} selected downloads from the beginning?\n\n{active:,} active; {completed:,} completed.", parent=self)
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setInformativeText("Keep files leaves previous downloads and partial files untouched.\n"
+            "Replace files permanently deletes recorded files created by this app.\n"
+            "Running downloads will stop first. Each restart uses a new folder.")
+        box.setDetailedText("Keep retains ALL old files, including partial/temporary state. "
+            "Every restart uses a fresh subfolder to avoid reusing partial data.\n"
+            "Replace permanently deletes only recorded job-owned outputs inside the download folder; "
+            "unrecorded files are never deleted.\n"
+            "Active tasks must stop before cleanup. Interrupted preparation stays non-runnable until reviewed.\n"
+            "Stop finishes the admitted slice (up to 32 jobs), then stops further restarts. "
+            "Failed preparation retains its queue entry and diagnostic details.")
+        keep = box.addButton("Restart, keep files", QMessageBox.ButtonRole.AcceptRole)
+        replace = box.addButton("Restart, replace files", QMessageBox.ButtonRole.DestructiveRole)
         box.addButton(QMessageBox.StandardButton.Cancel)
         box.setDefaultButton(keep); box.setEscapeButton(QMessageBox.StandardButton.Cancel); box.exec()
         return "keep" if box.clickedButton() is keep else "replace" if box.clickedButton() is replace else "cancel"
@@ -1607,7 +1614,7 @@ class MainWindow(QMainWindow):
                 self._remove_job(job, delete_files); removed += 1
         self._refresh_queue(); self._refresh_history()
         self.statusBar().showMessage(f"Removed {removed} queue entries; {pending} waiting for active tasks to stop. "
-            + ("Verified job-owned files selected for removal." if delete_files else "Downloaded files kept.")
+            + ("Files created by this app selected for removal." if delete_files else "Downloaded files kept.")
             + (f" {omitted} no longer matched the clear scope." if omitted else ""), 10000)
 
     def _confirm_remove(self, jobs: list[DownloadJob]) -> str:
@@ -1617,11 +1624,19 @@ class MainWindow(QMainWindow):
         active = sum(job.id in self.active for job in jobs)
         completed = sum(job.status in {JobStatus.COMPLETED, JobStatus.COMPLETED_WARNINGS} for job in jobs)
         box = QMessageBox(QMessageBox.Icon.Question, "Remove selected jobs",
-            f"Remove {len(jobs)} {scope}?\n\n{active} active; {completed} completed.\n"
-            "Active tasks must stop before their entries or files are removed.", parent=self)
+            f"Clear {len(jobs):,} {scope} from the queue?\n\n{active:,} active; {completed:,} completed.", parent=self)
         box.setTextFormat(Qt.TextFormat.PlainText)
-        keep = box.addButton("Remove queue entries only, keep files", QMessageBox.ButtonRole.AcceptRole)
-        delete = box.addButton("Remove entries and verified job-owned files", QMessageBox.ButtonRole.DestructiveRole)
+        box.setInformativeText("Downloaded files are kept unless you choose Delete files. Running downloads will stop first.\n"
+            "Deleting files uses Trash where possible; some files may be permanently deleted.")
+        box.setDetailedText("Keep files removes queue/history entries only, never downloaded or partial files.\n"
+            "Delete files removes only recorded job-owned paths inside the download folder. "
+            "Unrecorded files are never deleted. A fully owned folder or final file is moved to Trash when possible; "
+            "other recorded files and failed Trash moves use permanent deletion.\n"
+            "Active tasks must stop before entries/files are removed. Each admitted worker slice holds at most 32 jobs; "
+            "Stop prevents further slices after admitted work finishes. Entries are retained if cleanup fails. "
+            "Current collection membership and status are checked again before scoped removal.")
+        keep = box.addButton("Clear, keep files", QMessageBox.ButtonRole.AcceptRole)
+        delete = box.addButton("Delete files and entries", QMessageBox.ButtonRole.DestructiveRole)
         box.addButton(QMessageBox.StandardButton.Cancel)
         box.setDefaultButton(keep); box.setEscapeButton(QMessageBox.StandardButton.Cancel); box.exec()
         return "list" if box.clickedButton() is keep else "delete" if box.clickedButton() is delete else "cancel"
@@ -1968,7 +1983,13 @@ class MainWindow(QMainWindow):
         completed=sum(job.status in {JobStatus.COMPLETED,JobStatus.COMPLETED_WARNINGS} for job in jobs)
         active=sum(job.id in self.active for job in jobs)
         box=QMessageBox(QMessageBox.Icon.Question,action+" collection",
-            f"{action} {len(jobs):,} jobs in {scope}?\n\n{active} active; {completed} completed.\nOnly eligible jobs change; completed jobs remain completed.",parent=self)
+            f"{action} {len(jobs):,} jobs in {scope}?\n\n{active:,} active; {completed:,} completed.",parent=self)
+        box.setInformativeText("Only matching downloads that can perform this action will change. Completed downloads stay completed.")
+        box.setDetailedText("The confirmed job IDs are fixed; changing a filter cannot broaden this operation. "
+            "Current status and collection membership are checked again before each change.\n"
+            "Work is saved in bounded slices of up to 32 jobs. Stop prevents further slices after admitted work finishes. "
+            "Completed jobs are never made runnable. Retry failed excludes jobs with active task owners and uses the existing authentication retry policy. "
+            "Resume keeps available partial data; this action does not delete downloaded files.")
         box.setTextFormat(Qt.TextFormat.PlainText); box.setStandardButtons(QMessageBox.StandardButton.Ok|QMessageBox.StandardButton.Cancel)
         box.setDefaultButton(QMessageBox.StandardButton.Cancel); box.setEscapeButton(QMessageBox.StandardButton.Cancel)
         return box.exec()==QMessageBox.StandardButton.Ok

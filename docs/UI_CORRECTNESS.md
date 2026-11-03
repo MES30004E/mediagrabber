@@ -161,3 +161,70 @@ Fresh source captures include nonzero transfers/long ETAs, all3queue views and
 Light/Dark/System at requested sizes/fullscreen, with zero external I/O/final owners.
 Reviewed compact Dark queue/Download and System menu; final all-page evidence and
 same-fixture performance/hosted packaged qualification are still Task4 work.
+
+## Counted dialogs and native disabled menus
+
+Clear/restart/collection confirmations retain the existing result values, one
+confirmation, Keep-files/Cancel defaults, scope/UUID rechecks and worker services.
+Primary copy distinguishes clearing queue entries from deleting files, states
+counts and warns that deletion may be permanent. Clear still tries Trash where
+supported; restart replacement remains permanent. Recorded ownership, uncertain
+preparation,32-ID slices, stop behavior and cleanup failures remain in expandable
+Details, not lost or replaced by a claim of guaranteed Trash recovery.
+
+The implementation uses the existing [Qt QMessageBox property API](https://doc.qt.io/qt-6/qmessagebox.html#the-property-based-api):
+main/informative text is explicitly plain; detailed text is also plain. Tests open
+real dialogs, expand Details and click actual Keep/destructive/Cancel/OK buttons,
+checking the original results without executing file actions. Eight cases were
+observed failing before the change;89 focused/native8 then passed. Source captures
+cover collapsed/expanded dialogs in all3themes: clear691×161/283, restart689×177/299,
+collection420×193/315 logical pixels, within the compact900×650 parent.
+
+Actual System disabled menu text measured1.795:1 contrast. Explicit disabled-item
+styling now uses the same adaptive opaque token as buttons. A follow-up pixel
+test found that requiring ordinary4.5:1 contrast for disabled text selected black
+on native#ececec because the dim candidate measured4.494:1. Disabled text now uses
+the spec's3:1 minimum, remaining readable and visually distinct; normal semantic
+text retains4.5:1. Both defects were independently observed RED before repair.
+Native whole-checkpoint consumer command:74passed/5test-only warnings in26.88s.
+Final local full suite:999passed/5test-only warnings in144.89s, zero skips.
+Companion10passed/0skipped, protocol9fixtures match, pipcheck and shell syntax pass.
+The same command is now required in hosted macOS CI, not substituted by Linux or
+frozen progress-only checks. Hosted results remain pending at this writing.
+
+Remaining visual limitation: the native decorative question-mark icon is faint
+in Dark dialogs; primary text, counts and buttons remain readable. This is not
+claimed as a completed professional icon/design-system pass. The audit's direct
+theme changes leave the Settings form's pending Theme choice unchanged on purpose;
+the actual Apply/Cancel behavior is independently tested.
+
+## Same-fixture layout observation and remaining stalls
+
+After all other owned tests/captures finished, the existing isolated offscreen
+benchmark ran sequentially on `a5eb8ab` (theme/progress baseline) and current
+layout/dialog source. Both use exactly the same diagnostic, one cycle, profiler
+flag and synthetic1ms/job cleanup. These measure the layout increment, not all A
+against the older broken-paint9ed build, and are single observations, not a
+statistical performance or lifetime/leak qualification.
+
+| Jobs | Original-stage max gap, before→after | Extra collection max gap | Peak RSS MiB |
+| --- | --- | --- | --- |
+| 800 | .119→.129s | .249→.250s | 180.59→181.84 |
+| 5,000 | .739→.756s | 1.736→1.733s | 370.03→372.95 |
+
+At5,000 original-stage wall14.488→14.597s, CPU7.984→8.080s and post-removal
+RSS354.41→360.20MiB. SQL unchanged at26,279statements/633commits/25,004writes;
+800 unchanged4,223/105/4,004. Both retain two maximum transfer owners, one cleanup
+worker/32-job maximum slice, zero final owners and zero forbidden I/O. No
+performance improvement or fixed retention is claimed from these values.
+
+A separate whole-fixture profile attributes12.65s to12 diagnostic
+`verified_reload` calls, including independent persistence checks/full dictionary
+serialization, within47.74s profiled runtime. Collection assertions themselves
+include repeated whole-queue comparisons, so their heartbeat gap cannot all be
+attributed to application UI work. Application-side history refresh/search,
+serialization/copies and structural queue refresh also remain substantial:
+20 history refreshes4.43s cumulative,23 searches3.57s,22 queue syncs1.46s under
+profiling. These overlapping cumulative values are not additive or unprofiled
+latencies. The diagnostic/gates are unchanged; remaining stalls/long-running RSS
+remain open, not erased because verification contributes cost.

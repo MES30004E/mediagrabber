@@ -1,6 +1,6 @@
 # MediaGrabber feature backlog and qualification ledger
 
-Updated 2026-11-02. This extends, rather than replaces, the Reliable Downloads,
+Updated 2026-11-03. This extends, rather than replaces, the Reliable Downloads,
 Better UX and Public Releases master goal. The Critical UX, Scalability and
 Architecture Addendum changes the implementation order below. An existing helper,
 passing unit test or metadata inspector is not evidence of a finished feature.
@@ -212,6 +212,20 @@ restrictions remain. Live account/media tests need explicit user participation.
   qualification pending. No claim of solved stalls/retention or B/C/D/E completion.
   Final Task3 local precommit988passed142.97s/native45passed9.79s, zero skips;
   dialogs/performance/final review/exact hosted acceptance still outstanding.
+- Checkpoint A dialogs locally repaired: actual800-count/defaultKeep/Cancel and
+  real expanded diagnostic/button results verified (89focused/native8passed).
+  System disabled-menu actual1.795:1 failure and lost dim-state distinction fixed
+  with pixel regressions; full native consumer74passed26.88s. Hosted Cocoa step
+  added; full final suite/review/security/push/exact hosted evidence still pending.
+  Native Dark decorative question icon remains faint; original app icon unchanged.
+  Final local999passed144.89s, native74passed26.88s, JS10/protocol9/pipcheck/shell
+  syntax pass; no skips. Final review and exact hosted qualification remain gates.
+- Same-fixture local offscreen layout increment observation, a5eb8ab→current:
+  5,000 max original gap.739→.756s, collection1.736→1.733s, peak370.03→372.95MiB;
+  SQL26,279/633commits/25,004writes unchanged, max2owners/final0. Single isolated
+  cycle, not native/leak/performance acceptance. Whole-fixture profile shows
+  material diagnostic verification cost plus still-substantial application history/
+  serialization work; do not label the measured extra gap solely as the user freeze.
 - Preserve all existing edits and the unrelated October 4/18 migration drafts.
   Main remains `6a024ec97d2521beed1c6cce2752aaa605425390`; qualified Swift bridge
   remains `b603921f92dcf5238e6451ba46346ebe450bedfb`. No Swift Phase 3 work.

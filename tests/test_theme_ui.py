@@ -15,6 +15,26 @@ from morgan_media_downloader.yt_runtime import RuntimeSnapshot,YtDlpRuntimeManag
 APP=QApplication.instance() or QApplication([])
 
 
+@pytest.mark.parametrize("theme",["Light","Dark","System"])
+def test_actual_disabled_menu_caption_has_readable_native_pixels(window,theme):
+    switch(window,theme)
+    menu=QMenu(window); menu.addAction("Unavailable action").setEnabled(False)
+    menu.addAction("Unavailable action")
+    menu.popup(window.mapToGlobal(QPoint(350,250))); APP.processEvents()
+    try:
+        image=menu.grab().toImage(); scale=image.devicePixelRatio()
+        rect=menu.actionGeometry(menu.actions()[0]); background=image.pixelColor(round(2*scale),round((rect.y()+2)*scale))
+        colors=[image.pixelColor(x,y) for y in range(round((rect.y()+3)*scale),round((rect.bottom()-3)*scale))
+                for x in range(round((rect.x()+12)*scale),round((rect.right()-12)*scale))]
+        disabled_contrast=max(contrast(color,background) for color in colors)
+        assert disabled_contrast>=3,"Native disabled menu text must remain legible"
+        enabled=menu.actionGeometry(menu.actions()[1])
+        enabled_colors=[image.pixelColor(x,y) for y in range(round((enabled.y()+3)*scale),round((enabled.bottom()-3)*scale))
+                        for x in range(round((enabled.x()+12)*scale),round((enabled.right()-12)*scale))]
+        assert disabled_contrast<max(contrast(color,background) for color in enabled_colors),"Disabled and enabled captions must remain visually distinct"
+    finally: menu.hide(); menu.deleteLater(); APP.sendPostedEvents(menu,QEvent.Type.DeferredDelete)
+
+
 @pytest.fixture
 def window(tmp_path,monkeypatch):
     monkeypatch.setenv("HOME",str(tmp_path))
