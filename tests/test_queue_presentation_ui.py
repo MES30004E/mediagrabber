@@ -23,7 +23,12 @@ def seed(window,tmp_path):
 def test_default_queue_fits_and_prioritises_titles_with_useful_table_space(window,tmp_path,width,height,view):
     seed(window,tmp_path); window.resize(width,height); window.queue_filter.setCurrentText(view); APP.processEvents()
     assert not window.job_details.isVisible(), "Details must not consume a large empty panel by default"
-    assert window.queue_table.height()>=(250 if height==650 else 400)
+    assert window.queue_table.height()>=(250 if height==650 else 400), {
+        "requested":(width,height),"actual_window":(window.width(),window.height()),
+        "frame":window.frameGeometry().getRect(),"screen":window.screen().geometry().getRect(),
+        "available_screen":window.screen().availableGeometry().getRect(),
+        "table":window.queue_table.geometry().getRect(),"platform":APP.platformName(),
+    }
     assert window.queue_table.horizontalScrollBar().maximum()==0, (
         "Ordinary columns must fit without horizontal scrolling",window.queue_table.viewport().width(),
         [(name,window.queue_table.columnWidth(i)) for i,name in enumerate(window.queue_model.columns) if not window.queue_table.isColumnHidden(i)])

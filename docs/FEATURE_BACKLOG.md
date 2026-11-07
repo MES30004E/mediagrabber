@@ -231,6 +231,11 @@ restrictions remain. Live account/media tests need explicit user participation.
   Existing History header clipping, decorative Dark question icon, arbitrary
   localization/display/Qt6.7/hardware-focus, faint native placeholder hints and
   all live acceptance remain open.
+- First A hosted run42376744385 on136afd1 failed native size cases (81pass/2fail),
+  observed queue height286px vs400px at both requested larger window sizes.
+  Backend60/protocol9 pass; investigating actual runner window/display geometry
+  with unchanged test thresholds. Not flaky, skipped or qualified; frozen gate
+  remains pending and no release/install is authorized.
 - Same-fixture local offscreen layout increment observation, a5eb8ab→current:
   5,000 max original gap.739→.756s, collection1.736→1.733s, peak370.03→372.95MiB;
   SQL26,279/633commits/25,004writes unchanged, max2owners/final0. Single isolated

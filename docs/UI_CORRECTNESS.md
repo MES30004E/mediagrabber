@@ -271,6 +271,16 @@ design-token pass, not a claim of complete accessibility qualification.
 
 Exact-head hosted Linux/macOS/native/frozen/archive results are still pending.
 
+### First hosted attempt: not qualified
+
+Published source `136afd14eb7f38da48b11a4a887dc12c7ca61778`, run42376744385:
+macOS backend60 passed and protocol9 matched. Cocoa UI returned81passed/2failed
+in67.83s; both failures require400px queue height after requested1180×820 and
+1440×900 window sizes, but observed286px. This is not labeled flaky and no
+threshold is lowered. A diagnostic-only assertion update records actual window,
+frame and screen geometry to distinguish platform clamping from a layout defect.
+Swift build/tests and frozen packaging cannot be claimed on this failed run.
+
 Still not qualified: existing History header/value clipping; native placeholder
 hint contrast; faint native Dark
 question icon; arbitrary enlarged fonts/localizations/displays; actual Qt6.7;
