@@ -76,15 +76,21 @@ defaults/backward-compatible saved detail/sidebar/column preferences.
 
 Files: ui.py or small dialog module; dialog/collection tests; diagnostic gates;
 FEATURE_BACKLOG/CURRENT_ARCHITECTURE and new UI correctness evidence document.
-- [ ] RED concise counted plaintext default-Keep/Cancel dialogs at compact parent;
+- [x] RED concise counted plaintext default-Keep/Cancel dialogs at compact parent;
   expand full diagnostics; preserve deletion/restart/stop semantics and errors.
-- [ ] Actual before/after Light/Dark/System pages/native fullscreen and keyboard/
+- [x] Actual before/after Light/Dark/System pages/native fullscreen and keyboard/
   menu/error/disabled/loading states inspected; record actual OS-clamped geometry.
 - [ ] Same-fixture performance/SQL/workers/RSS before/after, profile remaining
   stalls honestly; full Python/JS/drift/pipcheck and native qualification gates.
 - [ ] One fresh final read-only review, one blocking-finding RED→GREEN fix pass/
   full suite; minors/exclusions explicit. Audited commit/nonforce push/exact CI
   logs+JSON/archive, no release/install; retain entire B/C/D/E and P0 backlog.
+
+November7 local evidence: single review complete; Important toolbar/Minor heading
+fixed RED→GREEN, additional actual System-dark sidebar correction verified.
+Full1,008passed197.65s/native83passed39.05s/JS10/protocol9/pipcheck/syntax pass,
+zero skips; actual72-frame final native capture. Hosted/frozen publication gate
+remains outstanding, so Task4 is not complete.
 
 Self-review: Task1 preserves API used by all pages/Task3; Task2 keeps roles used
 by selection/diagnostics. Task3 uses current scope/service interfaces, not duplicate

@@ -64,8 +64,23 @@ class _ThemeState(QObject):
         # Native System placeholder/disabled text can be translucent with <2:1
         # contrast. Use an opaque semantic color without overriding the native
         # application palette; regenerate it when the actual palette arrives.
-        color=status_foreground("disabled",self.application.palette())
-        return self._template.replace("@disabled-text@",color.name())
+        palette=self.application.palette()
+        color=status_foreground("disabled",palette)
+        sidebar="palette(alternate-base)"
+        if self.mode=="System":
+            background=palette.color(QPalette.ColorRole.AlternateBase)
+            for role in (QPalette.ColorRole.WindowText,QPalette.ColorRole.Text):
+                foreground=palette.color(role); alpha=foreground.alphaF()
+                painted=QColor.fromRgbF(*(fg*alpha+bg*(1-alpha) for fg,bg in zip(
+                    (foreground.redF(),foreground.greenF(),foreground.blueF()),
+                    (background.redF(),background.greenF(),background.blueF()))))
+                low,high=sorted((_luminance(background),_luminance(painted)))
+                if (high+.05)/(low+.05)<4.5:
+                    # Cocoa dark AlternateBase can be light gray behind white
+                    # labels. Reuse its window surface, not a manual OS palette.
+                    sidebar="palette(window)"
+                    break
+        return self._template.replace("@disabled-text@",color.name()).replace("@sidebar-background@",sidebar)
 
     def _palette_changed(self,*_args):
         # colorSchemeChanged precedes the native palette. React to the actual
@@ -109,7 +124,7 @@ def apply_theme(application, mode):
 QLabel#pageTitle { font-size: 23px; font-weight: 600; padding: 2px 0px; }
 QLabel#brand { font-size: 17px; font-weight: 700; }
 QLabel#muted { color: palette(window-text); }
-QWidget#sidebar { background: palette(alternate-base); border-right: 1px solid palette(mid); }
+QWidget#sidebar { background: @sidebar-background@; border-right: 1px solid palette(mid); }
 QListWidget#navigation { background: transparent; outline: none; }
 QListWidget#navigation::item { border-radius: 7px; padding: 3px 8px; margin: 2px 0px; }
 QListWidget#navigation::item:selected { background: palette(highlight); color: palette(highlighted-text); }
@@ -122,6 +137,7 @@ QPushButton[primary="true"] { background: palette(highlight); color: palette(hig
 QPushButton:disabled { color: @disabled-text@; background: palette(window); }
 QMenu::item:disabled { color: @disabled-text@; }
 QToolButton { padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; }
+QToolButton:disabled { color: @disabled-text@; }
 QLineEdit, QPlainTextEdit, QComboBox, QSpinBox { padding: 6px; border: 1px solid palette(mid); border-radius: 6px; background: palette(base); selection-background-color: palette(highlight); }
 QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: palette(highlight); }
 QPlainTextEdit[dropActive="true"] { border: 2px solid palette(highlight); background: palette(alternate-base); }

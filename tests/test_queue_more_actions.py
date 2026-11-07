@@ -29,6 +29,18 @@ def test_more_actions_scope_heading_is_actually_visible_in_native_menu(window):
     finally: window.queue_more_menu.hide()
 
 
+def test_clear_split_menu_scope_heading_is_actually_visible_in_native_menu(window):
+    populate(window,16); choose(window,"a")
+    menu=window.collections.clear_menu
+    menu.popup(window.collections.clear_button.mapToGlobal(QPoint(0,0))); _APP.processEvents()
+    try:
+        heading=window.collections.clear_heading
+        assert "Collection A" in heading.text()
+        assert menu.actionGeometry(heading).height()>0,"Clear menu scope must be visible on Cocoa too"
+        assert not heading.isEnabled()
+    finally: menu.hide()
+
+
 @pytest.mark.parametrize("count",[800,5000])
 def test_retry_failed_uses_captured_scope_one_confirmation_and_shared_auth_policy(window,tmp_path,monkeypatch,count):
     values=populate(window,count); choose(window,"a")

@@ -16,6 +16,32 @@ APP=QApplication.instance() or QApplication([])
 
 
 @pytest.mark.parametrize("theme",["Light","Dark","System"])
+@pytest.mark.parametrize("control",["collection","more"])
+def test_actual_disabled_collection_toolbar_caption_is_readable_and_distinct(window,theme,control):
+    button=window.collections.actions_button if control=="collection" else window.queue_more_button
+    if control=="collection":
+        assert not button.isEnabled()  # All collections is not one actionable group.
+    button.setEnabled(False)
+    # Existing batch tests prove More actions is disabled while busy; here test
+    # its actual native caption, including late return from another appearance.
+    for mode in (theme,"Dark","Light",theme): switch(window,mode)
+    image=button.grab().toImage(); scale=image.devicePixelRatio()
+    background=image.pixelColor(round(2*scale),round(2*scale))
+    # Sample only the caption interior, excluding border and native menu arrow.
+    def caption_contrast(frame):
+        return max(contrast(frame.pixelColor(x,y),background)
+            for y in range(round(6*scale),round((button.height()-6)*scale))
+            for x in range(round(10*scale),round((button.width()-24)*scale)))
+    disabled=caption_contrast(image)
+    assert disabled>=3,"Native disabled collection toolbar text must remain legible"
+    try:
+        button.setEnabled(True); APP.processEvents()
+        assert disabled<caption_contrast(button.grab().toImage()),"Disabled toolbar caption must remain distinct"
+    finally:
+        button.setEnabled(False)
+
+
+@pytest.mark.parametrize("theme",["Light","Dark","System"])
 def test_actual_disabled_menu_caption_has_readable_native_pixels(window,theme):
     switch(window,theme)
     menu=QMenu(window); menu.addAction("Unavailable action").setEnabled(False)
@@ -93,8 +119,35 @@ def test_dynamic_dialog_and_hidden_settings_controls_use_current_theme(window):
 def test_system_roundtrip_repolishes_existing_children_to_current_native_palette(window):
     switch(window,"Dark"); switch(window,"System")
     expected=APP.palette()
-    assert sidebar_pixel(window)==expected.color(QPalette.ColorRole.AlternateBase).name()
+    alternate=expected.color(QPalette.ColorRole.AlternateBase)
+    text=expected.color(QPalette.ColorRole.WindowText)
+    background=alternate if contrast(text,alternate)>=4.5 else expected.color(QPalette.ColorRole.Window)
+    assert sidebar_pixel(window)==background.name()
+    assert contrast(text,QColor(sidebar_pixel(window)))>=4.5
     assert window.queue_table.palette().color(QPalette.ColorRole.Base)==expected.color(QPalette.ColorRole.Base)
+
+
+@pytest.mark.parametrize("hidden",[False,True])
+def test_system_dark_sidebar_uses_readable_surface_without_overriding_native_palette(window,hidden):
+    switch(window,"System")
+    if hidden: window.hide()
+    # Native dark Cocoa palette observed in the actual November 7 capture:
+    # AlternateBase is much lighter than Window and unreadable behind white text.
+    native=QPalette(APP.palette())
+    for role,color in ((QPalette.ColorRole.Window,"#323232"),(QPalette.ColorRole.AlternateBase,"#989898"),
+                       (QPalette.ColorRole.WindowText,"#ffffff"),(QPalette.ColorRole.Text,"#ffffff")):
+        native.setColor(role,QColor(color))
+    APP.setPalette(native); APP.processEvents()
+    assert contrast(QColor("#ffffff"),QColor(sidebar_pixel(window)))>=4.5
+    assert sidebar_pixel(window)=="#323232"
+    assert APP.palette()==native,"Sidebar readability must not freeze or rewrite the native System palette"
+    # A later light appearance restores its ordinary alternate surface.
+    native.setColor(QPalette.ColorRole.Window,QColor("#ececec"))
+    native.setColor(QPalette.ColorRole.AlternateBase,QColor("#f5f5f5"))
+    native.setColor(QPalette.ColorRole.WindowText,QColor("#000000"))
+    native.setColor(QPalette.ColorRole.Text,QColor("#000000"))
+    APP.setPalette(native); APP.processEvents()
+    assert sidebar_pixel(window)=="#f5f5f5" and APP.palette()==native
 
 
 @pytest.mark.parametrize("hidden",[False,True])
@@ -104,6 +157,7 @@ def test_system_appearance_uses_palette_that_arrives_after_scheme_notification(w
     window._system_appearance_changed()  # Qt documents that the old palette is still current here.
     native=QPalette(APP.palette()); native.setColor(QPalette.ColorRole.Window,QColor("#102030"))
     native.setColor(QPalette.ColorRole.AlternateBase,QColor("#203040")); native.setColor(QPalette.ColorRole.Base,QColor("#304050"))
+    native.setColor(QPalette.ColorRole.WindowText,QColor("#ffffff")); native.setColor(QPalette.ColorRole.Text,QColor("#ffffff"))
     APP.setPalette(native); APP.processEvents()
     assert sidebar_pixel(window)=="#203040"
     assert window.queue_table.palette().color(QPalette.ColorRole.Base).name()=="#304050"

@@ -1,6 +1,6 @@
 # MediaGrabber feature backlog and qualification ledger
 
-Updated 2026-11-03. This extends, rather than replaces, the Reliable Downloads,
+Updated 2026-11-07. This extends, rather than replaces, the Reliable Downloads,
 Better UX and Public Releases master goal. The Critical UX, Scalability and
 Architecture Addendum changes the implementation order below. An existing helper,
 passing unit test or metadata inspector is not evidence of a finished feature.
@@ -220,6 +220,17 @@ restrictions remain. Live account/media tests need explicit user participation.
   Native Dark decorative question icon remains faint; original app icon unchanged.
   Final local999passed144.89s, native74passed26.88s, JS10/protocol9/pipcheck/shell
   syntax pass; no skips. Final review and exact hosted qualification remain gates.
+- Final A review completed for9ed..18e: no Critical, one Important disabled
+  QToolButton contrast gap and a minor invisible native clear-menu scope heading.
+  Both reproduced RED and repaired without changing scope/execution. Native
+  recapture additionally exposed unreadable System-dark sidebar AlternateBase;
+  a presentation-only native-Window fallback and visible/hidden palette-arrival
+  regressions pass. Final full local1,008passed197.65s; native83passed39.05s,
+  five known test-only warnings each, zero skips. JS10/protocol9/pipcheck/shell
+  syntax pass; fresh72captures0I/O/0owners. No second reviewer or hosted claim yet.
+  Existing History header clipping, decorative Dark question icon, arbitrary
+  localization/display/Qt6.7/hardware-focus, faint native placeholder hints and
+  all live acceptance remain open.
 - Same-fixture local offscreen layout increment observation, a5eb8ab→current:
   5,000 max original gap.739→.756s, collection1.736→1.733s, peak370.03→372.95MiB;
   SQL26,279/633commits/25,004writes unchanged, max2owners/final0. Single isolated
@@ -270,8 +281,8 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
 | --- | --- | --- | --- |
 | U01 Open | `docs/UI_DESIGN_SYSTEM.md` defines navigation, type, spacing/density, light/dark tokens, contrast/focus, controls/tables/progress/menus, states, resizing/fullscreen and destructive patterns | `theme.py`, `ui_components.py`, `ui.py`, `settings_window.py` | Research Stacher 7/ClipGrab interactions and Apple/Qt authoritative guidance; create actual mockups/screenshots before large redesign; user design approval |
-| U02 Open; diagnostic renders only | Real compact/standard/large/fullscreen screenshots in light/dark show readable, aligned unclipped UI; retain icon/native PySide6 | workspace queue-model current/baseline light/dark PNGs; UI/model tests | Offscreen1180x820 diagnostic is not Cocoa/fullscreen/design acceptance. Existing dark switch stale-child palette reproduced against baseline; fix with rendered regression. Title/destination remain narrow; approved design/resize QA still required |
-| U06 Partial; explicit steering priority A | Direct Clear Completed, discoverable advanced bulk actions, concise counted dialogs, precise known/unknown progress and human-readable messages | Current collection controls/confirmation/progress code; collection tests | Primary Clear Completed restored and mixed-unknown denominator fixed in collection work; remaining toolbar/dialog/jargon simplification and full theme/size/keyboard/native QA |
+| U02 Partial; native source A fixes | Real compact/standard/large/fullscreen screenshots in light/dark show readable, aligned unclipped UI; retain icon/native PySide6 | UI_CORRECTNESS.md; actual Cocoa theme/queue/default-column/caption/paint regressions and synthetic screenshots | Final reviewed source/hosted qualification pending; History clipping and professional design/other screens still open. Actual System-dark sidebar fix newly exposed by recapture; no blanket display/Qt-version acceptance |
+| U06 Partial; local A implementation | Direct Clear Completed, discoverable advanced bulk actions, concise counted dialogs, precise known/unknown progress and human-readable messages | Collection controls, More actions, real counted expandable-dialog and scoped batch tests | Direct control/More/keep-default dialogs implemented; final review fixes and exact hosted QA pending. Broader UI jargon and release/live interactions remain |
 | RB01 Open; checkpoint C | Visible MediaGrabber name everywhere, original icon retained, no data/session/extension identity loss | Existing branding/constants/specs/native host/companion/archive names | Inventory all user-visible names separately from compatible internal IDs; migration/preservation tests; hosted bundle/Dock/Finder/extension verification; exFAT install unresolved, no launcher/install now |
 | U03 Partial | Large analysed playlist has resizable remembered panels, collapsible options/preview, search, visible/all/none/invert, counts, keyboard/multi-selection | `ui.py`, `settings.py`; `test_playlist_workspace.py`; `docs/PLAYLIST_WORKSPACE.md` | 800–5,000 scale qualification and visual QA; current playlist table is still item-based |
 | U04 Partial | Lazy playlist thumbnails and real duration reflect current selected video, avoid N requests and route fallback | `thumbnail_cache.py`, `ui.py`; `test_thumbnail_cache.py`, `test_playlist_workspace.py` | Distinct from viewer: real rendered thumbnail/duration QA, scrolling/large-list responsiveness, missing/slow/cancelled responses |

@@ -39,7 +39,7 @@ class CollectionControls(QWidget):
         self.clear_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.clear_button.clicked.connect(lambda _checked=False:self.clear_requested.emit("Completed",self.scope()))
         self.clear_menu=QMenu(self.clear_button); self.clear_button.setMenu(self.clear_menu); self.clear_actions={}
-        self.clear_heading=self.clear_menu.addSection("Scope")
+        self.clear_heading=self.clear_menu.addAction("Scope"); self.clear_heading.setEnabled(False)
         for status in ("Completed","Cancelled","Failed","Collection"):
             item=self.clear_menu.addAction(status+" entries…"); self.clear_actions[status]=item
             item.triggered.connect(lambda _checked=False,s=status,item=item:self.clear_requested.emit(s,item.data() or self.scope()))

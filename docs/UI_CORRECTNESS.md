@@ -30,7 +30,7 @@ writes were added. Unchanged theme applications do not repolish the widget tree.
 
 Synthetic source Cocoa captures cover Download, Queue, History and Settings in
 Light/Dark/System at requested900×650/1180×820/1440×900 and Queue fullscreen,
-plus roundtrips, a details dialog and popup. The final audit records45 captures,
+plus roundtrips, a details dialog and popup. The theme-component audit records45 captures,
 zero external I/O attempts and zero final task owners. Actual larger normal
 windows were OS-clamped to1440×816; fullscreen1470×923 at DPR2. These are not
 claims of arbitrary-display or packaged-app acceptance.
@@ -54,9 +54,10 @@ hardware-keyboard focus or grant permission to control another application.
   remains outstanding with the rest of Checkpoint A.
 - Layout/preferences and discoverable actions are locally tested below; final
   whole-checkpoint visual/performance/hosted acceptance remains outstanding.
-- Concise counted confirmation dialogs and expandable technical details.
-- Whole-checkpoint fresh review, full final tests/performance comparisons and
-  exact-commit hosted packaged/macOS/Linux qualification.
+- Concise counted confirmation dialogs and expandable technical details are
+  implemented and locally tested below; hosted qualification remains pending.
+- Final review fixes, updated full-suite evidence and exact-commit hosted
+  packaged/macOS/Linux qualification.
 - Full B/C/D/E roadmap in FEATURE_BACKLOG, including actual Library playback,
   authentication acceptance, remaining stalls/retention, rebrand and releases.
 
@@ -228,3 +229,50 @@ serialization/copies and structural queue refresh also remain substantial:
 profiling. These overlapping cumulative values are not additive or unprofiled
 latencies. The diagnostic/gates are unchanged; remaining stalls/long-running RSS
 remain open, not erased because verification contributes cost.
+
+## Final review and additional native appearance evidence
+
+The single fresh reviewer read the complete `9ed1082..18e22bc` checkpoint and
+integration paths. No Critical findings; one Important finding: the opaque
+disabled token did not cover QToolButton. Native System Collection actions was
+1.795:1 in the original full-window capture. New real-control tests reproduce
+unreadable Collection/More actions after theme roundtrips, then verify both
+readability and a distinct disabled state. The same token now covers QToolButton.
+The minor retained Clear Completed scope heading also had native height zero:
+it now uses a disabled ordinary action, matching More actions. Scope/UUID/action
+execution is unchanged. Both defects were observed failing before correction.
+
+The reviewer independently ran56 portable tests (two known test-only warnings).
+Its native probe could not create a screen in its sandbox and is not counted as
+a pass. Main-agent authorized own-window checks are separate evidence; no
+Accessibility permission, live account access or local build was used.
+
+A November7 native recapture produced72 frames with zero external I/O attempts,
+zero final owners and empty stderr. This session uses System **dark**, unlike the
+earlier System-light audit, and permits actual900×650/1180×820/1440×900 normal
+windows and1920×1080 fullscreen. It exposed an additional native-palette issue:
+AlternateBase#989898 behind white sidebar text gives2.885:1 contrast. The sidebar
+now falls back to the native Window surface only when the alternate surface is
+unreadable; it does not set or freeze the native palette. Visible/hidden late
+dark-to-light regressions cover this, while preserving ordinary alternate surfaces
+and unchanged-theme no-op behavior.
+
+Final local verification after all corrections: **1,008 passed, 5 known test-only
+Qt activation warnings in 197.65s**, no skips. Native Cocoa consumer suite:
+**83 passed, 5 warnings in 39.05s**. JavaScript: 10 passed, zero skips; all nine
+protocol fixtures match; pip check and `zsh -n build_macos.sh` pass (syntax only).
+The preceding1,006-pass run predates the sidebar correction and is not the final
+result. The new72-frame capture again records zero external I/O/final owners and
+empty stderr. Inspected System-dark compact Queue/Settings/Download and fullscreen,
+Light standard Queue, Dark compact Queue and the real scope popup confirm the
+sidebar correction, readable disabled controls and visible heading. Native input
+placeholder hints still look faint in System appearance; record for the broader
+design-token pass, not a claim of complete accessibility qualification.
+
+Exact-head hosted Linux/macOS/native/frozen/archive results are still pending.
+
+Still not qualified: existing History header/value clipping; native placeholder
+hint contrast; faint native Dark
+question icon; arbitrary enlarged fonts/localizations/displays; actual Qt6.7;
+hardware-keyboard/OS focus/accessibility certification; live auth/media/Trash/
+cross-volume behavior; long-lived retention and remaining stalls; B/C/D/E roadmap.
