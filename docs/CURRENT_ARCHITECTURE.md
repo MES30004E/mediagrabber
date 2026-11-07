@@ -222,6 +222,14 @@ removal completion owns its full render. Dispatch invalidates for the next
 callback, rather than rebuilding per unchanged callback. Closing-only persistence
 does not render a disappearing window. Failed queue rendering after a committed
 change cannot hide the pending history refresh.
+Hidden History now coalesces explicit refresh requests without querying or
+allocating rows; obsolete cells/cache are discarded at that hidden refresh.
+`NavigationShell.currentChanged` renders pending data only when the actual
+History page is selected. Clean revisits preserve cells/selection. Callback rows
+are remembered only after acknowledged rendering, preventing hidden load/clear
+cycles from growing the cache. Closed windows ignore late presentation requests.
+Visible full rendering and SQL policy are unchanged; first stale-cell destruction
+is still proportional to its size. See HISTORY_DEFERRAL.md for limits/evidence.
 
 `settings.SettingsStore` atomically writes schema-6 mode-0600 settings, migrates
 legacy preferences, and recovers corrupt JSON. `keychain.py` calls macOS security

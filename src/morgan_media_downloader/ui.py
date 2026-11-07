@@ -451,6 +451,7 @@ class MainWindow(QMainWindow):
                                              account_callback=self._apply_account_choice,
                                              presentation_settings=lambda:self.settings)
         self.tabs.addTab(self.settings_panel, "Settings")
+        self.tabs.currentChanged.connect(self._render_pending_history)
         self.provider_label = StatusLabel(); self.runtime_label = QLabel(); self.connection_bar_label = QLabel()
         self.statusBar().addPermanentWidget(self.provider_label); self.statusBar().addPermanentWidget(self.runtime_label); self.statusBar().addPermanentWidget(self.connection_bar_label)
         self.provider_label.setText("● PO provider: checking"); self.runtime_label.setText(f"● yt-dlp {self.runtime_manager.snapshot().version}"); self._refresh_connection_status()
@@ -625,7 +626,7 @@ class MainWindow(QMainWindow):
         if target: Path(target).write_text(self.console_view.toPlainText() + "\n", encoding="utf-8")
 
     def _history_tab(self):
-        widget = QWidget(); layout = QVBoxLayout(widget); filters = QHBoxLayout()
+        widget = self.history_page = QWidget(); layout = QVBoxLayout(widget); filters = QHBoxLayout()
         layout.setContentsMargins(22, 18, 22, 16); layout.setSpacing(10)
         page_heading(layout, "History", "Find completed work and review output details from your local history.")
         self.history_search = QLineEdit(); self.history_search.setPlaceholderText("Search local history")
@@ -1381,7 +1382,7 @@ class MainWindow(QMainWindow):
         if self._history_refresh_state.needs_refresh(row): self._refresh_history()
         # Only this successfully persisted callback row is acknowledged here;
         # unrelated mutable jobs may not yet match what is in the database/UI.
-        self._history_refresh_state.remember(row)
+        if not self._history_refresh_state.pending: self._history_refresh_state.remember(row)
         if job.kind == "torrent":
             marker = (job.status.value, int(job.progress))
             if marker != getattr(self, "_last_aria_console", {}).get(job.id):
@@ -2261,8 +2262,19 @@ class MainWindow(QMainWindow):
         self._refresh_selected_job_details()
 
     def _refresh_history(self, *_):
-        if not hasattr(self, "history_table"): return
+        if self._closing or not hasattr(self, "history_table"): return
         self._history_refresh_state.invalidate()
+        if self.tabs.currentWidget() is not self.history_page:
+            # Do not retain stale cells/snapshots across hidden load/clear cycles.
+            # Subsequent invalidations coalesce without querying or scanning jobs.
+            self._history_refresh_state.discard()
+            if self.history_table.rowCount(): self.history_table.setRowCount(0)
+            return
+        self._render_pending_history()
+
+    def _render_pending_history(self, *_):
+        if (self._closing or self.tabs.currentWidget() is not self.history_page or
+                not self._history_refresh_state.pending): return
         jobs = self.database.search_history(self.history_search.text(), self.history_filter.currentText())
         self.history_empty.setVisible(not jobs)
         self.history_empty.setText("No matching history. Try another search or status filter." if self.history_search.text() or self.history_filter.currentText() != "All" else "No history yet. Completed downloads will appear here.")

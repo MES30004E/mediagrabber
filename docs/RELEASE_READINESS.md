@@ -5,14 +5,13 @@ asset, user installation or notarisation is implied by CI success.
 
 ## Qualified development source
 
-`e2f3ea33009610ae6bcf26dd06686ed33a539f33`, development branch
-`improvement/download-reliability`; run42378146636 attempt2 passed all jobs.
-The first packaging attempt timed out during a TLS source fetch; retrying that
-job alone on unchanged source passed. No source pins/TLS/signature gates changed.
-See QA_MATRIX.md and UI_CORRECTNESS.md for exact scope and limits.
+`380e62b4b1cc6e321dbc9656dc4f6030a9650918`, development branch
+`improvement/download-reliability`; run42382032289 attempt1 passed all jobs.
+Actual native/frozen/archive reports inspected and strict four-size validator
+rerun. See QA_MATRIX.md and DISPATCH_CAPACITY.md for exact scope and limits.
 
-Disposable hosted archive:141,966,769bytes,
-SHA256 `647087b75db9a99ad09b6bf1051cf1eb21371fa0a25eb7595294332bbf12b095`.
+Disposable hosted archive:141,968,028bytes,
+SHA256 `13e3027c0705d27be304c71777b08316e39f4c5a017cc51f575990d4848a2239`.
 Strict signature and content/symlink/mode round-trip, extracted launch and owned
 replacement/backup passed. This is an ad-hoc development build, not Developer ID
 signing or notarisation. No artefact was published or installed.

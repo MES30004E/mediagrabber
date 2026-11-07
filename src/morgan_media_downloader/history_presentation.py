@@ -40,6 +40,15 @@ class HistoryRefreshState:
     def invalidate(self) -> None:
         self._dirty = True
 
+    @property
+    def pending(self) -> bool:
+        return self._dirty
+
+    def discard(self) -> None:
+        """Release obsolete hidden snapshots without acknowledging a render."""
+        self._rows.clear()
+        self._dirty = True
+
     def remember(self, row: HistoryRow) -> None:
         self._rows[row.job_id] = row
 

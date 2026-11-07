@@ -72,22 +72,30 @@ restrictions remain. Live account/media tests need explicit user participation.
   independent review no blocker. Paired idle5000median100.77→.279ms,800
   15.59→.053ms. See DISPATCH_CAPACITY.md; remaining O(N) scan/history/retention
   remain open. Hosted Linux1,030/native92/backend60/Swift25/protocol9/JS10 passed;
-  packaged qualification pending. Do not equate this with whole P0 acceptance.
+  packaged checks also passed attempt1: strict four-size/two-cycle reports,
+  tools/protocol/replacement/archive validated. Do not equate this with whole P0 acceptance.
 - B2 restart nesting fix implemented locally: validated optional persisted anchor
   chooses fresh siblings; cleanup stays current-attempt-only. Legacy folders are
   not moved or heuristically flattened.23RED→56focused/39native pass; independent
   review no blocker. Full1,055pass204.60s/5existingwarnings/no skips; JS10/protocol9/
   pipcheck pass. Exact-source hosted qualification pending.
   See RESTART_DESTINATIONS.md; Q05 remains broader than this narrow correction.
+- B3 hidden-History work implemented locally: skip queries/cell allocation while
+  another page is selected, release stale hidden rows/cache, render persisted
+  data on first dirty revisit without invalidating clean revisits.6RED/2pass→
+  History48pass4.57s; expanded native178pass50.97s; independent review no blocker.
+  Full1,063pass153.09s/5existingwarnings/no skips; exact hosted pending. Paired5000×5: queries5→0,
+  cell writes175,000→0; median379.26→.0013ms. Visible rendering/first stale-cell
+  destruction/total retention remain open. See HISTORY_DEFERRAL.md.
 
 - Development branch: `improvement/download-reliability`. Latest qualified source
-  baseline: `e2f3ea33009610ae6bcf26dd06686ed33a539f33`, run `42378146636`,
-  attempt 2; all jobs passed. Linux 1,017 + JS 10; macOS native UI 92,
+  baseline: `380e62b4b1cc6e321dbc9656dc4f6030a9650918`, run `42382032289`,
+  attempt 1; all jobs passed. Linux 1,030 + JS 10; macOS native UI 92,
   backend 60, Swift 25 and protocol 9. Actual frozen four-size/two-cycle reports
   also passed the shipped strict verifier. Replacement/backup, extracted launch,
-  unchanged bundle and strict signatures passed. Archive 141,966,769 bytes,
-  SHA256 `647087b75db9a99ad09b6bf1051cf1eb21371fa0a25eb7595294332bbf12b095`.
-  Earlier 9ed1082 remains a rollback point. No release asset uploaded or installed.
+  unchanged bundle and strict signatures passed. Archive 141,968,028 bytes,
+  SHA256 `13e3027c0705d27be304c71777b08316e39f4c5a017cc51f575990d4848a2239`.
+  Earlier e2f3ea3/9ed1082 remain rollback points. No release asset uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
   Strict signature verification was not bypassed. Later green runs include this
@@ -324,7 +332,7 @@ Paths below are repository-relative; each row retains its own remaining QA.
 | Q02 QA Pending | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains | Q03 |
 | Q03 QA Pending | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain | Q09 |
 | Q04 QA Pending | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Exact72fd947/run41210675065 frozen gates pass. Details-dialog caption minor remains; no professional visual/live-media acceptance. Not analysed-playlist checkbox selection | Q01 |
-| Q05 In Progress | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart tests | Exact034/run41289264510: one restart dialog/default Keep,32 snapshots/one worker, owner drain/prepare/commit gates pass. New collection controls, real transfers and broad shutdown/freeze qualification remain | Q03, Q09 |
+| Q05 In Progress | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart/destination tests | Exact034/run41289264510 bounded controller gates pass; bd17a36 sibling-anchor fix local1,055/native39pass, exact hosted pending. Real transfers and broad shutdown/freeze qualification remain | Q03, Q09 |
 | Q06 QA Pending | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `collection_controls.py`, `ui.py`, shared QueueBatch/FileRemoval; collection UI/native probe tests; QUEUE_COLLECTIONS.md | Exact9ed/run41385802502 confirms primary Clear Completed/current or All scope, actual counts/one keep-default choice, eligibility/atomicity/deferred errors; e2f native theme visibility now passes; realistic file/transfer QA remains | Q03, Q04 |
 | Q07 In Progress | Collection grouping, group progress/status totals and bulk controls remain responsive | `queue_collections.py`, `collection_model.py`, `collection_controls.py`, immutable queue roles; pure/randomized/model/UI/frozen tests | Exact9ed native identities/aggregates/primary/actions/restart gates pass; uncertain denominator explicit. Bulk totals defer. Latest e2f native5,000extra gap2.472s and retention remain blockers; real transfer/visual acceptance pending. Minor name-only label refresh deferred | Q01, Q05, Q06 |
 | Q08 Not Started | Stable extractor/media identity deduplicates queue/download archive; completed outputs are not accidentally redownloaded or destroyed | `models.py`, `downloader.py`, `database.py`, `organisation.py` | Explicit duplicate/archive policy, cross-URL identities, missing outputs, retries and deliberate restart tests; no assumed guarantee from UUID job IDs | Q09 |
@@ -408,13 +416,14 @@ whole-app rewrite.
 
 ## Next checkpoints and reporting contract
 
-1. Baseline/old UI correctness gates pass exacte2f3ea3. Retain the measured P0
-   limits; next fix scheduler settings copies made despite exhausted type capacity.
+1. Baseline/old UI correctness gates and scheduler380e62b all pass exact hosted
+   Linux/macOS/Swift/frozen/archive gates. Qualify sibling
+   restart bd17a36 and the new hidden-History work before advancing acceptance.
 2. Continue P0 history/playlist progress, persistence recovery/retention, duplicate/
    archive policy, queued edits and the reported window-stayed-open freeze.
-   Repeated restart nesting is confirmed: add a validated stable attempt anchor,
-   fresh siblings, no ancestor-name guessing or movement/deletion of old folders.
-   Cleanup must still be bounded by the current attempt, never the shared anchor.
+   Repeated restart now uses validated fresh siblings locally; retain all ownership
+   and legacy-folder restrictions. Visible History and long-lived retention still
+   need measurements; do not treat hidden-query elimination as the whole fix.
 3. Design system/research/mockups and **approved** professional native screens;
    real visual QA before claiming polish.
 4. Real downloaded-media viewer/playback (separate from Inspect Video/preview).

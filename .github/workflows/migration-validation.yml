@@ -95,7 +95,7 @@ jobs:
       - name: Native Cocoa UI correctness regressions
         env:
           QT_QPA_PLATFORM: cocoa
-        run: python -m pytest -q -p no:cacheprovider tests/test_theme_ui.py tests/test_queue_presentation_ui.py tests/test_queue_more_actions.py tests/test_queue_dialogs.py tests/test_queue_progress_paint.py tests/test_dispatch_capacity.py tests/test_restart_destinations.py tests/test_queue_restart_ui.py
+        run: python -m pytest -q -p no:cacheprovider tests/test_theme_ui.py tests/test_queue_presentation_ui.py tests/test_queue_more_actions.py tests/test_queue_dialogs.py tests/test_queue_progress_paint.py tests/test_dispatch_capacity.py tests/test_restart_destinations.py tests/test_queue_restart_ui.py tests/test_history_deferred.py tests/test_history_progress.py
       - name: Swift build
         working-directory: swift
         run: swift build

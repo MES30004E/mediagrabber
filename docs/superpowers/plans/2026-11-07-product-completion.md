@@ -7,11 +7,11 @@ product and branch; no speculative rewrite. FEATURE_BACKLOG is the status ledger
   strict frozen reports and archive; preserve two October drafts; close old UI A.
 - [x] A: reconcile mission priorities, six status categories and dependency ledger;
   concise PRODUCT_SPEC/QA_MATRIX/RELEASE_READINESS/UI_DESIGN_SYSTEM/HANDOVER.
-- [ ] B1: capacity-before-snapshot scheduler fix. RED12/1 → GREEN13; same-fixture
+- [x] B1: capacity-before-snapshot scheduler fix. RED12/1 → GREEN13; same-fixture
   paired100/800/1000/5000 observations; independent review no blocker. Focused72,
   native13/full1,030passed169.54s/no skips. Security history/provider/index only
   known constants; published380e62b/run42382032289. Linux1,030/native92/backend60/
-  Swift25/protocol9/JS10 passed; final frozen/archive qualification pending.
+  Swift25/protocol9/JS10 passed; actual frozen/archive reports and gates passed.
 - [ ] B2: validated restart anchor/fresh siblings with Keep/Replace ownership tests;
   never guess old root by name, move old data or widen current-attempt cleanup.
   Implemented:23RED→56focused/39native pass, independent review no blocker;
@@ -19,6 +19,10 @@ product and branch; no speculative rewrite. FEATURE_BACKLOG is the status ledger
   publication/exact hosted CI pending.
 - [ ] B3: measured History/playlist reconstruction, long-lived retention, duplicate/
   archive policy, queued edits, interruption/relaunch and lifecycle acceptance.
+  Hidden-History deferral implemented/reviewed:48focused/178native pass; paired
+  five-call5000query5→0/cells175000→0. Full1,063pass153.09s/no skips;
+  security/publication/exact hosted CI pending.
+  Visible rendering, first stale-cell release and total retention remain open.
 - [ ] C: current official research/design proposals/approval where required,
   reusable native screens and compatibility-preserving visible rebrand.
 - [ ] D: real local Library playback, controls/tracks/fallback and frozen codecs.

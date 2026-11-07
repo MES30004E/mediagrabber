@@ -14,6 +14,8 @@ APP = QApplication.instance() or QApplication([])
 def window(tmp_path, monkeypatch):
     value = _window(tmp_path, monkeypatch)
     for timer in value.findChildren(QTimer): timer.stop()
+    # These assertions exercise visible cells, selection and SQL refresh policy.
+    value.tabs.setCurrentWidget(value.history_page)
     try: yield value
     finally: value.close(); APP.processEvents()
 

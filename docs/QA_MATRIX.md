@@ -5,9 +5,9 @@ Evidence below qualifies stated scopes, not entire roadmap features.
 
 | Area / IDs | Verified evidence | Remaining acceptance |
 | --- | --- | --- |
-| Baseline source | e2f3ea33009610ae6bcf26dd06686ed33a539f33; run42378146636 attempt2 success, actual logs inspected | New implementation needs its own reviewed tests and relevant hosted qualification |
-| Python / protocol | Local1,017passed164.28s; hosted Linux1,017passed332.82s; macOS backend60; nine protocol fixtures | Live media/account and platform matrix are separate |
-| Native UI / U02,U06 | Hosted92passed54.48s; local92passed34.19s;72 Cocoa frames across Light/Dark/System and actual900×650,1180×820,1440×900/fullscreen1920×1080 | History clipping, placeholder/decorative icon contrast, redesign, actualQt6.7, hardware/accessibility certification |
+| Baseline source | 380e62b4b1cc6e321dbc9656dc4f6030a9650918; run42382032289 attempt1 success, actual logs/reports inspected | New implementation needs its own reviewed tests and relevant hosted qualification |
+| Python / protocol | Local1,030passed169.54s; hosted Linux1,030passed229.78s; macOS backend60; nine protocol fixtures | Live media/account and platform matrix are separate |
+| Native UI / U02,U06 | Hosted92passed71.45s; prior e2f72 Cocoa frames across Light/Dark/System and actual900×650,1180×820,1440×900/fullscreen1920×1080; no new visual layout in380 | History clipping, placeholder/decorative icon contrast, redesign, actualQt6.7, hardware/accessibility certification |
 | Swift preserved | Hosted build and25tests, including two actual Python worker tests | No new Swift work authorized |
 | Companion / AU01–AU02 | JS10/no skips; frozen native protocol5cases; extension identity retained | Manual browser Incognito, consent/Keychain/readiness and real authorized transfer |
 | Bundled tools / R03 | Provider1.3.1, Nodev24.22.0/Canvas PNG; nine synthetic offline media cases; Cocoa launch/clean shutdown | Real token generation, live downloads/torrents, supported OS/codec matrix |
@@ -20,8 +20,8 @@ Evidence below qualifies stated scopes, not entire roadmap features.
 
 New scheduler checkpoint: focused72pass14.42s, Cocoa13pass3.03s and full local
 1,030pass169.54s/5knownwarnings/no skips; JS10/protocol9/pipcheck pass.
-Independent review no blocker. Hosted qualification for this source is pending;
-the table above intentionally remains pinned to the last qualified e2f baseline.
+Independent review no blocker. Exact380hosted qualification passed;
+the table above remains pinned to that qualified source while new work is tested.
 DISPATCH_CAPACITY.md records RED evidence, fixture diagnosis and paired timings.
 
 Restart anchor checkpoint:23RED→56focused0.72s; Cocoa39pass13.86s; full local
@@ -30,9 +30,14 @@ JS10/protocol9/pipcheck pass. RESTART_DESTINATIONS.md documents repeated saved-j
 and real-dialog coverage, unchanged cleanup scope and deliberate legacy behavior.
 Exact-source hosted qualification remains pending.
 
-Latest frozen5000: original max GUI gap1.032948s; extra collection gaps
-2.429543/2.472245s; peak456.05MiB; post-removal355.08→384.06MiB. At800,
-original max.209707s and collection gaps.496925/.340003s. These include diagnostic
+Hidden History checkpoint:6RED/2pass→48focused4.57s; combined native178pass50.97s;
+full local1,063pass153.09s/five existing warnings/no skips. Independent review
+8pass/no blocker; JS10/protocol9/pipcheck pass. Exact-source hosted pending.
+HISTORY_DEFERRAL.md records narrow query/allocation improvements and limitations.
+
+Latest frozen5000 on380: original max GUI gap1.863235s; extra collection gaps
+3.579752/4.883992s; peak456.33MiB; post-removal355.97→383.75MiB. At800,
+original max.352118s and collection gaps.657168/.576828s. These include diagnostic
 verification costs and are not controlled paired improvements or proof of leaks.
 Keep the independent90s original/collection diagnostic budgets and all safety
 assertions. Longitudinal profiling and real production timers remain P0 work.

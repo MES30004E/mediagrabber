@@ -1,6 +1,7 @@
 # P0 scheduler capacity-before-snapshot correction
 
-Status: locally verified; hosted qualification pending. Source rollback:
+Status: qualified exact380e62b4b1cc6e321dbc9656dc4f6030a9650918,
+run42382032289attempt1; all jobs and actual frozen reports inspected. Source rollback:
 e2f3ea33009610ae6bcf26dd06686ed33a539f33. Feature ledger Q01/Q11/A01 remains
 In Progress because other stalls and retention have not been resolved.
 
@@ -32,7 +33,12 @@ First full-suite attempt in the restricted execution sandbox:1009passed/21failed
 unique synthetic Keychain write. The unchanged suite with normal test permission
 passed **1,030 tests, five existing test-only warnings in169.54s**, no skips.
 The restricted failure is retained, not relabeled as success. JavaScript10pass,
-protocol9match and pip check pass. Exact new hosted qualification remains pending.
+protocol9match and pip check pass. Hosted Linux1,030passed229.78s, nativeUI92,
+backend60,Swift25incl2realworker,protocol9 andJS10passed. Actual four-size/two-cycle
+frozen reports passed the strict validator; replacement/archive signatures and
+extracted launch passed. No release/installation. Frozen5000collection gaps reached
+3.580/4.884s,peak456.33MiB: diagnostic variance and other work remain, not a paired
+overall-scale improvement or resolution of the user's freeze.
 
 A new test initially left a fake queue service installed into real window teardown,
 causing a reproducible native fault in the following lifecycle test. Excluding
