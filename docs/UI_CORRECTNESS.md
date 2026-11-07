@@ -281,6 +281,31 @@ threshold is lowered. A diagnostic-only assertion update records actual window,
 frame and screen geometry to distinguish platform clamping from a layout defect.
 Swift build/tests and frozen packaging cannot be claimed on this failed run.
 
+The diagnostic-only commit `3e13dba95a4db65a8a9ca96d6a2d5c7540d29090`, hosted
+run42377309447, proved the native clamp: requested1180×820 and1440×900 both
+became656px content height. Each684px frame exactly filled the screen's available
+684px vertical space. Both native attempts returned81passes/2failures; this is
+an invalid requested-height assumption, not evidence of an application shrink.
+The test now retains250px at actual650px and400px at actual requested large sizes;
+only verified Cocoa screen clamping can account for the missing height, never
+below the compact250px minimum. Eight regressions retain the original thresholds
+and reject offscreen/unexplained shrinkage or a window below650px. Large requested
+sizes remain exercised exactly by Linux offscreen and the local native display;
+hosted clamped cases are not advertised as actual820/900px native captures.
+
+The first Linux attempt returned1,007passes/one failure in273.02s: real platform
+font widths made ordinary All-view columns total702px in a696px viewport. The
+second diagnostic attempt retained that failure (1,007passed/one failed in
+225.44s). A regression reproduces those
+measured widths before the fix. Automatic progress-track width now absorbs small
+font-dependent differences while preserving the complete percentage, at least a
+24px track,160px title and all status/rate/ETA text. It returns to100px when space
+permits; explicit user widths are never overridden or saved as automatic choices.
+The controller still touches only bounded header sections, not jobs/SQL/workers.
+Focused portable28/native38passed; full native92passed34.19s with five known
+test-only warnings. Final isolated full suite: **1,017 passed, five warnings in
+164.28s**, no skips. New hosted/frozen qualification is still pending.
+
 Still not qualified: existing History header/value clipping; native placeholder
 hint contrast; faint native Dark
 question icon; arbitrary enlarged fonts/localizations/displays; actual Qt6.7;

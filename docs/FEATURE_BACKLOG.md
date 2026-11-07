@@ -236,6 +236,14 @@ restrictions remain. Live account/media tests need explicit user participation.
   Backend60/protocol9 pass; investigating actual runner window/display geometry
   with unchanged test thresholds. Not flaky, skipped or qualified; frozen gate
   remains pending and no release/install is authorized.
+- Diagnostic3e13dba/run42377309447 proves macOS screen clamp: actual content656px,
+  frame684px matches available684px. Test keeps requested-size250/400px minima
+  and permits only verified native-clamp accounting, with eight guard cases.
+  Linux's1,007pass/one failure is genuine default All-view font-width overflow
+  (702px columns/696px viewport), reproduced and locally fixed using bounded
+  automatic progress width; full labels/title and explicit user widths retained.
+  Native92passed34.19s; full1,017passed164.28s, no test skips. New hosted/frozen
+  evidence remains pending; no qualification claim or release/install.
 - Same-fixture local offscreen layout increment observation, a5eb8ab→current:
   5,000 max original gap.739→.756s, collection1.736→1.733s, peak370.03→372.95MiB;
   SQL26,279/633commits/25,004writes unchanged, max2owners/final0. Single isolated

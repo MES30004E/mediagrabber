@@ -90,7 +90,10 @@ November7 local evidence: single review complete; Important toolbar/Minor headin
 fixed RED→GREEN, additional actual System-dark sidebar correction verified.
 Full1,008passed197.65s/native83passed39.05s/JS10/protocol9/pipcheck/syntax pass,
 zero skips; actual72-frame final native capture. Hosted/frozen publication gate
-remains outstanding, so Task4 is not complete.
+remains outstanding, so Task4 is not complete. Hosted runs42376744385/42377309447
+exposed platform-font compact overflow and proved native screen height clamping.
+Focused source/test fixes retain readable width and original unclamped minima;
+final local1,017passed164.28s/native92passed34.19s. New hosted/frozen run required.
 
 Self-review: Task1 preserves API used by all pages/Task3; Task2 keeps roles used
 by selection/diagnostics. Task3 uses current scope/service interfaces, not duplicate

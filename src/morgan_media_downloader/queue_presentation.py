@@ -87,6 +87,17 @@ class QueuePresentation(QObject):
         self._configuring=True
         try:
             title=self.model.columns.index("Title")
+            progress=self.model.columns.index("Progress")
+            if "Progress" not in self._widths():
+                # Platform fonts can need a few more pixels for status/rates.
+                # Let only the automatic track absorb that difference, keeping
+                # the full percentage, a 24px track and the 160px title minimum.
+                minimum=self.table.fontMetrics().horizontalAdvance("100.0%")+40
+                preferred=max(self._default_width("Progress"),minimum)
+                other=sum(self.table.columnWidth(column) for column in range(len(self.model.columns))
+                    if column not in (title,progress) and not self.table.isColumnHidden(column))
+                width=max(minimum,min(preferred,self.table.viewport().width()-other-160))
+                self.table.horizontalHeader().resizeSection(progress,width)
             occupied=sum(self.table.columnWidth(column) for column in range(len(self.model.columns))
                 if column!=title and not self.table.isColumnHidden(column))
             self.table.horizontalHeader().resizeSection(title,max(160,self.table.viewport().width()-occupied))

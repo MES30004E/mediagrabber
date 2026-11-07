@@ -12,6 +12,32 @@ from test_theme_ui import window
 APP=QApplication.instance() or QApplication([])
 
 
+def _minimum_queue_height(requested,actual,frame,available,platform):
+    minimum=250 if requested==650 else 400
+    if actual<requested:
+        # Hosted Cocoa proves its frame fills the available screen when macOS
+        # clamps height. Don't quietly excuse a product-imposed smaller window.
+        assert platform=="cocoa" and abs(frame-available)<=2 and actual>=650
+        minimum=max(250,minimum-(requested-actual))
+    return minimum
+
+
+@pytest.mark.parametrize("requested,actual,frame,available,platform,minimum",[
+    (650,650,678,1055,"cocoa",250),(820,820,848,1055,"cocoa",400),
+    (900,900,928,684,"offscreen",400),(820,656,684,684,"cocoa",250),
+    (900,656,684,684,"cocoa",250),
+])
+def test_height_gate_preserves_requested_sizes_and_accounts_for_verified_native_clamp(requested,actual,frame,available,platform,minimum):
+    assert _minimum_queue_height(requested,actual,frame,available,platform)==minimum
+
+
+@pytest.mark.parametrize("actual,frame,available,platform",[
+    (656,684,1055,"cocoa"),(656,684,684,"offscreen"),(620,648,648,"cocoa"),
+])
+def test_height_gate_rejects_unexplained_shrink_or_loss_of_compact_minimum(actual,frame,available,platform):
+    with pytest.raises(AssertionError): _minimum_queue_height(820,actual,frame,available,platform)
+
+
 def seed(window,tmp_path):
     jobs=[DownloadJob(MediaItem(f"https://example.test/{i}",f"Synthetic download {i} — a useful long title",source="Fixture"),
         DownloadOptions(download_dir=str(tmp_path/"downloads")),kind="torrent" if i%2 else "media") for i in range(8)]
@@ -23,7 +49,10 @@ def seed(window,tmp_path):
 def test_default_queue_fits_and_prioritises_titles_with_useful_table_space(window,tmp_path,width,height,view):
     seed(window,tmp_path); window.resize(width,height); window.queue_filter.setCurrentText(view); APP.processEvents()
     assert not window.job_details.isVisible(), "Details must not consume a large empty panel by default"
-    assert window.queue_table.height()>=(250 if height==650 else 400), {
+    minimum=_minimum_queue_height(height,window.height(),window.frameGeometry().height(),
+        window.screen().availableGeometry().height(),APP.platformName())
+    assert window.width()==width
+    assert window.queue_table.height()>=minimum, {
         "requested":(width,height),"actual_window":(window.width(),window.height()),
         "frame":window.frameGeometry().getRect(),"screen":window.screen().geometry().getRect(),
         "available_screen":window.screen().availableGeometry().getRect(),
@@ -45,6 +74,30 @@ def test_collection_selector_stays_next_to_its_label_in_a_wide_window(window,tmp
     seed(window,tmp_path); window.resize(1440,900); APP.processEvents()
     label=next(label for label in window.collections.findChildren(QLabel) if label.text()=="Collection:")
     assert 0<=window.collections.selector.x()-(label.x()+label.fontMetrics().horizontalAdvance(label.text()))<=20
+
+
+def test_larger_platform_font_widths_fit_without_saving_automatic_progress_width(window,tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    seed(window,tmp_path); window.queue_filter.setCurrentText("All"); window.resize(900,650)
+    metrics=window.queue_table.fontMetrics()
+    # Widths observed on hosted Ubuntu/Qt6.12: ordinary columns total702px,
+    # while the actual compact viewport has696px. Don't alter font/text/status.
+    widths={"Completed with warnings ⚠":181,"1023.9 KB/s":78,"999:59:59":67}
+    monkeypatch.setattr(window.queue_table,"fontMetrics",lambda:SimpleNamespace(
+        horizontalAdvance=lambda text:widths.get(text,metrics.horizontalAdvance(text))))
+    window.queue_presentation.configure("All",force=True); APP.processEvents()
+    table=window.queue_table; progress=window.queue_model.columns.index("Progress")
+    title=window.queue_model.columns.index("Title")
+    assert table.horizontalScrollBar().maximum()==0
+    assert table.columnWidth(title)>=160
+    assert table.columnWidth(progress)>=metrics.horizontalAdvance("100.0%")+40  # Full label +24px track +16px spacing.
+    assert "Progress" not in window.settings.queue_column_widths.get("All",{})
+    window.resize(1180,820); APP.processEvents()
+    assert table.columnWidth(progress)==100
+    table.horizontalHeader().resizeSection(progress,144)
+    window.resize(900,650); APP.processEvents()
+    assert table.columnWidth(progress)==144  # Explicit user preference may require scrolling.
+    assert window.settings.queue_column_widths["All"]["Progress"]==144
 
 
 def test_columns_and_disclosures_persist_without_overwriting_pending_settings(window,tmp_path,monkeypatch):
