@@ -10,9 +10,13 @@ product and branch; no speculative rewrite. FEATURE_BACKLOG is the status ledger
 - [ ] B1: capacity-before-snapshot scheduler fix. RED12/1 → GREEN13; same-fixture
   paired100/800/1000/5000 observations; independent review no blocker. Focused72,
   native13/full1,030passed169.54s/no skips. Security history/provider/index only
-  known constants; refreshed final index, commit/push and exact CI next.
+  known constants; published380e62b/run42382032289. Linux1,030/native92/backend60/
+  Swift25/protocol9/JS10 passed; final frozen/archive qualification pending.
 - [ ] B2: validated restart anchor/fresh siblings with Keep/Replace ownership tests;
   never guess old root by name, move old data or widen current-attempt cleanup.
+  Implemented:23RED→56focused/39native pass, independent review no blocker;
+  real-window repeated reload/action covered. Full1,055pass204.60s/no skips;
+  publication/exact hosted CI pending.
 - [ ] B3: measured History/playlist reconstruction, long-lived retention, duplicate/
   archive policy, queued edits, interruption/relaunch and lifecycle acceptance.
 - [ ] C: current official research/design proposals/approval where required,

@@ -105,6 +105,9 @@ class DownloadJob:
     subtitle_files: list[str] = field(default_factory=list)
     thumbnail_files: list[str] = field(default_factory=list)
     created_job_directory: str = ""
+    # Stable parent for fresh restart attempts; never grants file ownership.
+    # Empty on legacy records: their current destination becomes the anchor.
+    restart_base_directory: str = ""
     warnings: list[str] = field(default_factory=list)
     verification: dict[str, Any] = field(default_factory=dict)
     effective_authentication: str = ""

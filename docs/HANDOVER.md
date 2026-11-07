@@ -21,12 +21,15 @@ approval limits in PRODUCT_SPEC/FEATURE_BACKLOG/RELEASE_READINESS.
 2. New P0 scheduler correction implemented and independently reviewed: capacity
    before snapshots, separate budgets/FIFO/captured inputs/activity preserved.
    RED12/1 → focused72/native13/full1,030pass169.54s, no skips. Paired idle5000
-   median100.77→.279ms; no broad freeze claim. Commit/audited push and exact hosted
-   qualification next; until then e2f remains the qualified rollback.
-3. Next independent fix: repeated restart nests under the previous attempt.
-   Propose optional validated stable anchor and unique siblings. Keep old legacy
-   nesting untouched; never derive ownership by stripping folder names. Cleanup
-   must run against the current attempt before publishing the new destination.
+   median100.77→.279ms; no broad freeze claim. Published380e62b/run42382032289:
+   Linux1,030/native92/backend60/Swift25/protocol9/JS10 passed, final package pending.
+   Until all gates are inspected, e2f remains the qualified rollback.
+3. Restart fix implemented: optional validated stable anchor and unique siblings.
+   Keep old legacy nesting untouched; never derive ownership by stripping folder
+   names. Cleanup still sees the current attempt before the new destination is
+   assigned.23RED→56focused/39native/full1,055pass204.60s/no skips; independent
+   review no blocker. Exact staged security review, commit/push/hosted qualification next.
+   New RESTART_DESTINATIONS.md defines behavior and limits.
 4. Profile actual History rebuilds and long-lived retention separately from
    expensive diagnostic reload/payload comparisons. Do not label all observed
    synthetic gap time as the user's real freeze.

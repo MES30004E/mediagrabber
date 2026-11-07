@@ -1,6 +1,7 @@
 import copy
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QTimer
@@ -174,6 +175,43 @@ def test_empty_selection_does_not_prompt_or_start_restart(window, monkeypatch):
     monkeypatch.setattr(window, "_confirm_restart", unexpected)
     window.restart_selected()
     assert not window.queue_batch.busy and window.task_manager.active_count == 0
+
+
+@pytest.mark.parametrize("choice", ["keep", "replace"])
+def test_repeated_restart_after_reload_confirms_once_per_action_and_stays_siblings(window, tmp_path, choice):
+    job = populate(window, tmp_path, 1)[0]
+    attempts = []
+    prompts = []
+    errors = []
+    original = tmp_path / "original.mp4"; original.write_bytes(b"not owned by later attempts")
+    for _ in range(2):
+        window.queue_table.selectAll()
+        def accept():
+            box = QApplication.activeModalWidget()
+            try:
+                prompts.append(box.text())
+                # Exercise the real counted dialog, not a mocked confirmation path.
+                button = next(button for button in box.buttons() if choice in button.text().lower())
+                button.click()
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                if box is not None and box.isVisible(): box.reject()
+        QTimer.singleShot(0, accept)
+        window.restart_selected(); finish(window)
+        if errors: raise errors[0]
+        restored = window.database.load_jobs()[0]
+        assert restored.id == job.id and restored.status == JobStatus.WAITING
+        destination = Path(restored.options.download_dir)
+        assert destination.parent == tmp_path and destination not in attempts
+        assert restored.created_job_directory == str(destination)
+        assert window.queue_batch.describe()["completed"] == 1
+        assert not window.queue_batch.describe()["failed"]
+        attempts.append(destination)
+        # Reconstruct the live GUI state from persisted records for the next action.
+        window.jobs = {restored.id: restored}; window._refresh_queue()
+    assert len(prompts) == 2 and all("1" in prompt for prompt in prompts)
+    assert original.read_bytes() == b"not owned by later attempts"
 
 
 def test_keep_retains_file_promoted_from_temporary_to_final_after_cancel(window, tmp_path, monkeypatch):

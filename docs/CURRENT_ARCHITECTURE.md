@@ -144,6 +144,12 @@ paths, since even temporary files may have finalized after cancellation. Escapin
 filename templates/torrent paths are rejected before cleanup; Replace permits
 permanent removal only of recorded in-root paths. Auth/route/template/torrent
 metadata remain captured. See BULK_RESTART.md for compatibility and QA limits.
+Repeated attempts use `DownloadJob.restart_base_directory` as a validated stable
+parent and unique sibling destinations. It is optional JSON metadata, not file
+ownership: cleanup retains the current attempt root until it finishes, and
+`created_job_directory` names only the new attempt. Legacy jobs anchor at their
+saved destination without moving/flattening old directories. Invalid anchor/attempt
+relationships fail before cleanup. See RESTART_DESTINATIONS.md.
 
 Queue presentation now uses `queue_model.QueueTableModel` with immutable display
 rows, stable UUID roles, a native QSortFilterProxyModel and style-painted progress

@@ -24,6 +24,12 @@ Independent review no blocker. Hosted qualification for this source is pending;
 the table above intentionally remains pinned to the last qualified e2f baseline.
 DISPATCH_CAPACITY.md records RED evidence, fixture diagnosis and paired timings.
 
+Restart anchor checkpoint:23RED→56focused0.72s; Cocoa39pass13.86s; full local
+1,055pass204.60s/five existing warnings/no skips; independent review no blocker.
+JS10/protocol9/pipcheck pass. RESTART_DESTINATIONS.md documents repeated saved-job
+and real-dialog coverage, unchanged cleanup scope and deliberate legacy behavior.
+Exact-source hosted qualification remains pending.
+
 Latest frozen5000: original max GUI gap1.032948s; extra collection gaps
 2.429543/2.472245s; peak456.05MiB; post-removal355.08→384.06MiB. At800,
 original max.209707s and collection gaps.496925/.340003s. These include diagnostic

@@ -66,12 +66,19 @@ restrictions remain. Live account/media tests need explicit user participation.
 
 ## Current checkpoint and restrictions
 
-- New mission B1 scheduler correction is locally verified, not yet hosted:
+- New mission B1 scheduler correction published380e62b/run42382032289:
   capacity-before-snapshot preserves independent budgets/FIFO/route snapshots.
   Focused72/native13/full1,030pass169.54s, JS10/protocol9/pipcheck, no skips;
   independent review no blocker. Paired idle5000median100.77→.279ms,800
   15.59→.053ms. See DISPATCH_CAPACITY.md; remaining O(N) scan/history/retention
-  and restart nesting remain open. Do not equate this with whole P0 acceptance.
+  remain open. Hosted Linux1,030/native92/backend60/Swift25/protocol9/JS10 passed;
+  packaged qualification pending. Do not equate this with whole P0 acceptance.
+- B2 restart nesting fix implemented locally: validated optional persisted anchor
+  chooses fresh siblings; cleanup stays current-attempt-only. Legacy folders are
+  not moved or heuristically flattened.23RED→56focused/39native pass; independent
+  review no blocker. Full1,055pass204.60s/5existingwarnings/no skips; JS10/protocol9/
+  pipcheck pass. Exact-source hosted qualification pending.
+  See RESTART_DESTINATIONS.md; Q05 remains broader than this narrow correction.
 
 - Development branch: `improvement/download-reliability`. Latest qualified source
   baseline: `e2f3ea33009610ae6bcf26dd06686ed33a539f33`, run `42378146636`,

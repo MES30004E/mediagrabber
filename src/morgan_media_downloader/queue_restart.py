@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -15,6 +16,24 @@ from .models import DownloadJob, JobStatus
 from .queue_batch import BatchOutcome
 
 
+def _restart_base_directory(job: DownloadJob) -> Path:
+    current = Path(job.options.download_dir).expanduser()
+    anchor = job.restart_base_directory
+    if anchor == "":
+        # Legacy destinations may already be nested, or intentionally named
+        # restart-*. Never infer an ancestor or relocate their existing files.
+        return current.resolve(strict=False)
+    if not isinstance(anchor, str) or not anchor.strip() or "\x00" in anchor:
+        raise ValueError("Restart base directory is invalid; review the saved destination")
+    base = Path(anchor).expanduser()
+    if (not base.is_absolute() or base.resolve(strict=False) != base or
+            current.parent != base or current.resolve(strict=False) != current or
+            not re.fullmatch(r"restart-[0-9a-f]{32}", current.name) or
+            job.created_job_directory != str(current)):
+        raise ValueError("Restart destination does not match its saved attempt; review before retrying")
+    return base
+
+
 def restart_job(job: DownloadJob, choice: str, *, cleaner=None) -> DownloadJob:
     if choice not in {"keep", "replace"}: raise ValueError("Invalid restart choice")
     if not isinstance(job.options.download_dir, str) or not job.options.download_dir.strip():
@@ -25,6 +44,7 @@ def restart_job(job: DownloadJob, choice: str, *, cleaner=None) -> DownloadJob:
                 PurePosixPath(value.replace("\\", "/")).is_absolute() or PureWindowsPath(value).drive or
                 ".." in PurePosixPath(value.replace("\\", "/")).parts):
             raise ValueError("Restart requires relative output paths without '..'; choose a safe filename template/destination and requeue")
+    base = _restart_base_directory(job)  # Validate before any filesystem effects.
     changed = copy.deepcopy(job)
     if choice == "keep":
         # Cancellation suppresses the final inventory. Even a recorded temporary
@@ -33,9 +53,12 @@ def restart_job(job: DownloadJob, choice: str, *, cleaner=None) -> DownloadJob:
         changed.final_files.clear(); changed.partial_files.clear(); changed.temporary_files.clear()
         changed.subtitle_files.clear(); changed.thumbnail_files.clear(); changed.output_file = ""
     (cleaner or delete_restart_state)(changed, delete_final=choice == "replace")
+    # Cleanup above MUST retain the current destination as its ownership root,
+    # not this shared parent (which also contains previous attempts).
     # A cancelled worker's final inventory can be incomplete. Never reuse an
     # unrecorded partial, nor overwrite a fixed torrent path or final output.
-    destination = Path(changed.options.download_dir) / ("restart-" + uuid4().hex)
+    destination = base / ("restart-" + uuid4().hex)
+    changed.restart_base_directory = str(base)
     changed.options.download_dir = str(destination)
     changed.created_job_directory = str(destination)
     changed.final_files.clear(); changed.output_file = ""
