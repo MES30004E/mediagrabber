@@ -80,9 +80,9 @@ FEATURE_BACKLOG/CURRENT_ARCHITECTURE and new UI correctness evidence document.
   expand full diagnostics; preserve deletion/restart/stop semantics and errors.
 - [x] Actual before/after Light/Dark/System pages/native fullscreen and keyboard/
   menu/error/disabled/loading states inspected; record actual OS-clamped geometry.
-- [ ] Same-fixture performance/SQL/workers/RSS before/after, profile remaining
+- [x] Same-fixture performance/SQL/workers/RSS before/after, profile remaining
   stalls honestly; full Python/JS/drift/pipcheck and native qualification gates.
-- [ ] One fresh final read-only review, one blocking-finding RED→GREEN fix pass/
+- [x] One fresh final read-only review, one blocking-finding RED→GREEN fix pass/
   full suite; minors/exclusions explicit. Audited commit/nonforce push/exact CI
   logs+JSON/archive, no release/install; retain entire B/C/D/E and P0 backlog.
 
@@ -93,7 +93,11 @@ zero skips; actual72-frame final native capture. Hosted/frozen publication gate
 remains outstanding, so Task4 is not complete. Hosted runs42376744385/42377309447
 exposed platform-font compact overflow and proved native screen height clamping.
 Focused source/test fixes retain readable width and original unclamped minima;
-final local1,017passed164.28s/native92passed34.19s. New hosted/frozen run required.
+final local1,017passed164.28s/native92passed34.19s. Final e2f3ea3/run42378146636
+attempt2 passed all hosted jobs and strict four-size/two-cycle reports, archive,
+replacement and signatures. Original packaging attempt timed out fetching sources;
+failed-job-only retry passed unchanged pins/checks. Task4 complete within this UI
+correctness scope; P0 stalls/retention and all product roadmap work remain open.
 
 Self-review: Task1 preserves API used by all pages/Task3; Task2 keeps roles used
 by selection/diagnostics. Task3 uses current scope/service interfaces, not duplicate

@@ -1,7 +1,9 @@
-# UI correctness — Checkpoint A in progress
+# UI correctness — qualified development checkpoint
 
 This is a conservative repair checkpoint, not the later professional redesign,
-rebrand or Library/playback acceptance. Published collection rollback:
+rebrand or Library/playback acceptance. Final qualified source is e2f3ea3,
+run42378146636 attempt2; the final evidence below supersedes earlier pending
+entries retained as investigation history. Published collection rollback:
 `9ed1082fbdace1bc5fea7a6943666c759881a80d`, hosted run `41385802502`.
 
 ## Theme component
@@ -50,14 +52,10 @@ hardware-keyboard focus or grant permission to control another application.
 
 ## Still unfinished
 
-- Native progress repair is locally tested below; exact hosted frozen validation
-  remains outstanding with the rest of Checkpoint A.
-- Layout/preferences and discoverable actions are locally tested below; final
-  whole-checkpoint visual/performance/hosted acceptance remains outstanding.
-- Concise counted confirmation dialogs and expandable technical details are
-  implemented and locally tested below; hosted qualification remains pending.
-- Final review fixes, updated full-suite evidence and exact-commit hosted
-  packaged/macOS/Linux qualification.
+- Full scalability/retention and production timer qualification; current measured
+  pauses are not release acceptance. See QA_MATRIX and FEATURE_BACKLOG.
+- History clipping, faint placeholder/decorative icon hints, broad native display/
+  accessibility/Qt-version coverage and the professional redesign.
 - Full B/C/D/E roadmap in FEATURE_BACKLOG, including actual Library playback,
   authentication acceptance, remaining stalls/retention, rebrand and releases.
 
@@ -269,7 +267,7 @@ sidebar correction, readable disabled controls and visible heading. Native input
 placeholder hints still look faint in System appearance; record for the broader
 design-token pass, not a claim of complete accessibility qualification.
 
-Exact-head hosted Linux/macOS/native/frozen/archive results are still pending.
+Exact-head hosted results are recorded in the final section below.
 
 ### First hosted attempt: not qualified
 
@@ -304,7 +302,39 @@ permits; explicit user widths are never overridden or saved as automatic choices
 The controller still touches only bounded header sections, not jobs/SQL/workers.
 Focused portable28/native38passed; full native92passed34.19s with five known
 test-only warnings. Final isolated full suite: **1,017 passed, five warnings in
-164.28s**, no skips. New hosted/frozen qualification is still pending.
+164.28s**, no skips.
+
+### Corrected hosted source: all development qualification gates pass
+
+Source `e2f3ea33009610ae6bcf26dd06686ed33a539f33`, run42378146636:
+- Linux: **1,017 passed, six warnings in332.82s**; JavaScript10passed/0skipped.
+- macOS: **92 native UI passed, five warnings in54.48s**; backend60passed1.68s;
+  protocol9match, Swift build and25tests including both actual-worker tests pass.
+- No test skips hide the earlier failures. The source correction preserves pins,
+  dependency checks, original requested-size gates and the compact250px minimum.
+- Packaged attempt1 failed before compilation: a60s TLS handshake timeout in
+  `prepare_media_bundle.download` fetching one of the two allowlisted sources.
+  The log does not identify which source; no checksum or frozen-app result may be
+  inferred. Only that failed job was retried on unchanged source, with all pins,
+  TLS/checksum/size checks and frozen gates intact. Attempt2 passed. The actual
+  four frozen reports were rerun through `check_packaged_app.validate_queue`:
+  100/800/1000/5000 jobs ×2 cycles, all18stages, actual track/label changes,
+  captured scopes, bounded restart/clear, persistence and zero final owners pass.
+- Replacement/backup/extracted launch/source preservation and strict signatures
+  pass. Archive modes differ0;141,966,769bytes; SHA256
+  `647087b75db9a99ad09b6bf1051cf1eb21371fa0a25eb7595294332bbf12b095`.
+  No release/upload/installation. This is not signing/notarisation certification.
+- Frozen5000 original max gap1.032948s; collection2.429543/2.472245s;
+  peak456.05MiB, post-removal355.08→384.06MiB. The diagnostic includes expensive
+  verification; these are not paired improvement or leak-freedom claims. P0 stays
+  open under the new Full Product Completion Mission.
+
+The exact published source also produced72 fresh native frames at actual900×650,
+1180×820,1440×900 and1920×1080 fullscreen; zero external attempts/final owners,
+empty stderr. Inspected System/Dark compact Queue, Light standard Queue, System
+Download/Settings and the counted clear dialog retain the expected corrections.
+The first capture command omitted `PYTHONPATH=src` and stopped at import; the
+corrected command completed, without source changes or personal account access.
 
 Still not qualified: existing History header/value clipping; native placeholder
 hint contrast; faint native Dark

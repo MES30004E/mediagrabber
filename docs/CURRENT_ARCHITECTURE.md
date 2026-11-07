@@ -1,7 +1,7 @@
 # Current architecture — Python/PySide6
 
-This source map describes the Stage 1 Python baseline, not a proposed rewrite.
-See `ARCHITECTURE.md` for the longer runtime/lifecycle narrative and
+This source map describes the current Python product, not a proposed rewrite.
+See `../ARCHITECTURE.md` for the longer runtime/lifecycle narrative and
 `CODEX_CONTEXT.md` for test prerequisites and development restrictions.
 
 ## Entry and UI
@@ -63,11 +63,12 @@ in Completed with warnings rather than destruction of usable media.
 ## Authentication/provider/network
 
 `auth.authentication_options` uses yt-dlp's cookiesfrombrowser or cookiefile.
-Auto starts without cookies and retries selected browser authentication on
-recognised account-required errors. Explicit authenticated modes can retry once
-without cookies for public format failures, never for recognised private/account
-errors. Download uses the same policy, with effective mode persisted. This is
-message-based policy, not verified entitlement inference. No cache scraping.
+Auto starts without cookies for ordinary targets and retries the configured
+browser on recognised account-required errors; Watch Later goes straight to
+configured authentication. Explicit authenticated modes never silently downgrade
+to anonymous for player/format errors. The selected mode remains an attempt
+invariant through transfer, with effective mode persisted. Error classification
+is not verified entitlement inference. No cache scraping.
 
 `provider.py` discovers external HTTP `/ping` or script homes/JS runtimes and
 supplies yt-dlp extractor arguments. The pinned bgutil plugin retains its own
@@ -110,6 +111,13 @@ Resume/Retry keep resumable state. Restart waits for worker ownership to end,
 then cleans only recorded state and resets progress. `file_ownership.py` protects
 unrelated files/directories and uses Trash for completed outputs where practical.
 Queue selection is tied to job ID rather than changing row indices.
+
+The500ms scheduler checks per-kind capacity before copying settings/jobs. Media
+snapshots are taken only after successful explicit route resolution; torrent and
+media budgets remain independent and insertion-order/FIFO is preserved per kind.
+Once both budgets are exhausted it stops admission scanning, still updating the
+activity label. The waiting-list scan remains O(N); no scheduler rewrite, new
+thread, network fallback or broader freeze/retention guarantee is implied.
 
 Large status/retry and keep-files removal use `queue_batch.QueueBatch`:32-ID
 GUI timer slices, one active batch, atomic DB transactions, explicit waiting-ID
@@ -258,6 +266,8 @@ ffmpeg/ffprobe, tests, packages, and ad-hoc signs. Aria2 acquisition is separate
 Base Python is durable user-local storage, not a temporary directory; exFAT venvs
 use copied executables. Build/dist/binaries are not source-control artifacts.
 
-Stage 1 tests passed locally with existing native tools. No fresh packaged build,
-live private content, Tor traffic, or torrent swarm result is claimed. Preserve
-these distinctions when reporting parity or Cloud readiness.
+Current qualified source e2f3ea3/run42378146636 attempt2 passed hosted macOS
+bundling, offline native protocol/media/provider checks, Cocoa queue diagnostics,
+strict archive extraction/signature/launch and owned replacement checks. See
+QA_MATRIX/RELEASE_READINESS for exact scope; no live private content, Tor traffic,
+torrent swarm, user installation, notarisation or stable release is implied.

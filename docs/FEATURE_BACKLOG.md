@@ -5,7 +5,24 @@ Better UX and Public Releases master goal. The Critical UX, Scalability and
 Architecture Addendum changes the implementation order below. An existing helper,
 passing unit test or metadata inspector is not evidence of a finished feature.
 
-## Product steering — 2 November 2026
+## Active mission — 7 November 2026
+
+The Full Product Completion Mission supersedes the earlier execution order, not
+its requirements. Work through A baseline → B P0 stability/queue completion →
+C researched native redesign/rebrand → D real Library playback → E rich download
+capabilities → F scoped authentication/onboarding → G updates/distribution →
+H full acceptance. Continue eligible work; releases, installation, live accounts
+and protected branches retain their approval boundaries.
+
+`PRODUCT_SPEC.md` defines workflows; `QA_MATRIX.md` maps evidence;
+`RELEASE_READINESS.md` records distribution blockers; `CURRENT_ARCHITECTURE.md`
+remains the component map. `UI_DESIGN_SYSTEM.md` distinguishes established repair
+rules from unapproved redesign. `HANDOVER.md` is the concise resume point.
+Feature rows below are authoritative; narrative checkpoint entries are historical
+evidence, not current completion status. No complete product feature is promoted
+to Verified solely because the baseline CI passed.
+
+## Retained product steering — 2 November 2026
 
 Definitive vision: **MediaGrabber — simple by default, powerful when needed**,
 combining approachable paste/select/download with capable queue/library/auth/media
@@ -49,13 +66,21 @@ restrictions remain. Live account/media tests need explicit user participation.
 
 ## Current checkpoint and restrictions
 
-- Development branch: `improvement/download-reliability`. Latest hosted-tested
-  checkpoint: `9ed1082fbdace1bc5fea7a6943666c759881a80d`, run `41385802502`,
-  all jobs passed. Actual logs: Linux913 (one existing Qt warning); macOS backend60, Swift25 and protocol9;
-  bundled provider/media, Cocoa startup/clean shutdown, replacement backup and
-  strict extracted-archive verification/launch passed. Archive141949706bytes,
-  SHA256 `8186b0f671be82147908faa7c2be34d7912c750c35f60630621824d63b9d4834`.
-  No release asset was uploaded or installed.
+- New mission B1 scheduler correction is locally verified, not yet hosted:
+  capacity-before-snapshot preserves independent budgets/FIFO/route snapshots.
+  Focused72/native13/full1,030pass169.54s, JS10/protocol9/pipcheck, no skips;
+  independent review no blocker. Paired idle5000median100.77→.279ms,800
+  15.59→.053ms. See DISPATCH_CAPACITY.md; remaining O(N) scan/history/retention
+  and restart nesting remain open. Do not equate this with whole P0 acceptance.
+
+- Development branch: `improvement/download-reliability`. Latest qualified source
+  baseline: `e2f3ea33009610ae6bcf26dd06686ed33a539f33`, run `42378146636`,
+  attempt 2; all jobs passed. Linux 1,017 + JS 10; macOS native UI 92,
+  backend 60, Swift 25 and protocol 9. Actual frozen four-size/two-cycle reports
+  also passed the shipped strict verifier. Replacement/backup, extracted launch,
+  unchanged bundle and strict signatures passed. Archive 141,966,769 bytes,
+  SHA256 `647087b75db9a99ad09b6bf1051cf1eb21371fa0a25eb7595294332bbf12b095`.
+  Earlier 9ed1082 remains a rollback point. No release asset uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
   Strict signature verification was not bypassed. Later green runs include this
@@ -242,8 +267,15 @@ restrictions remain. Live account/media tests need explicit user participation.
   Linux's1,007pass/one failure is genuine default All-view font-width overflow
   (702px columns/696px viewport), reproduced and locally fixed using bounded
   automatic progress width; full labels/title and explicit user widths retained.
-  Native92passed34.19s; full1,017passed164.28s, no test skips. New hosted/frozen
-  evidence remains pending; no qualification claim or release/install.
+  Native92passed34.19s; full1,017passed164.28s, no test skips.
+- Corrected e2f3ea3/run42378146636 test jobs pass: hosted Linux1,017/JS10;
+  macOSnative92/backend60/Swift25/protocol9. Exact-source72nativecaptures retain
+  expected corrections,0externalattempts/owners. Packaged job stopped before
+  compilation on a TLS handshake timeout fetching pinned media sources. One
+  failed-job-only retry passed on unchanged source; no source/checksum/TLS checks
+  relaxed. UI correctness checkpoint qualified within its documented scope.
+  At5,000: original max gap1.033s, collection gaps2.430/2.472s, peak456.05MiB,
+  post-removal355.08→384.06MiB. These remain P0 concerns, not leak/freeze freedom.
 - Same-fixture local offscreen layout increment observation, a5eb8ab→current:
   5,000 max original gap.739→.756s, collection1.736→1.733s, peak370.03→372.95MiB;
   SQL26,279/633commits/25,004writes unchanged, max2owners/final0. Single isolated
@@ -264,79 +296,90 @@ restrictions remain. Live account/media tests need explicit user participation.
 - Installation remains unresolved by user choice. Preserve the preferred external
   `dist` requirement; the latest addendum names `dist/MediaGrabber.app`, whereas
   the existing bundle is `Morgan Media Downloader.app`. No rename or alternate
-  launcher is approved/implemented here. My Passport is exFAT; current framework
+  launcher is installed here. Rebranding implementation is authorized by the new
+  mission, but installation is not. My Passport is exFAT; current framework
   symlinks require an explicitly resolved compatible deployment approach.
 
-Status vocabulary: **Partial** = useful implementation, not full acceptance;
-**In progress** = unfinished worktree; **Open** = not implemented/qualified;
-**Release blocker** = must pass before distribution; **Portable-tested** or
-**Hosted-tested** always states the limited evidence, not universal compatibility.
+Status vocabulary: **Not Started / In Progress / Implemented / QA Pending /
+Verified / Blocked**. Implemented describes connected source, QA Pending retains
+missing acceptance, Verified requires the row's actual acceptance evidence, and
+Blocked requires an external dependency. Historical Portable/Hosted-tested labels
+describe only their recorded limited evidence. Priority comes from section/mission.
+Dependencies include interface contracts and acceptance prerequisites, not a claim
+that every prerequisite's whole feature must finish before synthetic work starts.
 Paths below are repository-relative; each row retains its own remaining QA.
 
 ## P0: queue scale, crashes and proper batch operations
 
-| ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
-| --- | --- | --- | --- |
-| Q01 Release blocker; user describes freeze | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify UI stall/exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, `queue_check.py`, model/scale/bulk/history tests, `docs/QUEUE_SCALE.md` | Header/queue model fixes and native two-cycle matrix pass. User reports an open frozen window; no observed process crash. Remaining history/playlist stalls, memory growth, long-run/live QA; do not claim a unique cause or leak freedom |
-| Q02 Portable-tested fix | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains |
-| Q03 Partial; bounded worker connected | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain |
-| Q04 Hosted-tested narrow scopes | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Exact72fd947/run41210675065 frozen gates pass. Details-dialog caption minor remains; no professional visual/live-media acceptance. Not analysed-playlist checkbox selection |
-| Q05 Hosted-tested narrow restart; collections in progress | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart tests | Exact034/run41289264510: one restart dialog/default Keep,32 snapshots/one worker, owner drain/prepare/commit gates pass. New collection controls, real transfers and broad shutdown/freeze qualification remain |
-| Q06 Hosted-tested narrow behavior; visual/live QA open | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `collection_controls.py`, `ui.py`, shared QueueBatch/FileRemoval; collection UI/native probe tests; QUEUE_COLLECTIONS.md | Exact9ed/run41385802502 confirms primary Clear Completed/current or All scope, actual counts/one keep-default choice, eligibility/atomicity/deferred errors; theme visibility and realistic file/transfer QA remain |
-| Q07 Partial; native functional gates pass | Collection grouping, group progress/status totals and bulk controls remain responsive | `queue_collections.py`, `collection_model.py`, `collection_controls.py`, immutable queue roles; pure/randomized/model/UI/frozen tests | Exact9ed native identities/aggregates/primary/actions/restart gates pass; uncertain denominator explicit. Bulk totals defer. Native5,000extra sequence gap4.817s and retention remain blockers; real transfer/visual acceptance pending. Minor name-only label refresh deferred |
-| Q08 Open | Stable extractor/media identity deduplicates queue/download archive; completed outputs are not accidentally redownloaded or destroyed | `models.py`, `downloader.py`, `database.py`, `organisation.py` | Explicit duplicate/archive policy, cross-URL identities, missing outputs, retries and deliberate restart tests; no assumed guarantee from UUID job IDs |
-| Q09 Partial | Interrupted jobs restore accurately; resume preserves compatible partials and completed outputs | `Database.load_jobs`, `downloader.py`, `file_ownership.py`; `test_database.py`, `test_downloader_policy.py` | Scale/relaunch tests, transactional bulk persistence and fault injection across cancellation/removal/shutdown |
-| Q10 Partial | Batch quality/container/audio/subtitle defaults plus per-item overrides survive queueing/restart | `models.py`, `media_details.py`, `ui.py`; `test_media_details.py`, `test_media_details_ui.py`, `test_formats.py` | Existing media-selection coverage is not queue-wide batch edit; test mixed sources, unsupported requirements and large selected sets |
-| Q11 Release blocker | Memory/worker/network queues stay bounded and UI interactive under 800 jobs; rate-aware retries, no retry storm | `tasks.py`, `ui.py:_dispatch`, `_refresh_queue`, downloader callbacks, thumbnails | Instrument before changing architecture; model/view where justified, dirty-ID updates, signal coalescing, bounded work and batch DB transactions; report measured deltas |
+| ID / status | User story / acceptance criteria | Related code/tests now | Remaining work / QA | Dependencies |
+| --- | --- | --- | --- | --- |
+| Q01 In Progress | Synthetic 100/800/1,000/5,000-item analysis/enqueue/start/pause/cancel/remove/reload runs; classify UI stall/exception/native fault/OOM/unbounded work from evidence | `scripts/benchmark_queue.py`, `queue_check.py`, model/scale/bulk/history tests, `docs/QUEUE_SCALE.md` | Header/queue model fixes and native two-cycle matrix pass. User reports an open frozen window; no observed process crash. Capacity-before-copy scheduler correction locally tested (DISPATCH_CAPACITY.md); remaining history/playlist stalls, memory growth, long-run/live QA; do not claim a unique cause or leak freedom | A01 |
+| Q02 QA Pending | Removing 800 selected jobs opens at most one confirmation, shows actual total and running/completed counts; Cancel changes nothing | `ui.py:remove_selected`, `_confirm_remove`; `test_queue_bulk.py` | One selected-ID snapshot/one native dialog, keep-files default, latest post-modal inventory and deferred active-removal tests now pass; native visual/realactive QA remains | Q03 |
+| Q03 QA Pending | Default keeps files; optional deletion touches only verified job-owned paths; no wildcard destination deletion | `file_ownership.py`, `file_removal.py`, `ui.py`; ownership/service/bulk tests | One explicit decision;32 snapshots/one owned worker after transfer owners stop; successful cleanup precedes atomic DB removal. Temp-owned/foreign, stop/admission/DB/close failures tested; real Trash, cross-volume and realistic transfer races remain | Q09 |
+| Q04 QA Pending | Select all/none/visible/filtered; select waiting/running/completed/failed/paused/cancelled jobs | `queue_selection.py`, raw model roles, native controls; selection/model/UI/packaged-gate tests; QUEUE_SELECTION.md | Exact72fd947/run41210675065 frozen gates pass. Details-dialog caption minor remains; no professional visual/live-media acceptance. Not analysed-playlist checkbox selection | Q01 |
+| Q05 In Progress | Pause/resume, cancel selected/collection, retry failed/selected, safe restart and removal remain asynchronous/bounded; report completed/failed/pending counts | `queue_batch.py`, `queue_restart.py`, `file_removal.py`, `ui.py`, `tasks.py`; batch/bulk/restart tests | Exact034/run41289264510: one restart dialog/default Keep,32 snapshots/one worker, owner drain/prepare/commit gates pass. New collection controls, real transfers and broad shutdown/freeze qualification remain | Q03, Q09 |
+| Q06 QA Pending | Clear collection, completed/cancelled and failed entries with safe default and one confirmation | `collection_controls.py`, `ui.py`, shared QueueBatch/FileRemoval; collection UI/native probe tests; QUEUE_COLLECTIONS.md | Exact9ed/run41385802502 confirms primary Clear Completed/current or All scope, actual counts/one keep-default choice, eligibility/atomicity/deferred errors; e2f native theme visibility now passes; realistic file/transfer QA remains | Q03, Q04 |
+| Q07 In Progress | Collection grouping, group progress/status totals and bulk controls remain responsive | `queue_collections.py`, `collection_model.py`, `collection_controls.py`, immutable queue roles; pure/randomized/model/UI/frozen tests | Exact9ed native identities/aggregates/primary/actions/restart gates pass; uncertain denominator explicit. Bulk totals defer. Latest e2f native5,000extra gap2.472s and retention remain blockers; real transfer/visual acceptance pending. Minor name-only label refresh deferred | Q01, Q05, Q06 |
+| Q08 Not Started | Stable extractor/media identity deduplicates queue/download archive; completed outputs are not accidentally redownloaded or destroyed | `models.py`, `downloader.py`, `database.py`, `organisation.py` | Explicit duplicate/archive policy, cross-URL identities, missing outputs, retries and deliberate restart tests; no assumed guarantee from UUID job IDs | Q09 |
+| Q09 QA Pending | Interrupted jobs restore accurately; resume preserves compatible partials and completed outputs | `Database.load_jobs`, `downloader.py`, `file_ownership.py`; `test_database.py`, `test_downloader_policy.py` | Scale/relaunch tests, transactional bulk persistence and fault injection across cancellation/removal/shutdown | A01 |
+| Q10 In Progress | Batch quality/container/audio/subtitle defaults plus per-item overrides survive queueing/restart | `models.py`, `media_details.py`, `ui.py`; `test_media_details.py`, `test_media_details_ui.py`, `test_formats.py` | Existing media-selection coverage is not queue-wide batch edit; test mixed sources, unsupported requirements and large selected sets | U05, Q05 |
+| Q11 In Progress | Memory/worker/network queues stay bounded and UI interactive under 800 jobs; rate-aware retries, no retry storm | `tasks.py`, `ui.py:_dispatch`, `_refresh_queue`, downloader callbacks, thumbnails | Instrument before changing architecture; model/view where justified, dirty-ID updates, signal coalescing, bounded work and batch DB transactions; report measured deltas | Q01 |
 
 ## P1: professional native UX, architecture and real media viewing
 
-| ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
-| --- | --- | --- | --- |
-| U01 Open | `docs/UI_DESIGN_SYSTEM.md` defines navigation, type, spacing/density, light/dark tokens, contrast/focus, controls/tables/progress/menus, states, resizing/fullscreen and destructive patterns | `theme.py`, `ui_components.py`, `ui.py`, `settings_window.py` | Research Stacher 7/ClipGrab interactions and Apple/Qt authoritative guidance; create actual mockups/screenshots before large redesign; user design approval |
-| U02 Partial; native source A fixes | Real compact/standard/large/fullscreen screenshots in light/dark show readable, aligned unclipped UI; retain icon/native PySide6 | UI_CORRECTNESS.md; actual Cocoa theme/queue/default-column/caption/paint regressions and synthetic screenshots | Final reviewed source/hosted qualification pending; History clipping and professional design/other screens still open. Actual System-dark sidebar fix newly exposed by recapture; no blanket display/Qt-version acceptance |
-| U06 Partial; local A implementation | Direct Clear Completed, discoverable advanced bulk actions, concise counted dialogs, precise known/unknown progress and human-readable messages | Collection controls, More actions, real counted expandable-dialog and scoped batch tests | Direct control/More/keep-default dialogs implemented; final review fixes and exact hosted QA pending. Broader UI jargon and release/live interactions remain |
-| RB01 Open; checkpoint C | Visible MediaGrabber name everywhere, original icon retained, no data/session/extension identity loss | Existing branding/constants/specs/native host/companion/archive names | Inventory all user-visible names separately from compatible internal IDs; migration/preservation tests; hosted bundle/Dock/Finder/extension verification; exFAT install unresolved, no launcher/install now |
-| U03 Partial | Large analysed playlist has resizable remembered panels, collapsible options/preview, search, visible/all/none/invert, counts, keyboard/multi-selection | `ui.py`, `settings.py`; `test_playlist_workspace.py`; `docs/PLAYLIST_WORKSPACE.md` | 800–5,000 scale qualification and visual QA; current playlist table is still item-based |
-| U04 Partial | Lazy playlist thumbnails and real duration reflect current selected video, avoid N requests and route fallback | `thumbnail_cache.py`, `ui.py`; `test_thumbnail_cache.py`, `test_playlist_workspace.py` | Distinct from viewer: real rendered thumbnail/duration QA, scrolling/large-list responsiveness, missing/slow/cancelled responses |
-| U05 Partial | On-demand per-video format/audio/language and manual/automatic subtitle metadata; only available controls; safe overrides | `media_details.py`, `media_details_dialog.py`, `formats.py`, `subtitle_mux.py`; media-details/formats/subtitle tests | Real authorised media and batch language/subtitle outputs with explicit user participation; no invented Original/default identity or 800 automatic inspections |
-| V01 Open | Discoverable downloaded-media grid/list with thumbnails/metadata, search/filter/sort/browsing history and Finder open/reveal | History currently offers Open/Reveal; `ui.py:_history_context_menu` | Build actual library/viewer; Inspect Video is metadata, **not playback**; add index/model and missing-file tests |
-| V02 Open | Actual video/audio playback, play/pause/seek/volume/fullscreen, duration/timeline, available audio/subtitle choice | No qualified in-app playback implementation | Evaluate QMediaPlayer/QVideoWidget, packaged backend/codecs and safe external-player fallback; explicit user validation on real local media and packaged app; unsupported errors truthful |
-| A01 Partial/incremental | Separate presentation/models, queue/batch service, execution/scheduling, auth/session, inspection/playback, persistence, updates and diagnostics with clear ownership | New `queue_model.py`, `display_format.py`, `queue_batch.py`, `file_removal.py`; existing backend helpers | GUI-owned model and bounded services separated, backend/DB unchanged. Continue debt register, typed/testable interfaces and measured remediation; no whole-project rewrite |
+| ID / status | User story / acceptance criteria | Related code/tests now | Remaining work / QA | Dependencies |
+| --- | --- | --- | --- | --- |
+| U01 In Progress | `docs/UI_DESIGN_SYSTEM.md` defines navigation, type, spacing/density, light/dark tokens, contrast/focus, controls/tables/progress/menus, states, resizing/fullscreen and destructive patterns | `theme.py`, `ui_components.py`, `ui.py`, `settings_window.py` | Research Stacher 7/ClipGrab interactions and Apple/Qt authoritative guidance; create actual mockups/screenshots before large redesign; user design approval | Q01 |
+| U02 In Progress | Real compact/standard/large/fullscreen screenshots in light/dark show readable, aligned unclipped UI; retain icon/native PySide6 | UI_CORRECTNESS.md; actual Cocoa theme/queue/default-column/caption/paint regressions and synthetic screenshots | UI correctness e2f/run42378146636attempt2 and72actual native frames qualified; History clipping and professional design/other screens still open. Actual System-dark sidebar fix newly exposed by recapture; no blanket display/Qt-version acceptance | U01 |
+| U06 QA Pending | Direct Clear Completed, discoverable advanced bulk actions, concise counted dialogs, precise known/unknown progress and human-readable messages | Collection controls, More actions, real counted expandable-dialog and scoped batch tests | Direct control/More/keep-default dialogs implemented; final review fixes and exact e2f hosted QA pass. Broader UI jargon and release/live interactions remain | Q05, Q06 |
+| RB01 Not Started | Visible MediaGrabber name everywhere, original icon retained, no data/session/extension identity loss | Existing branding/constants/specs/native host/companion/archive names | Inventory all user-visible names separately from compatible internal IDs; migration/preservation tests; hosted bundle/Dock/Finder/extension verification; exFAT install unresolved, no launcher/install now | U01, R03 |
+| U03 QA Pending | Large analysed playlist has resizable remembered panels, collapsible options/preview, search, visible/all/none/invert, counts, keyboard/multi-selection | `ui.py`, `settings.py`; `test_playlist_workspace.py`; `docs/PLAYLIST_WORKSPACE.md` | 800–5,000 scale qualification and visual QA; current playlist table is still item-based | Q01, U01 |
+| U04 QA Pending | Lazy playlist thumbnails and real duration reflect current selected video, avoid N requests and route fallback | `thumbnail_cache.py`, `ui.py`; `test_thumbnail_cache.py`, `test_playlist_workspace.py` | Distinct from viewer: real rendered thumbnail/duration QA, scrolling/large-list responsiveness, missing/slow/cancelled responses | U03 |
+| U05 QA Pending | On-demand per-video format/audio/language and manual/automatic subtitle metadata; only available controls; safe overrides | `media_details.py`, `media_details_dialog.py`, `formats.py`, `subtitle_mux.py`; media-details/formats/subtitle tests | Real authorised media and batch language/subtitle outputs with explicit user participation; no invented Original/default identity or 800 automatic inspections | D02 |
+| V01 Not Started | Discoverable downloaded-media grid/list with thumbnails/metadata, search/filter/sort/browsing history and Finder open/reveal | History currently offers Open/Reveal; `ui.py:_history_context_menu` | Build actual library/viewer; Inspect Video is metadata, **not playback**; add index/model and missing-file tests | Q08, U01 |
+| V02 Not Started | Actual video/audio playback, play/pause/seek/volume/fullscreen, duration/timeline, available audio/subtitle choice | No qualified in-app playback implementation | Evaluate QMediaPlayer/QVideoWidget, packaged backend/codecs and safe external-player fallback; explicit user validation on real local media and packaged app; unsupported errors truthful | V01, R03 |
+| A01 In Progress | Separate presentation/models, queue/batch service, execution/scheduling, auth/session, inspection/playback, persistence, updates and diagnostics with clear ownership | New `queue_model.py`, `display_format.py`, `queue_batch.py`, `file_removal.py`; existing backend helpers | GUI-owned model and bounded services separated, backend/DB unchanged. Continue debt register, typed/testable interfaces and measured remediation; no whole-project rewrite | Measured evidence |
 
 ## Download reliability and authentication (original highest-priority goal retained)
 
-| ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
-| --- | --- | --- | --- |
-| D01 Partial; live unverified | Authenticated individual extraction/download succeeds independently of flat playlist analysis | `downloader.py`, `yt_runtime.py`; `test_player_failure.py`, `test_downloader_diagnostics.py`; `docs/DOWNLOAD_RELIABILITY.md` | Upstream authenticated-player failure strongly matched; isolated verified nightly/provider imports qualified, **not** a live-account reproduction. User must explicitly validate authorised video, transfer and playback |
-| D02 Portable-tested | Explicit auth preserved through analysis/format refresh/download/subtitles; no silent anonymous fallback; bounded HTTP403 refresh; precise stage/category | `auth.py`, `downloader.py`; `test_auth.py`, `test_player_failure.py`, `test_downloader_policy.py` | Verify live provider/token/player/format/transfer distinctions with user; retain one-retry bound, compiled per-item selectors and fresh IDs |
-| D03 Partial | Nightly reversible and separate from stable; JS/player runtime and pinned provider compatible | `yt_runtime.py`, `provider.py`; `test_yt_runtime.py`, `test_javascript_runtime.py`; runtime docs | Provider import is not generation success. Requalify runtime changes; stable remains rollback option; no unattended nightly activation |
-| AU01 Partial | Accounts truthfully separates extension/native host, consent, transfer, Keychain, verification, identity confirmation and downloader/provider readiness; redacted times/errors/recovery | `settings_window.py`, `youtube_companion/`, `keychain.py`; companion/storage/connection/settings tests; auth docs | Real browser/manual Incognito, Keychain session and user download acceptance; never invent account/channel identity |
-| AU02 Portable-tested | Successful managed import persists/activates only auth settings, without unrelated Apply; Cancel remains meaningful | `settings_window.py`, `youtube_companion/bridge.py`; `test_youtube_connection.py`, `test_settings_window.py` | Real UI workflow verification; nonce TTL/single-use/ownership and secure local storage remain required |
+| ID / status | User story / acceptance criteria | Related code/tests now | Remaining work / QA | Dependencies |
+| --- | --- | --- | --- | --- |
+| D01 QA Pending | Authenticated individual extraction/download succeeds independently of flat playlist analysis | `downloader.py`, `yt_runtime.py`; `test_player_failure.py`, `test_downloader_diagnostics.py`; `docs/DOWNLOAD_RELIABILITY.md` | Upstream authenticated-player failure strongly matched; isolated verified nightly/provider imports qualified, **not** a live-account reproduction. User must explicitly validate authorised video, transfer and playback | D02, D03, AU01 |
+| D02 QA Pending | Explicit auth preserved through analysis/format refresh/download/subtitles; no silent anonymous fallback; bounded HTTP403 refresh; precise stage/category | `auth.py`, `downloader.py`; `test_auth.py`, `test_player_failure.py`, `test_downloader_policy.py` | Verify live provider/token/player/format/transfer distinctions with user; retain one-retry bound, compiled per-item selectors and fresh IDs | AU01 |
+| D03 QA Pending | Nightly reversible and separate from stable; JS/player runtime and pinned provider compatible | `yt_runtime.py`, `provider.py`; `test_yt_runtime.py`, `test_javascript_runtime.py`; runtime docs | Provider import is not generation success. Requalify runtime changes; stable remains rollback option; no unattended nightly activation | R01, R03 |
+| AU01 QA Pending | Accounts truthfully separates extension/native host, consent, transfer, Keychain, verification, identity confirmation and downloader/provider readiness; redacted times/errors/recovery | `settings_window.py`, `youtube_companion/`, `keychain.py`; companion/storage/connection/settings tests; auth docs | Real browser/manual Incognito, Keychain session and user download acceptance; never invent account/channel identity | D02 synthetic contract |
+| AU02 QA Pending | Successful managed import persists/activates only auth settings, without unrelated Apply; Cancel remains meaningful | `settings_window.py`, `youtube_companion/bridge.py`; `test_youtube_connection.py`, `test_settings_window.py` | Real UI workflow verification; nonce TTL/single-use/ownership and secure local storage remain required | AU01 |
 
 ## P2: multi-site, site-scoped privacy and first-run onboarding
 
-| ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
-| --- | --- | --- | --- |
-| M01 Partial foundation | yt-dlp Python API supports feasible single URLs/playlists/channels/collections/generic embedded sources/audio/quality/languages/subtitles/batch/archive; truthful unsupported/auth/DRM errors | `parsing.py`, `downloader.py`, `formats.py`; parsing/downloader/format tests | Research current official extractor capabilities and competitor workflows; representative controlled fixtures/site matrix, no universal-site/DRM-circumvention/Spotify encrypted-streaming claims |
-| M02 Open site scoping | Separate anonymous, YouTube Companion, supported browser-profile and Netscape imports; future consented domain-scoped capture; OAuth only officially supported | `auth.py`, `youtube_companion/`; existing auth/companion tests | Site-scoped account/session model, least-privilege extension domains, synthetic cross-domain/profile isolation tests; never forward cookies to unrelated domains or silently switch profiles |
-| M03 Open lifecycle choices | Session-only in memory clears on exit; Remember securely in Keychain has expiry/reverification/Disconnect; No auth attaches none | Existing YouTube Keychain/session storage is not a generic site-account system | Implement lifecycle/isolation per site, loaded/verified/rejected/expired/missing states without values; no cookie paste/DevTools extraction instructions |
-| M04 Partial routing; privacy QA open | Auth and network choice independent; consistent authorised Tor/proxy routing; personal login explicitly not anonymous; no silent Direct or circuit-rotation bypass | `network.py`, `managed_tor.py`, `auth.py`, `thumbnail_cache.py`; network/Tor tests | Inspect existing retry/circuit behavior against addendum, clear warning and explicit route-switch approval, synthetic routing/credential leak probes; real Tor/account use only explicit user validation |
-| F01 Open | First-run guides runtime, FFmpeg/probe, Companion/native host/manual Incognito, capture/verification, destination and optional network | `diagnostics.py`, Settings/Accounts tools; setup/diagnostics tests | Cohesive first-run flow and packaged new-user QA. No Terminal/Python/Git needed by ordinary qualified-release users; browser-only steps remain manual |
-| M05 Retained boundary | Spotify metadata→artist/title search→user-reviewed lawful source matches; aria2 separate from yt-dlp, no default torrent-over-Tor | `spotify.py`, `torrent.py`; `test_spotify.py`, `test_torrent.py` | Preserve existing scope while extending sites; no encrypted Spotify decryption, no false privacy guarantees; regression QA |
+Additional mission coverage: paste/drop/multiple/search inputs are included in
+U03/M01; filename templates, destination, original/alternative audio, external or
+embedded manual/automatic subtitles, cover artwork and chapters/metadata in U05/
+Q10. QuickTime/Universal/Original plus existing local conversion remain supported
+scope (`formats.py`, `compatibility.py`, `local_converter.py`; format/compatibility/
+general/local converter tests), with real-output/platform QA still pending.
+
+| ID / status | User story / acceptance criteria | Related code/tests now | Remaining work / QA | Dependencies |
+| --- | --- | --- | --- | --- |
+| M01 In Progress | yt-dlp Python API supports feasible single URLs/playlists/channels/collections/generic embedded sources/audio/quality/languages/subtitles/batch/archive; truthful unsupported/auth/DRM errors | `parsing.py`, `downloader.py`, `formats.py`; parsing/downloader/format tests | Research current official extractor capabilities and competitor workflows; representative controlled fixtures/site matrix, no universal-site/DRM-circumvention/Spotify encrypted-streaming claims | D02, U05 |
+| M02 Not Started | Separate anonymous, YouTube Companion, supported browser-profile and Netscape imports; future consented domain-scoped capture; OAuth only officially supported | `auth.py`, `youtube_companion/`; existing auth/companion tests | Site-scoped account/session model, least-privilege extension domains, synthetic cross-domain/profile isolation tests; never forward cookies to unrelated domains or silently switch profiles | M01, AU01 |
+| M03 Not Started | Session-only in memory clears on exit; Remember securely in Keychain has expiry/reverification/Disconnect; No auth attaches none | Existing YouTube Keychain/session storage is not a generic site-account system | Implement lifecycle/isolation per site, loaded/verified/rejected/expired/missing states without values; no cookie paste/DevTools extraction instructions | M02 |
+| M04 QA Pending | Auth and network choice independent; consistent authorised Tor/proxy routing; personal login explicitly not anonymous; no silent Direct or circuit-rotation bypass | `network.py`, `managed_tor.py`, `auth.py`, `thumbnail_cache.py`; network/Tor tests | Inspect existing retry/circuit behavior against addendum, clear warning and explicit route-switch approval, synthetic routing/credential leak probes; real Tor/account use only explicit user validation | M02, M03 |
+| F01 Not Started | First-run guides runtime, FFmpeg/probe, Companion/native host/manual Incognito, capture/verification, destination and optional network | `diagnostics.py`, Settings/Accounts tools; setup/diagnostics tests | Cohesive first-run flow and packaged new-user QA. No Terminal/Python/Git needed by ordinary qualified-release users; browser-only steps remain manual | AU01, R03 |
+| M05 QA Pending | Spotify metadata→artist/title search→user-reviewed lawful source matches; aria2 separate from yt-dlp, no default torrent-over-Tor | `spotify.py`, `torrent.py`; `test_spotify.py`, `test_torrent.py` | Preserve existing scope while extending sites; no encrypted Spotify decryption, no false privacy guarantees; regression QA | Q09 |
 
 ## P2: components, application updates and controlled public releases
 
-| ID / status | Acceptance criteria | Related code/tests now | Remaining work / QA |
-| --- | --- | --- | --- |
-| R01 Partial | Installed/latest/compatibility/check/update/error/rollback separately shown for app, stable/nightly yt-dlp, provider, FFmpeg/probe and Companion | `components.py`, `settings_window.py`, `yt_runtime.py`; component/UI/runtime tests; `docs/COMPONENT_UPDATES.md` | Actual installed Chrome/protocol vs shipped version, provider runtime vs import and media provenance remain distinct; no fake compatibility claims |
-| R02 Partial | Automatic reasonable checks/backoff + manual check; compatible integrity-checked activation; active-download snapshots | Component catalog and yt runtime timers; `test_components.py`, `test_yt_runtime.py` | App/provider/media/Companion activation not completed by catalog checks; no blind upstream HEAD pulls; test rate-limit/restart/offline/error states |
-| R03 Hosted-tested narrow gates | Apple Silicon app contains native host, Node/provider/Canvas, FFmpeg/probe/aria2; native protocol/media/Mach-O/Cocoa launch tests | `build_macos.sh`, specs, workflow, `scripts/check_packaged_*.py`, package tests; `docs/PACKAGED_*.md` | Preserve current successful narrow native gates; packaging qualification depends on exact run/commit; local licence-gated build prohibited |
-| R04 Hosted-tested development archive | Versioned archive preserves bundle/signature and launches after extraction, with manifest/checksums/notes; dev separate from stable | `app_archives.py`, `check_packaged_archive.py`; archive/probe tests; `docs/DEVELOPMENT_ARCHIVES.md` | Diagnostic0242 identifies Canvas compiler object; pre-signing runtime-only fix9a06044 passed strict native round-trip/launch in40991415616. No bypass/re-sign. Stable publication/trust, supported volumes and updater recovery still open |
-| R05 Partial; safe checkpoint pushed | Public tokenless newer stable metadata/asset integrity/platform/OS checks; private cancellable staging; previous candidate preserved | `app_updates.py`, `settings_window.py`, stable archive policy; update transport/manager/UI tests; `docs/APP_UPDATES.md`; commit049c44d | Retry/ledger/concurrency/redirect/duplicate-JSON regressions fixed and reviewed; no live qualified stable feed. Stage is not install; full native updater/recovery/publication remain open |
-| R06 Partial primitive, updater open | Stop-coordinated replacement, durable crash recovery, previous working installation and rollback; no active-download replacement | `app_installation.py`; installation/replacement tests; `docs/APP_REPLACEMENT.md` | Post-exit orchestration/helper/journal/recovery UI and active-job coordination not connected. User approval/destination unresolved; no install now |
-| R07 Open approval gate | Controlled hosted release builds only approved exact qualified commit/version; checksums/notes/source/notices; protected explicit approval before publish | Existing validation workflow is **not** release publication | Application licence, dependency/source-offer compliance, Developer ID/notarisation credentials or truthful unsigned status, stable promotion/release workflow and explicit approval. No tag/release/upload now |
-| R08 Open acceptance | New nontechnical user downloads qualified app, discovers tools/auth, data/settings/cookies/history survive update/rollback | Existing app and private runtime/data separation | Fresh-user packaged end-to-end test, install destination/filesystem resolution, rollback failure/crash tests and explicit user account/media QA |
+| ID / status | User story / acceptance criteria | Related code/tests now | Remaining work / QA | Dependencies |
+| --- | --- | --- | --- | --- |
+| R01 In Progress | Installed/latest/compatibility/check/update/error/rollback separately shown for app, stable/nightly yt-dlp, provider, FFmpeg/probe and Companion | `components.py`, `settings_window.py`, `yt_runtime.py`; component/UI/runtime tests; `docs/COMPONENT_UPDATES.md` | Actual installed Chrome/protocol vs shipped version, provider runtime vs import and media provenance remain distinct; no fake compatibility claims | R03 |
+| R02 In Progress | Automatic reasonable checks/backoff + manual check; compatible integrity-checked activation; active-download snapshots | Component catalog and yt runtime timers; `test_components.py`, `test_yt_runtime.py` | App/provider/media/Companion activation not completed by catalog checks; no blind upstream HEAD pulls; test rate-limit/restart/offline/error states | R01 |
+| R03 QA Pending | Apple Silicon app contains native host, Node/provider/Canvas, FFmpeg/probe/aria2; native protocol/media/Mach-O/Cocoa launch tests | `build_macos.sh`, specs, workflow, `scripts/check_packaged_*.py`, package tests; `docs/PACKAGED_*.md` | Preserve current successful narrow native gates; packaging qualification depends on exact run/commit; local licence-gated build prohibited | Q01, D03 |
+| R04 QA Pending | Versioned archive preserves bundle/signature and launches after extraction, with manifest/checksums/notes; dev separate from stable | `app_archives.py`, `check_packaged_archive.py`; archive/probe tests; `docs/DEVELOPMENT_ARCHIVES.md` | Diagnostic0242 identifies Canvas compiler object; pre-signing runtime-only fix9a06044 passed strict native round-trip/launch in40991415616. No bypass/re-sign. Stable publication/trust, supported volumes and updater recovery still open | R03 |
+| R05 In Progress | Public tokenless newer stable metadata/asset integrity/platform/OS checks; private cancellable staging; previous candidate preserved | `app_updates.py`, `settings_window.py`, stable archive policy; update transport/manager/UI tests; `docs/APP_UPDATES.md`; commit049c44d | Retry/ledger/concurrency/redirect/duplicate-JSON regressions fixed and reviewed; no live qualified stable feed. Stage is not install; full native updater/recovery/publication remain open | R04 |
+| R06 In Progress | Stop-coordinated replacement, durable crash recovery, previous working installation and rollback; no active-download replacement | `app_installation.py`; installation/replacement tests; `docs/APP_REPLACEMENT.md` | Post-exit orchestration/helper/journal/recovery UI and active-job coordination not connected. User approval/destination unresolved; no install now | R05, Q09 |
+| R07 Not Started | Controlled hosted release builds only approved exact qualified commit/version; checksums/notes/source/notices; protected explicit approval before publish | Existing validation workflow is **not** release publication | Application licence, dependency/source-offer compliance, Developer ID/notarisation credentials or truthful unsigned status, stable promotion/release workflow and explicit approval. No tag/release/upload now | R03, R04, R08; release approval |
+| R08 Not Started | New nontechnical user downloads qualified app, discovers tools/auth, data/settings/cookies/history survive update/rollback | Existing app and private runtime/data separation | Fresh-user packaged end-to-end test, install destination/filesystem resolution, rollback failure/crash tests and explicit user account/media QA | RB01, V02, F01, R06 |
 
 ## Measured architecture-debt register
 
@@ -358,11 +401,13 @@ whole-app rewrite.
 
 ## Next checkpoints and reporting contract
 
-1. Collection functional/synthetic gates now pass exact9ed; begin Checkpoint A
-   theme/contrast, native progress/layout/resizing, toolbar/dialog clarity and
-   actual screenshot/keyboard regressions. Preserve all native gates/backlog.
-2. Continue P0 history/playlist progress, persistence recovery/retention and the
-   reported window-stayed-open freeze investigation from measured evidence.
+1. Baseline/old UI correctness gates pass exacte2f3ea3. Retain the measured P0
+   limits; next fix scheduler settings copies made despite exhausted type capacity.
+2. Continue P0 history/playlist progress, persistence recovery/retention, duplicate/
+   archive policy, queued edits and the reported window-stayed-open freeze.
+   Repeated restart nesting is confirmed: add a validated stable attempt anchor,
+   fresh siblings, no ancestor-name guessing or movement/deletion of old folders.
+   Cleanup must still be bounded by the current attempt, never the shared anchor.
 3. Design system/research/mockups and **approved** professional native screens;
    real visual QA before claiming polish.
 4. Real downloaded-media viewer/playback (separate from Inspect Video/preview).

@@ -1309,9 +1309,10 @@ class MainWindow(QMainWindow):
         torrent_slots = max(0, self.settings.torrent_max_active - active_torrents)
         waiting = [job for job in self.jobs.values() if job.status == JobStatus.WAITING]
         for job in waiting:
-            settings = copy.deepcopy(self.settings)
+            if not media_slots and not torrent_slots: break
             if job.kind == "torrent":
                 if not torrent_slots: continue
+                settings = copy.deepcopy(self.settings)
                 operation = lambda cancel, progress, j=copy.deepcopy(job), s=settings: _torrent_download_operation(j, s, cancel, progress)
                 torrent_slots -= 1
                 job.status = JobStatus.FETCHING_METADATA if job.torrent_source.startswith("magnet:?") else JobStatus.DOWNLOADING
@@ -1319,6 +1320,7 @@ class MainWindow(QMainWindow):
                 if not media_slots: continue
                 try: proxy = self._proxy()
                 except (ValueError, ConnectionError): continue
+                settings = copy.deepcopy(self.settings)
                 runtime = self.runtime_manager.snapshot()
                 job.status = JobStatus.ANALYSING; job.postprocessing_stage = "Resolving media"
                 job.active_extractor_task = True; job.active_transfer_task = False; job.active_postprocess_task = False
