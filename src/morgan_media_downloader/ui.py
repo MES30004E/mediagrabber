@@ -580,7 +580,8 @@ class MainWindow(QMainWindow):
         if selected and selected.output_file and Path(selected.output_file).is_file():
             menu.addAction("Convert for macOS / QuickTime", self.convert_selected_for_macos)
             menu.addAction("Convert As…", lambda: self.open_video_converter(selected.output_file))
-        menu.exec(self.queue_table.viewport().mapToGlobal(position))
+        try: menu.exec(self.queue_table.viewport().mapToGlobal(position))
+        finally: menu.deleteLater()
 
     def _console_tab(self):
         widget = QWidget(); layout = QVBoxLayout(widget); controls = QHBoxLayout()
@@ -1093,9 +1094,15 @@ class MainWindow(QMainWindow):
             self._update_selection_count()
         self.media_details_dialog = MediaDetailsDialog(item.title, details, self._current_options(),
             self._item_overrides.get(id(item), {}), apply, self)
+        self.media_details_dialog.finished.connect(self._media_details_finished)
         self.media_details_dialog.status.setText(f"Inspected {datetime.now(timezone.utc).isoformat(timespec='seconds')} · yt-dlp {version} · Authentication: {effective}. Not a sign-in or transfer guarantee.")
         self.media_details_dialog.show()
         self.statusBar().showMessage("Inspection ready — review formats and apply choices to this item, or keep batch defaults.", 15000)
+
+    def _media_details_finished(self, _result):
+        dialog = self.sender()
+        if self.media_details_dialog is dialog: self.media_details_dialog = None
+        dialog.deleteLater()
 
     def _inspection_finished(self, *_):
         self._inspection_busy = False
@@ -2216,7 +2223,8 @@ class MainWindow(QMainWindow):
         menu.addAction("View Console", lambda: (select(), self.view_job_console()))
         menu.addAction("Convert for macOS / QuickTime", lambda: self.open_video_converter(job.output_file, quicktime=True))
         menu.addAction("Convert As…", lambda: self.open_video_converter(job.output_file))
-        menu.exec(self.history_table.viewport().mapToGlobal(position))
+        try: menu.exec(self.history_table.viewport().mapToGlobal(position))
+        finally: menu.deleteLater()
 
     def _refresh_queue(self, *_, job_id=None, filters_only=False):
         if not hasattr(self, "queue_table"): return
@@ -2417,6 +2425,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if not self._closing:
             self._closing = True
+            if self.media_details_dialog is not None: self.media_details_dialog.close()
             self._shutdown_persistence_failed = False
             self.file_removal.close()
             self.queue_batch.cancel(abandon=True)

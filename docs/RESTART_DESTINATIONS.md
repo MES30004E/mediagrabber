@@ -51,8 +51,9 @@ against adversarial concurrent symlink replacement in the older ownership helper
   `QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m pytest -q -p no:cacheprovider`
   with temporary MORGAN_DATA_DIR/MORGAN_LOG_DIR/MORGAN_CACHE_DIR.
 - Hosted native coverage now includes scheduler-capacity, destination and restart
-  UI tests. Exact-source hosted results must be recorded before
-  declaring this checkpoint qualified. No real user files or transfers tested.
+  UI tests. Published bd17a36 and qualified as part of exact b91faf2,
+  run42383941374 attempt1: all Linux/macOS/Swift/frozen/archive gates passed.
+  Strict four-size queue reports revalidated. No real user files or transfers tested.
 
 Commands: `QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m pytest -q
 tests/test_restart_destinations.py tests/test_queue_restart.py tests/test_file_ownership.py`

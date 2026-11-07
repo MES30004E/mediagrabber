@@ -62,3 +62,9 @@ and owned workers in both probes. These timings reflect eliminated work, not a
 timing-based test gate or a measurement of first stale-table destruction. Ignored
 `history_hidden_probe.py` and `history-hidden-{before,after}.json` retain evidence
 under `.superpowers/sdd/2026-11-02-ui-correctness/`.
+
+Published b91faf2145b18d1c0995d369cc945d4b2c186c50; hosted42383941374
+attempt1 passed all jobs. Linux1,063/JS10; native178/backend60/Swift25/protocol9.
+Actual frozen100/800/1000/5000×2 reports rerun through the strict verifier;
+native tools, launch/shutdown, replacement/backup and strict archive round-trip
+passed. QA_MATRIX records measurements without a whole-app improvement claim.

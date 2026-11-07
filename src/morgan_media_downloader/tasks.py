@@ -210,12 +210,17 @@ class TaskManager(QObject):
         if record is None:
             return
         record.state = "Finished"
-        if not self._shutting_down:
-            record.finished_callback.call(task_id)
-        self.task_finished.emit(task_id, record.kind)
-        record.thread.deleteLater()
-        if not self._records:
-            self.all_finished.emit()
+        try:
+            if not self._shutting_down:
+                record.finished_callback.call(task_id)
+        finally:
+            # A failing UI callback must not retain a stopped thread/closure or
+            # prevent observers from releasing their ownership. Keep the error
+            # visible through the existing Qt/Python exception reporting path.
+            record.thread.deleteLater()
+            self.task_finished.emit(task_id, record.kind)
+            if not self._records:
+                self.all_finished.emit()
 
     def shutdown(self, timeout_ms: int = 10_000) -> bool:
         self._accepting = False

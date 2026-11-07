@@ -74,28 +74,35 @@ restrictions remain. Live account/media tests need explicit user participation.
   remain open. Hosted Linux1,030/native92/backend60/Swift25/protocol9/JS10 passed;
   packaged checks also passed attempt1: strict four-size/two-cycle reports,
   tools/protocol/replacement/archive validated. Do not equate this with whole P0 acceptance.
-- B2 restart nesting fix implemented locally: validated optional persisted anchor
+- B2 restart nesting fix published bd17a36: validated optional persisted anchor
   chooses fresh siblings; cleanup stays current-attempt-only. Legacy folders are
   not moved or heuristically flattened.23RED→56focused/39native pass; independent
   review no blocker. Full1,055pass204.60s/5existingwarnings/no skips; JS10/protocol9/
-  pipcheck pass. Exact-source hosted qualification pending.
+  pipcheck pass. Exact b91/run42383941374 passed all hosted jobs.
   See RESTART_DESTINATIONS.md; Q05 remains broader than this narrow correction.
-- B3 hidden-History work implemented locally: skip queries/cell allocation while
+- B3 hidden-History work published b91faf2: skip queries/cell allocation while
   another page is selected, release stale hidden rows/cache, render persisted
   data on first dirty revisit without invalidating clean revisits.6RED/2pass→
   History48pass4.57s; expanded native178pass50.97s; independent review no blocker.
-  Full1,063pass153.09s/5existingwarnings/no skips; exact hosted pending. Paired5000×5: queries5→0,
+  Full1,063pass153.09s/5existingwarnings/no skips; exact hosted passed. Paired5000×5: queries5→0,
   cell writes175,000→0; median379.26→.0013ms. Visible rendering/first stale-cell
   destruction/total retention remain open. See HISTORY_DEFERRAL.md.
+- B4 one-shot UI/failed-callback retention correction implemented and reviewed:
+  closed inspectors/context menus release captured items/jobs; stopped threads
+  and completion signals finalize even when a callback raises (error preserved).
+  Original8UI cases and stopped-task regression RED;57focused/23Cocoa lifecycle/
+  201expanded native passed. Full1,074passed150.24s/5existing warnings/no skips;
+  independent11pass/no blocker; JS10/protocol9/pipcheck pass. Hosted qualification
+  pending. See EPHEMERAL_LIFECYCLE.md; broader Q11 memory acceptance remains open.
 
 - Development branch: `improvement/download-reliability`. Latest qualified source
-  baseline: `380e62b4b1cc6e321dbc9656dc4f6030a9650918`, run `42382032289`,
-  attempt 1; all jobs passed. Linux 1,030 + JS 10; macOS native UI 92,
+  baseline: `b91faf2145b18d1c0995d369cc945d4b2c186c50`, run `42383941374`,
+  attempt 1; all jobs passed. Linux 1,063 + JS 10; macOS native UI 178,
   backend 60, Swift 25 and protocol 9. Actual frozen four-size/two-cycle reports
   also passed the shipped strict verifier. Replacement/backup, extracted launch,
-  unchanged bundle and strict signatures passed. Archive 141,968,028 bytes,
-  SHA256 `13e3027c0705d27be304c71777b08316e39f4c5a017cc51f575990d4848a2239`.
-  Earlier e2f3ea3/9ed1082 remain rollback points. No release asset uploaded or installed.
+  unchanged bundle and strict signatures passed. Archive 141,962,199 bytes,
+  SHA256 `06de6df190aff86ec04c56489ec611fedc0980bb40ddd4d55146860b172b9bc0`.
+  Earlier380/e2f3ea3/9ed1082 remain rollback points. No release asset uploaded or installed.
 - Earlier Canvas failure (`40989481899`, extracted `ImageData.o`) was fixed by
   staging only the required `canvas.node` before normal signing (`9a06044`).
   Strict signature verification was not bypassed. Later green runs include this
@@ -416,9 +423,9 @@ whole-app rewrite.
 
 ## Next checkpoints and reporting contract
 
-1. Baseline/old UI correctness gates and scheduler380e62b all pass exact hosted
-   Linux/macOS/Swift/frozen/archive gates. Qualify sibling
-   restart bd17a36 and the new hidden-History work before advancing acceptance.
+1. Baseline, scheduler380e62b, sibling restart bd17a36 and hidden-History b91faf2
+   pass exact hosted Linux/macOS/Swift/frozen/archive gates. Qualify the new
+   one-shot ownership fixes before advancing acceptance; wider P0 remains open.
 2. Continue P0 history/playlist progress, persistence recovery/retention, duplicate/
    archive policy, queued edits and the reported window-stayed-open freeze.
    Repeated restart now uses validated fresh siblings locally; retain all ownership

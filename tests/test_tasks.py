@@ -52,3 +52,45 @@ def test_shutdown_cancels_and_waits_without_destroying_a_running_qthread():
     assert entered.wait(1)
     assert manager.shutdown(2000)
     assert not any(record.thread.isRunning() for record in manager._records.values())
+
+
+def test_finished_callback_failure_still_releases_thread_payload_and_completion_signals(monkeypatch):
+    import gc
+    import sys
+    import weakref
+    from PySide6.QtCore import QEvent
+    from morgan_media_downloader.tasks import TaskThread
+
+    class Payload: pass
+    errors = []; finished = []; idle = []; references = []
+    debug_names = ("last_exc", "last_type", "last_value", "last_traceback")
+    previous_debug = {name: getattr(sys, name) for name in debug_names if hasattr(sys, name)}
+    # Record text only: saving the traceback would itself retain the popped record.
+    monkeypatch.setattr(sys, "excepthook", lambda _kind, error, _traceback: errors.append(str(error)))
+    manager = TaskManager()
+    manager.task_finished.connect(lambda key, kind: finished.append((key, kind)))
+    manager.all_finished.connect(lambda: idle.append(True))
+    def fail(_key): raise RuntimeError("synthetic finished callback failure")
+    try:
+        for number in range(3):
+            payload = Payload(); references.append(weakref.ref(payload))
+            manager.start("fixture", lambda _cancel, _report, captured=payload: None,
+                          task_id=f"fixture-{number}", on_finished=fail)
+            del payload
+            _drain(manager)
+        _APP.sendPostedEvents(None, QEvent.Type.DeferredDelete); gc.collect()
+        assert errors == ["synthetic finished callback failure"] * 3
+        # PySide's exception reporting intentionally keeps the most recent
+        # traceback in sys.last_*. That debugger root is not manager ownership.
+        # Release this test's reported error before checking captured payloads.
+        for name in debug_names:
+            if hasattr(sys, name): delattr(sys, name)
+        gc.collect()
+        observed = (len(manager.findChildren(TaskThread)), sum(ref() is not None for ref in references), finished, idle)
+        assert observed == (0, 0, [(f"fixture-{i}", "fixture") for i in range(3)], [True] * 3)
+    finally:
+        manager.shutdown(1000); manager.deleteLater()
+        _APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        for name in debug_names:
+            if name in previous_debug: setattr(sys, name, previous_debug[name])
+            elif hasattr(sys, name): delattr(sys, name)

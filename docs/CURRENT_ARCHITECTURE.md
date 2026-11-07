@@ -231,6 +231,14 @@ cycles from growing the cache. Closed windows ignore late presentation requests.
 Visible full rendering and SQL policy are unchanged; first stale-cell destruction
 is still proportional to its size. See HISTORY_DEFERRAL.md for limits/evidence.
 
+One-shot MediaDetailsDialog ownership ends on `finished`; MainWindow clears only
+the matching current pointer and schedules deferred deletion, including shutdown.
+Queue/History context menus are disposed after their nested `exec`, retaining
+action bindings while releasing captured jobs. TaskManager finalizes stopped
+threads and emits completion signals in `finally` if a finished callback raises;
+errors remain visible through Qt/Python reporting. EPHEMERAL_LIFECYCLE.md records
+repeat-cycle weak-reference tests and the distinction from debugger traceback roots.
+
 `settings.SettingsStore` atomically writes schema-6 mode-0600 settings, migrates
 legacy preferences, and recovers corrupt JSON. `keychain.py` calls macOS security
 for proxy passwords; passwords are not serialized as preference fields.

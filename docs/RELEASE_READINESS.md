@@ -5,13 +5,13 @@ asset, user installation or notarisation is implied by CI success.
 
 ## Qualified development source
 
-`380e62b4b1cc6e321dbc9656dc4f6030a9650918`, development branch
-`improvement/download-reliability`; run42382032289 attempt1 passed all jobs.
+`b91faf2145b18d1c0995d369cc945d4b2c186c50`, development branch
+`improvement/download-reliability`; run42383941374 attempt1 passed all jobs.
 Actual native/frozen/archive reports inspected and strict four-size validator
-rerun. See QA_MATRIX.md and DISPATCH_CAPACITY.md for exact scope and limits.
+rerun. See QA_MATRIX.md, HISTORY_DEFERRAL.md and RESTART_DESTINATIONS.md for scope.
 
-Disposable hosted archive:141,968,028bytes,
-SHA256 `13e3027c0705d27be304c71777b08316e39f4c5a017cc51f575990d4848a2239`.
+Disposable hosted archive:141,962,199bytes,
+SHA256 `06de6df190aff86ec04c56489ec611fedc0980bb40ddd4d55146860b172b9bc0`.
 Strict signature and content/symlink/mode round-trip, extracted launch and owned
 replacement/backup passed. This is an ad-hoc development build, not Developer ID
 signing or notarisation. No artefact was published or installed.
